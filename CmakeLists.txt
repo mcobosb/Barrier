@@ -1,0 +1,14 @@
+# Requerir la versión mínima de CMake.
+cmake_minimum_required(VERSION 3.10)
+
+# Definir el nombre del proyecto.
+project(SV)
+
+# Establecer el estándar de C++.
+set(CMAKE_CXX_STANDARD 17)
+
+# Incluir el directorio de cabeceras para el proyecto.
+include_directories(include)
+
+# Agregar ejecutable y especificar los archivos fuente.
+add_executable(SV src/main.cpp src/simulation.cpp src/utils.cpp src/read_input.cpp)

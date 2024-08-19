@@ -11,8 +11,9 @@
  */
 
 /*===============================================================================================================================
-
 ===============================================================================================================================*/
+#include "main.h"
+#include "simulation.h"
 
 //===============================================================================================================================
 //! Saint Venant's main function
@@ -20,7 +21,7 @@
 int main(int argc, char const* argv[])
 {
    // Enable the use of UTF-8 symbols in Saint Venant output
-   setlocale(LC_ALL, "en_GB.UTF-8");
+   // setlocale(LC_ALL, "en_GB.UTF-8");
 
    // Create a CSimulation object
    auto* pSimulation = new CSimulation;
