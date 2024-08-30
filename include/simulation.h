@@ -23,150 +23,207 @@ using std::localtime;
 using std::time;
 using std::time_t;
 
-#include <fstream>
-using std::ofstream;
-
 #include <string>
 using std::string;
 
 #include <vector>
-using std::pmr::vector;
+using std::vector;
+
+// #include "data_reader.h"
+#include "hydrograph.h"
 
 class CSimulation
 {
-private:
+    // friend class CDataReader;
+    friend class CHydro;
 
-    bool bReadConfigurationFile(void);
-    bool bOpenLogFile(void);
-    static bool bParseDate(string const*, int&, int&, int&);
-    static bool bParseTime(string const*, int&, int&, int&);
-    static vector<string> *VstrSplit(string const*, char const, vector<string>*);
-    static vector<string> VstrSplit(string const*, char const);
+    public:
 
+    //! Duration of simulation, in hours
+    double m_dSimDuration;
 
-    //! The SV folder
-    string m_strSVDir;
+    //! The length of an iteration (a timestep) in hours
+    double m_dSimTimestep;
 
-    //! Folder for the SV .ini file
-    string m_strSVIni;
+    //! The initial estuarine condition, IEC [0: filename, 1: constant water flow and 2:constant elevation]
+    int m_nInitialEstuarineCondition;
 
-    //! An email address to which to send end-of-simulation messages
-    string m_strMailAddress;
+    //! The constant initial along channel water flow [if IEC = 1]
+    double m_dInitialConstantWaterFlow;
 
-    //! Folder in which the CME data file is found
-    string m_strDataPathName;
+    //! The constant initial along channel elevation [if IEC = 2]
+    double m_dInitialConstantElevation;
 
-    //! The name of this simulation
-    string m_strRunName;
+    //! Compute water density?
+    bool m_bDoWaterDensity;
 
-    //! Name of output log file
-    string m_strLogFile;
+    //! The beta salinity constant [if compute water density]
+    double m_dBetaSalinityConstant;
 
-    //! Path for all output files
-    string m_strOutPath;
+    //! The longitudinal dispersion, kh [if compute water density]
+    double m_dLongitudinalDispersion;
 
-    //! Name of main output file
-    string m_strOutFile;
+    //! The upward estuarine condition
+    int m_nUpwardEstuarineCondition;
 
-    //! Name of along channel geometry file
-    string m_strAlongChannelGeometryFilename;
-    //! Name of cross sections file
-    string m_strCrossSectionsFilename;
-    //! Name of hydro file
-    string m_strHydroFilename;
+    //! The downward estuarine condition
+    int m_nDownwardEstuarineCondition;
 
-    //! Start time of the simulation (seconds)
-    int m_nSimStartSec;
+    //! The downward fix water flow
+    double m_dDownwardWaterFlow;
 
-    //! Start time of the simulation (minutes)
-    int m_nSimStartMin;
+    //! The Courant Number
+    double m_dCourantNumber;
 
-    //! Start time of the simulation (hours)
-    int m_nSimStartHour;
+    //! Do MackComarck Limiter Flux?
+    bool m_bDoMackComarckLimiterFlux;
 
-    //! Start date of the simulation (day)
-    int m_nSimStartDay;
+    //! The equation for MackComarck Limiter Flux
+    int m_nEquationMacComarckLimiterFlux;
 
-    //! Start date of the simulation (month)
-    int m_nSimStartMonth;
+    //! Psi Formula
+    int m_nPsiFormula;
 
-    //! Start date of the simulation (year)
-    int m_nSimStartYear;
+    //! Delta Value
+    double m_dDeltaValue;
 
-    //! The level of detail in the log file output. Can be LOG_FILE_LOW_DETAIL, LOG_FILE_MIDDLE_DETAIL, or LOG_FILE_HIGH_DETAIL
-    int m_nLogFileDetail;
+    //! Do Surface Gradient Method?
+    bool m_bDoSurfaceGradientMethod;
 
-    //! The number of the current iteration (time step)
-    unsigned long m_ulIter;
+    //! Do Source Term Balance?
+    bool m_bDoSourceTermBalance;
 
-    //! The main output file stream
-    ofstream OutStream;
+    //! Do beta coefficient?
+    bool m_bDoBetaCoefficient;
 
-    // Utility routines
-    // Utility routines
-    static void AnnounceStart(void);
-    void AnnounceLicence(void);
-    // void AnnounceReadBasementDEM(void) const;
-    // static void AnnounceAddLayers(void);
-    // static void AnnounceReadRasterFiles(void);
-    // static void AnnounceReadVectorFiles(void);
-    // void AnnounceReadLGIS(void) const;
-    // void AnnounceReadICGIS(void) const;
-    // void AnnounceReadIHGIS(void) const;
-    static void AnnounceInitializing(void);
-    // void AnnounceReadInitialSuspSedGIS(void) const;
-    // void AnnounceReadInitialFineUnconsSedGIS(int const) const;
-    // void AnnounceReadInitialSandUnconsSedGIS(int const) const;
-    // void AnnounceReadInitialCoarseUnconsSedGIS(int const) const;
-    // void AnnounceReadInitialFineConsSedGIS(int const) const;
-    // void AnnounceReadInitialSandConsSedGIS(int const) const;
-    // void AnnounceReadInitialCoarseConsSedGIS(int const) const;
-    // void AnnounceReadDeepWaterWaveValuesGIS(void) const;
-    // void AnnounceReadSedimentEventInputValuesGIS(void) const;
-    // void AnnounceReadFloodLocationGIS(void) const;
-    // void AnnounceReadTideData(void) const;
-    // static void AnnounceReadSCAPEShapeFunctionFile(void);
-    // static void AnnounceAllocateMemory(void);
-    // static void AnnounceIsRunning(void);
-    // static void AnnounceSimEnd(void);
-    void StartClock(void);
-    bool bFindExeDir(char const*);
-    // bool bTimeToQuit(void);
-    // static int nDoTimeUnits(string const*);
-    // int nDoSimulationTimeMultiplier(string const*);
-    // static double dGetTimeMultiplier(string const*);
-    // static bool bParseDate(string const*, int&, int&, int&);
-    // static bool bParseTime(string const*, int&, int&, int&);
-    // void DoTimestepTotals(void);
-    static string strGetBuild(void);
-    // static string strGetComputerName(void);
-    static string strGetErrorText(int const);
-    static string strTrim(string const*);
-    static string strTrimLeft(string const*);
-    static string strTrimRight(string const*);
+    //! Do Dry Bed?
+    bool m_bDoDryBed;
+
+    //! Do Murillo condition?
+    bool m_bDoMurilloCondition;
 
 
-    //! System start-simulation time
-    time_t m_tSysStartTime;
+    CSimulation();
+    ~CSimulation();
 
-    //! System finish-simulation time
-    time_t m_tSysEndTime;
 
-    //! Last value returned by clock()
-    double m_dClkLast;
-    //! Total elapsed CPU time
-    double m_dCPUClock;
 
-public:
-    ofstream LogStream;
+    //! Method for getting the simulation duration
+    [[nodiscard]] double dGetSimulationDuration();
+    //! Method for setting the simulation duration
+    void dSetSimulationDuration(double simDuration);
 
-    CSimulation(void);
-    ~CSimulation(void);
+    //! Method for getting the simulation timestep
+    [[nodiscard]] double dGetSimulationTimestep();
+    //! Method for setting the simulation timestep
+    void dSetSimulationTimestep(double simTimestep);
+
+    //! Method for getting the initial estuarine condition
+    [[nodiscard]] int nGetInitialEstuarineCondition();
+    //! Method for setting the initial estuarine condition
+    void nSetInitialEstuarineCondition(int initialCondition);
+
+    //! Method for getting the along channel constant water flow
+    [[nodiscard]] double dGetInitialConstantWaterFlow();
+    //! Method for setting the along channel constant water flow
+    void dSetInitialConstantWaterFlow(double constWaterFlow);
+
+    //! Method for getting the along channel constant elevation
+    [[nodiscard]] double dGetInitialConstantElevation();
+    //! Method for setting the along channel constant elevation
+    void dSetInitialConstantElevation(double constElevation);
+
+    //! Method for getting the compute water density
+    [[nodiscard]] bool bGetDoWaterDensity();
+    //! Method for setting the compute water density
+    void bSetDoWaterDensity(bool doWaterDensity);
+
+    //! Method for getting the beta salinity constant
+    [[nodiscard]] double dGetBetaSalinityConstant();
+    //! Method for setting the beta salinity constant
+    void dSetBetaSalinityConstant(double salinityConstant);
+
+    //! Method for getting the along channel constant elevation
+    [[nodiscard]] double dGetLongitudinalDispersionConstant();
+    //! Method for setting the along channel constant elevation
+    void dSetLongitudinalDispersionConstant(double longitudinalDispersion);
+
+    //! Method for getting the upward estuarine condition
+    [[nodiscard]] int nGetUpwardEstuarineCondition();
+    //! Method for setting the upward estuarine condition
+    void nSetUpwardEstuarineCondition(int upwardEstuarineCondition);
+
+    //! Method for getting the downward estuarine condition
+    [[nodiscard]] int nGetDownwardEstuarineCondition();
+    //! Method for setting the downward estuarine condition
+    void nSetDownwardEstuarineCondition(int downwardEstuarineCondition);
+
+    //! Method for getting the downward water flow
+    [[nodiscard]] double dGetDownwardWaterFlow();
+    //! Method for setting the downward estuarine condition
+    void dSetDownwardWaterFlow(double downwardWaterFlow);
+
+    //! Method for getting the courant number
+    [[nodiscard]] double dGetCourantNumber();
+    //! Method for setting the courant number
+    void dSetCourantNumber(double courantNumber);
+
+    //! Method for getting if McComarck limiter flux is applied
+    [[nodiscard]] bool bGetDoMcComarckLimiterFlux();
+    //! Method for setting if McComarck limiter flux is applied
+    void bSetDoMcComarckLimiterFlux(bool doMcComarckLimiterFlux);
+
+    //! Method for getting equation limiter flux
+    [[nodiscard]] int nGetEquationLimiterFlux();
+    //! Method for setting equation limiter flux
+    void nSetEquationLimiterFlux(int equationLimiterFlux);
+
+    //! Method for getting Psi formula
+    [[nodiscard]] int nGetPsiFormula();
+    //! Method for setting Psi formula
+    void nSetPsiFormula(int psiFormula);
+
+    //! Method for getting Delta Value
+    [[nodiscard]] double dGetDeltaValue();
+    //! Method for setting Delta Value
+    void dSetDeltaValue(double deltaValue);
+
+    //! Method for getting if surface gradient method is applied
+    [[nodiscard]] bool bGetDoSurfaceGradientMethod();
+    //! Method for setting if surface gradient method is applied
+    void bSetDoSurfaceGradientMethod(bool doSurfaceGradientMethod);
+
+    //! Method for getting if source term balance is applied
+    [[nodiscard]] bool bGetDoSurfaceTermBalance();
+    //! Method for setting if source term balance is applied
+    void bSetDoSurfaceTermBalance(bool doSourceTermBalance);
+
+    //! Method for getting if beta coefficient is applied
+    [[nodiscard]] bool bGetDoBetaCoefficient();
+    //! Method for setting if beta coefficient is applied
+    void bSetDoBetaCoefficient(bool doBetaCoefficient);
+
+    //! Method for getting if dry bed is applied
+    [[nodiscard]] bool bGetDoDryBed();
+    //! Method for setting if dry bed is applied
+    void bSetDoDryBed(bool doDryBed);
+
+    //! Method for getting if Murillo condition is applied
+    [[nodiscard]] bool bGetDoMurilloCondition();
+    //! Method for setting if Murillo condition is applied
+    void bSetDoMurilloCondition(bool doMurilloCondition);
+
+    //! A vector with cross-sections objects along the estuary
+    vector<CHydrograph> hydrographs;
+
+    void AddHydrograph();
+
+
 
     //! Runs the simulation
     int nDoSimulation(int, char const* []);
 
     //! Carries out end-of-simulation tidying (error messages etc.)
-    void DoSimulationEnd(int const);
+    void DoSimulationEnd(int);
 };
 #endif // SIMULATION_H

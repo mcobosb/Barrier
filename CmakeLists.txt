@@ -7,8 +7,14 @@ project(SV)
 # Establecer el estándar de C++.
 set(CMAKE_CXX_STANDARD 17)
 
+# Establecer el modo de depuración y asegurar que no se optimiza el código en depuración
+# que no permita inspeccionar todos los métodos y variables
+set(CMAKE_BUILD_TYPE Debug)
+
 # Incluir el directorio de cabeceras para el proyecto.
 include_directories(include)
 
 # Agregar ejecutable y especificar los archivos fuente.
-add_executable(SV src/main.cpp src/simulation.cpp src/utils.cpp src/read_input.cpp)
+add_executable(SV src/main.cpp src/simulation.cpp src/screen_presenter.cpp src/data_reader.cpp
+        src/utils.cpp src/error_handling.cpp src/cross_section.cpp src/estuary.cpp
+        src/hydrograph.cpp)
