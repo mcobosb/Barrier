@@ -337,12 +337,12 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            }
 
             	case 6: {
-	            	// Get the output variables
+		            // Get the output variables
 	            	if (strRH.empty())
 	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
 	            	else {
 	            		if (strRH == "full") {
-	            			vector<string> vOutputVariables;
+	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rh", "Rhp", "I1", "I1p", "B", "Bp", "eta", "etap", "beta", "betap", "I2", "I2p", "U", "c", "S", "Qb", "Qs", "Qt", "rho", "rhop", "xl", "xr", "xlp", "xrp"};
 	            		}
 	            		else {
 	            			vector<string> vOutputVariables;
@@ -352,9 +352,11 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 
 	            			// Using getline for spliting the string by commas
 	            			while (getline(sline, token, ',')) {
-	            				vOutputVariables.push_back(token);
+	            				m_pSimulation->strAddOutputVariable(token);
+	            			}
 	            		}
 	            	}
+	            }
 
          		case 7: {
          			// Get the along channel geometry file name

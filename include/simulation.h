@@ -117,6 +117,9 @@ class CSimulation
     //! Number of hydrographs
     int m_nHydrographsNo;
 
+    //! Names of output variables
+    vector<string> m_vOutputVariables;
+
     //! A vector with cross-sections objects along the estuary
     vector<CCrossSection> estuary;
 
@@ -233,6 +236,8 @@ class CSimulation
     //! Method for setting if Murillo condition is applied
     void bSetDoMurilloCondition(bool doMurilloCondition);
 
+    //! Add output variable
+    void strAddOutputVariable(string strItem);
 
     //! A vector with hydrograph objects
     vector<CHydrograph> hydrographs;

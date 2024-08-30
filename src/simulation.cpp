@@ -28,6 +28,8 @@ CSimulation::CSimulation ()
 
     m_nInitialEstuarineCondition = 0;
 
+    vector<string> m_vOutputVariables;
+
     vector<CCrossSection> estuary;
     vector<CHydrograph> hydrographs;
 }
@@ -241,6 +243,12 @@ void CSimulation::bSetDoMurilloCondition(bool doMurilloCondition) {
     m_bDoMurilloCondition = doMurilloCondition;
 }
 
+//===============================================================================================================================
+//! Appends output variables
+//===============================================================================================================================
+void CSimulation::strAddOutputVariable(string strItem){
+    m_vOutputVariables.push_back(strItem);
+}
 
 //===============================================================================================================================
 //! Appends a CHydrograph objet to the CSimulation
