@@ -16,5 +16,4 @@ include_directories(include)
 
 # Agregar ejecutable y especificar los archivos fuente.
 add_executable(SV src/main.cpp src/simulation.cpp src/screen_presenter.cpp src/data_reader.cpp
-        src/utils.cpp src/error_handling.cpp src/cross_section.cpp src/estuary.cpp
-        src/hydrograph.cpp)
+        src/utils.cpp src/error_handling.cpp src/cross_section.cpp src/hydrograph.cpp)

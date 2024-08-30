@@ -10,9 +10,11 @@ using std::setprecision;
 #include <string>
 using std::to_string;
 
-#include "main.h"
+// #include "main.h"
 #include "simulation.h"
 #include "screen_presenter.h"
+#include "hydrograph.h"
+#include "cross_section.h"
 
 //===============================================================================================================================
 //! The CSimulation constructor
@@ -25,6 +27,9 @@ CSimulation::CSimulation ()
     m_dInitialConstantElevation = 0.0;
 
     m_nInitialEstuarineCondition = 0;
+
+    vector<CCrossSection> estuary;
+    vector<CHydrograph> hydrographs;
 }
 
 //===============================================================================================================================
@@ -247,32 +252,117 @@ void CSimulation::AddHydrograph(){
 }
 
 
+//! Method for getting the number of hydrographs
+int CSimulation::nGetHydrographsNo(){
+    return m_nHydrographsNo;
+}
+//! Method for setting the number of hydrographs
+void CSimulation::nSetHydrographsNo(int nValue) {
+    m_nHydrographsNo = nValue;
+}
+
+
 //===============================================================================================================================
-//! The nDoSimulation member function of CSimulation sets up and runs the simulation
+//! Appends a CCrossSection objet to the estuary
 //===============================================================================================================================
-int CSimulation::nDoSimulation(int nArg, char const* pcArgv[])
+void CSimulation::AddCrossSection(){
+    // Create the
+    CCrossSection crossSection;
+    estuary.push_back(crossSection);
+}
+
+//===============================================================================================================================
+//! The bDoSimulation member function of CSimulation sets up and runs the simulation
+//===============================================================================================================================
+bool CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
+
+    calculateIs();
+
+    return false;
+}
+
+
+//===============================================================================================================================
+//! Compute the source terms I1 (difference between pressure thrusts applied over the frontiers x1 and x2) and
+// I2(pressure forces due the channel width variation)
+//===============================================================================================================================
+void CSimulation::calculateIs()
 {
 
-    // // ================================================== initialization section ================================================
-    // // Hello, World!
-    // ScreenPresenter::AnnounceStart();
-    //
-    // // Start the clock ticking
-    // StartClock();
-    //
-    // // Find out the folder in which the SV executable sits, in order to open the .ini file (they are assumed to be in the same folder)
-    // if (! bFindExeDir(pcArgv[0]))
-    //    return (RTN_ERR_SVDIR);
-    //
-    // // Deal with command-line parameters
-    // // int nRet = nHandleCommandLineParams (nArg, pcArgv);
-    // // if (nRet != RTN_OK)
-    // //    return (nRet);
-    //
-    // // OK, we are off, tell the user about the licence and the start time
-    // AnnounceLicence();
 
-   return 0;
+    //Calculate I1
+    int nCrossSections = estuary.size();
+    for (int i = 0; i < nCrossSections; i++) {
+        double dValue = 0.0;
+        this->estuary[i].dAppend2Vector("I1", dValue);
+        for (int j = 1; j < estuary[i].nGetElevationSectionsNumber(); j++) {
+            dValue = (this->estuary[i].dGetSigma(j) + this->estuary[i].dGetSigma(j-1)) / 2.0*this->estuary[i].dGetElevation(j)*(this->estuary[i].dGetElevation(j) - this->estuary[i].dGetElevation(j-1));
+            this->estuary[i].dAppend2Vector("I1", dValue);
+        }
+    }
+
+    double dhdx = 0.0;
+    double dI1dx = 0.0;
+    double dX1 = 0.0;
+    double dX2 = 0.0;
+
+    //Calculate I2
+    for (int i = 0; i < nCrossSections ; i++) {
+
+        if (i == 0) {
+            // Compute dx as forward difference
+            dX1 = this->estuary[i+1].dGetX() - this->estuary[i].dGetX();
+        }
+        else if (i == nCrossSections - 1){
+            // Compute dx as backward difference
+            dX2 = this->estuary[i].dGetX() - this->estuary[i-1].dGetX();
+        }
+        else {
+            dX1 = this->estuary[i+1].dGetX() - this->estuary[i].dGetX();
+            dX2 = this->estuary[i].dGetX() - this->estuary[i-1].dGetX();
+        }
+
+        for (int j = 0; j < estuary[i].nGetElevationSectionsNumber(); j++) {
+
+            if (i == 0) {
+                // Upward finite-difference
+                dhdx = (this->estuary[i+1].dGetElevation(j) - this->estuary[i].dGetElevation(j))/dX1;
+                dI1dx = (this->estuary[i+1].dGetI1(j) - this->estuary[i].dGetI1(j))/dX1;
+            }
+            else if (i == nCrossSections - 1) {
+                // Downward finite-difference
+                dhdx = (this->estuary[i].dGetElevation(j) - this->estuary[i-1].dGetElevation(j))/dX2;
+                dI1dx = (this->estuary[i].dGetI1(j) - this->estuary[i-1].dGetI1(j))/dX2;
+            }
+            else {
+                // Central finite-difference
+                dhdx = (this->estuary[i+1].dGetElevation(j) - this->estuary[i-1].dGetElevation(j))/(dX1 +dX2);
+                dI1dx = (this->estuary[i+1].dGetI1(j) - this->estuary[i-1].dGetI1(j))/(dX1 + dX2);
+
+            }
+            double dValue = dI1dx - this->estuary[i].dGetArea(j)*dhdx;
+            this->estuary[i].dAppend2Vector("I2", dValue);
+        }
+    }
+
+
+    // //Calculate I12
+    // // Central finite-difference
+    // dhdx, dI1dx = np.zeros([db.sizes["x"], db.sizes["z"]]), np.zeros(
+    //     [db.sizes["x"], db.sizes["z"]]
+    // )
+    // dhdx[1:-1, :] = (db["eta"][2:, :] - db["eta"][:-2, :]) / (2 * dConfig["dx"])
+    // dI1dx[1:-1, :] = (db["I1"][2:, :] - db["I1"][:-2, :]) / (2 * dConfig["dx"])
+    // // Upward finite-difference
+    // dhdx[0, :] = (db["eta"][1, :] - db["eta"][0, :]) / dConfig["dx"]
+    // dI1dx[0, :] = (db["I1"][1, :] - db["I1"][0, :]) / dConfig["dx"]
+    //
+    // // Downward finite-difference
+    // dhdx[-1, :] = (db["eta"][-1, :] - db["eta"][-2, :]) / dConfig["dx"]
+    // dI1dx[-1, :] = (db["I1"][-1, :] - db["I1"][-2, :]) / dConfig["dx"]
+    //
+    // db["I2"][:] = dI1dx - db["A"][:].values * dhdx
+
 }
 
 

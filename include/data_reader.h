@@ -133,11 +133,11 @@ public:
     string const OUT_EXT = ".out";
     string const LOG_EXT = ".log";
 
-    int ReadConfigurationFile(CSimulation* m_pSimulation);
-    int ReadAlongChannelGeometryFile(CEstuary* m_pEstuary);
-    int ReadCrossSectionGeometryFile(CEstuary* m_pEstuary);
-    int ReadHydroFile(CSimulation* m_pSimulation);
-    bool bOpenLogFile();
+    bool bReadConfigurationFile(CSimulation* m_pSimulation);
+    bool bReadAlongChannelGeometryFile(CSimulation* m_pSimulation);
+    bool bReadCrossSectionGeometryFile(CSimulation* m_pSimulation);
+    bool bReadHydrographsFile(CSimulation* m_pSimulation);
+    bool bOpenLogFile(CSimulation* m_pSimulation);
 
 };
 #endif // DATA_READER_H

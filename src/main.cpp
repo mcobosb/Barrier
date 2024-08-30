@@ -16,7 +16,6 @@
 #include "simulation.h"
 #include "screen_presenter.h"
 #include "data_reader.h"
-#include "estuary.h"
 
 //===============================================================================================================================
 //! Saint Venant's main function
@@ -30,8 +29,6 @@ int main(int argc, char const* argv[])
     // Create a CSimulation object
     CSimulation pSimulation;
 
-    // Create a CSimulation object
-    CEstuary pEstuary;
     // Create a ScreenPresenter object
     auto* pScreenPresenter = new CScreenPresenter;
     // Create a DataReader object
@@ -42,14 +39,16 @@ int main(int argc, char const* argv[])
     //! Announce Start -------------------------------------------------------------------------------------------------
     pScreenPresenter->StartingRun(argc, argv);
 
+    bool nRtn = pDataReader->bOpenLogFile(&pSimulation);
     //! Read the .ini file and get the name of the run-data file, and path for output etc.
-    int nRtn = pDataReader->ReadConfigurationFile(&pSimulation);
-    nRtn = pDataReader->ReadAlongChannelGeometryFile(&pEstuary);
-    nRtn = pDataReader->ReadCrossSectionGeometryFile(&pEstuary);
-    // nRtn = pDataReader->bOpenLogFile();
+    nRtn = pDataReader->bReadConfigurationFile(&pSimulation);
+    nRtn = pDataReader->bReadAlongChannelGeometryFile(&pSimulation);
+    nRtn = pDataReader->bReadCrossSectionGeometryFile(&pSimulation);
+    nRtn = pDataReader->bReadHydrographsFile(&pSimulation);
+
 
     // Run the simulation and then check how it ends
-    nRtn = pSimulation.nDoSimulation(argc, argv);
+    nRtn = pSimulation.bDoSimulation(argc, argv);
     // pSimulation->DoSimulationEnd(nRtn);
 
     //! Announce End -------------------------------------------------------------------------------------------------

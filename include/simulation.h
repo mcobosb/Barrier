@@ -29,15 +29,27 @@ using std::string;
 #include <vector>
 using std::vector;
 
+#include <fstream>
+using std::ofstream;
+
 // #include "data_reader.h"
 #include "hydrograph.h"
+// #include "estuary.h"
+#include "cross_section.h"
 
 class CSimulation
 {
-    // friend class CDataReader;
-    friend class CHydro;
+    // friend class CHydrograph;
+    friend class CHydrograph;
+
+    // // friend class CEstuary;
+    // friend class CEstuary;
+
+    // friend class CCrossSection;
+    friend class CCrossSection;
 
     public:
+    ofstream LogStream;
 
     //! Duration of simulation, in hours
     double m_dSimDuration;
@@ -101,6 +113,14 @@ class CSimulation
 
     //! Do Murillo condition?
     bool m_bDoMurilloCondition;
+
+    //! Number of hydrographs
+    int m_nHydrographsNo;
+
+    //! A vector with cross-sections objects along the estuary
+    vector<CCrossSection> estuary;
+
+    void AddCrossSection();
 
 
     CSimulation();
@@ -213,15 +233,22 @@ class CSimulation
     //! Method for setting if Murillo condition is applied
     void bSetDoMurilloCondition(bool doMurilloCondition);
 
-    //! A vector with cross-sections objects along the estuary
+
+    //! A vector with hydrograph objects
     vector<CHydrograph> hydrographs;
+
+    //! Method for getting the number of hydrographs
+    [[nodiscard]] int nGetHydrographsNo();
+    //! Method for setting the number of hydrographs
+    void nSetHydrographsNo(int nValue);
 
     void AddHydrograph();
 
 
 
     //! Runs the simulation
-    int nDoSimulation(int, char const* []);
+    bool bDoSimulation(int, char const* []);
+    void calculateIs();
 
     //! Carries out end-of-simulation tidying (error messages etc.)
     void DoSimulationEnd(int);

@@ -38,7 +38,8 @@ using std::find;
 //! The CCrossSection constructor
 //===============================================================================================================================
 CCrossSection::CCrossSection(){
-    m_nSectionNumber = 0;
+    m_nSectionNumber =
+    m_nElevationSectionNumber = 0;
 
     m_dX =
     m_dZ =
@@ -60,28 +61,32 @@ CCrossSection::~CCrossSection() = default;
 //! Append a cross-section object to the estuary object
 //===============================================================================================================================
 void CCrossSection::dAppend2Vector(string strItem, double dValue){
-  if (strItem == "elevation")
-      m_vElevation.push_back(dValue);
-  else if (strItem == "width")
-      m_vWidth.push_back(dValue);
-  else if (strItem == "area")
-    m_vArea.push_back(dValue);
-  else if (strItem == "perimeter")
-    m_vPerimeter.push_back(dValue);
-  else if (strItem == "hydraulic radius")
-    m_vHydraulicRadius.push_back(dValue);
-  else if (strItem == "sigma")
-    m_vSigma.push_back(dValue);
-  else if (strItem == "left river bank location")
-    m_vLeftRBLocation.push_back(dValue);
-  else if (strItem == "right river bank location")
-    m_vRightRBLocation.push_back(dValue);
-  else if (strItem == "beta")
-    m_vBeta.push_back(dValue);
+    if (strItem == "elevation")
+        m_vElevation.push_back(dValue);
+    else if (strItem == "width")
+        m_vWidth.push_back(dValue);
+    else if (strItem == "area")
+        m_vArea.push_back(dValue);
+    else if (strItem == "perimeter")
+        m_vPerimeter.push_back(dValue);
+    else if (strItem == "hydraulic radius")
+        m_vHydraulicRadius.push_back(dValue);
+    else if (strItem == "sigma")
+        m_vSigma.push_back(dValue);
+    else if (strItem == "left river bank location")
+        m_vLeftRBLocation.push_back(dValue);
+    else if (strItem == "right river bank location")
+        m_vRightRBLocation.push_back(dValue);
+    else if (strItem == "beta")
+       m_vBeta.push_back(dValue);
+    else if (strItem == "I1")
+        m_vI1.push_back(dValue);
+    else if (strItem == "I2")
+        m_vI2.push_back(dValue);
 }
 
 //===============================================================================================================================
-//! The CCrossSection Setter
+//! The CCrossSection Setters
 //===============================================================================================================================
 void CCrossSection::nSetSectionNumber(int nSectionNumber){
     m_nSectionNumber = nSectionNumber;
@@ -110,8 +115,12 @@ void CCrossSection::dSetLeftRBAngle(double dValue) {
     m_dLeftRBAngle = dValue;
 }
 
+void CCrossSection::nSetElevationSectionsNumber(int nValue) {
+    m_nElevationSectionNumber = nValue;
+}
+
 //===============================================================================================================================
-//! The CCrossSection Getter
+//! The CCrossSection Getters
 //===============================================================================================================================
 int CCrossSection::nGetSectionNumber(){
   return m_nSectionNumber;
@@ -138,6 +147,10 @@ double CCrossSection::dGetRightRBAngle(){
 double CCrossSection::dGetLeftRBAngle(){
   return m_dLeftRBAngle;
 }
+int CCrossSection::nGetElevationSectionsNumber(){
+    return m_nElevationSectionNumber;
+}
+
 
 double CCrossSection::dGetElevation(int nZ){
   return m_vElevation[nZ];
@@ -165,5 +178,9 @@ double CCrossSection::dGetRightY(int nZ){
 }
 double CCrossSection::dGetBeta(int nZ){
   return m_vBeta[nZ];
+}
+
+double CCrossSection::dGetI1(int nZ){
+    return m_vI1[nZ];
 }
 

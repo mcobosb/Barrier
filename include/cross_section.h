@@ -47,7 +47,8 @@ class CCrossSection {
         //! The left river bank angle
         double m_dLeftRBAngle;
 
-
+        //! Number of Elevation Sections
+        int m_nElevationSectionNumber;
 
         //! The elevation over Z
         vector<double> m_vElevation;
@@ -76,6 +77,12 @@ class CCrossSection {
         //! The beta value at Elevation
         vector<double> m_vBeta;
 
+        //! The I1 value at Elevation
+        vector<double> m_vI1;
+
+        //! The I2 value at Elevation
+        vector<double> m_vI2;
+
     public:
 
         CCrossSection();
@@ -89,6 +96,7 @@ class CCrossSection {
         void dSetYUTM(double dValue);
         void dSetRightRBAngle(double dValue);
         void dSetLeftRBAngle(double dValue);
+        void nSetElevationSectionsNumber(int nValue);
         void dAppend2Vector(string strItem, double dValue);
         // void dSetElevation(double dValue);
         // void dSetWidth(double dValue);
@@ -108,6 +116,7 @@ class CCrossSection {
         double dGetYUTM();
         double dGetRightRBAngle();
         double dGetLeftRBAngle();
+        int nGetElevationSectionsNumber();
         double dGetElevation(int nValue);
         double dGetWidth(int nValue);
         double dGetArea(int nValue);
@@ -117,5 +126,6 @@ class CCrossSection {
         double dGetLeftY(int nValue);
         double dGetRightY(int nValue);
         double dGetBeta(int nValue);
+        double dGetI1(int nValue);
 };
 #endif

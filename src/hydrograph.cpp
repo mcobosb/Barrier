@@ -35,28 +35,57 @@ using std::to_string;
 #include <hydrograph.h>
 
 //===============================================================================================================================
-//! The CHydro constructor
+//! The CHydrograph constructor
 //===============================================================================================================================
-CHydro::CHydro(){
-    m_dHydroXLocation =
-    m_dHydroYLocation = 0.0;
+CHydrograph::CHydrograph(){
+    m_dHydrographXLocation =
+    m_dHydrographYLocation = 0.0;
 
-    m_nCrossSectionNo = 0;
+    m_nNearestCrossSectionNo = 0;
 }
 
 //===============================================================================================================================
-//! The CHydro destructor
+//! The CHydrograph destructor
 //===============================================================================================================================
-CHydro::~CHydro() = default;
+CHydrograph::~CHydrograph() = default;
 
 
 //===============================================================================================================================
-//! Append a hydrogram object to the CSimulation object
+//! Append a hydrograph object to the CSimulation object
 //===============================================================================================================================
-void CHydro::dAppend2Vector(string strItem, double dValue){
+void CHydrograph::dAppend2Vector(const string& strItem, const double dValue){
     if (strItem == "time")
         m_vHydroTime.push_back(dValue);
     else if (strItem == "water flow")
         m_vHydroWaterFlow.push_back(dValue);
+}
 
+
+//===============================================================================================================================
+//! Set the hydrograph X coordinate location
+//===============================================================================================================================
+void CHydrograph::dSetHydrographXLocation(double dValue) {
+    m_dHydrographXLocation = dValue;
+}
+
+//===============================================================================================================================
+//! Get the hydrograph X coordinate location
+//===============================================================================================================================
+double CHydrograph::dGetHydrographXLocation() {
+    return m_dHydrographXLocation;
+}
+
+//===============================================================================================================================
+//! Set the hydrograph Y coordinate location
+//===============================================================================================================================
+void CHydrograph::dSetHydrographYLocation(double dValue) {
+    m_dHydrographYLocation = dValue;
+}
+
+
+//===============================================================================================================================
+//! Get the hydrograph Y coordinate location
+//===============================================================================================================================
+double CHydrograph::dGetHydrographYLocation() {
+    return m_dHydrographYLocation;
 }

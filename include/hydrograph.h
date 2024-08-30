@@ -15,11 +15,12 @@
 #ifndef HYDROGRAPH_H
 #define HYDROGRAPH_H
 
-#include <simulation.h>
+//#include <simulation.h>
 #include <string>
 using std::string;
 
 #include <vector>
+using std::vector;
 
 //class CSimulation;
 //class CEstuary;
@@ -40,7 +41,7 @@ private:
     double m_dHydrographYLocation;
 
     //! Nearest cross-section estuary to flow
-    int m_nCrossSectionNo;
+    int m_nNearestCrossSectionNo;
 
     //! Time from starting simulation in hours and water discharge
     vector<double> m_vHydroTime;
@@ -50,18 +51,18 @@ private:
 
 public:
     CHydrograph();
-    ~CHydrograph()();
+    ~CHydrograph();
 
-    double GetHydrographXLocation();
-    double GetHydrographYLocation();
-    int GetCrossSectionNo();
-    vector<double> GetHydrographTime();
-    vector<double> GetHydrographWaterFlow();
+    double dGetHydrographXLocation();
+    double dGetHydrographYLocation();
+    // int GetCrossSectionNo();
+    // vector<double> GetHydrographTime();
+    // vector<double> GetHydrographWaterFlow();
 
-    void SetHydrographXLocation(double dHydroXLocation);
-    void SetHydrographYLocation(double dHydroYLocation);
-    void SetCrossSectionNo(int nCrossSectionNo);
-    void dAppend2Vector(string strItem, double dValue);
+    void dSetHydrographXLocation(double dHydroXLocation);
+    void dSetHydrographYLocation(double dHydroYLocation);
+    // void SetCrossSectionNo(int nCrossSectionNo);
+    void dAppend2Vector(const string& strItem, double dValue);
 
 };
 
