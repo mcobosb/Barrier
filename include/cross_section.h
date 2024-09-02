@@ -33,7 +33,7 @@ class CCrossSection {
         double m_dZ;
 
         //! The Manning number
-        double m_dManningNo;
+        double m_dManningNumber;
 
         //! The X coordinate in UTM
         double m_dXUTM;
@@ -46,6 +46,12 @@ class CCrossSection {
 
         //! The left river bank angle
         double m_dLeftRBAngle;
+
+        //! The water elevation
+        double m_dElevation;
+
+        //! The water flow
+        double m_dWaterFlow;
 
         //! Number of Elevation Sections
         int m_nElevationSectionNumber;
@@ -91,13 +97,17 @@ class CCrossSection {
         void nSetSectionNumber(int nValue);
         void dSetX(double dValue);
         void dSetZ(double dValue);
-        void dSetManningNo(double dValue);
+        void dSetManningNumber(double dValue);
         void dSetXUTM(double dValue);
         void dSetYUTM(double dValue);
         void dSetRightRBAngle(double dValue);
         void dSetLeftRBAngle(double dValue);
         void nSetElevationSectionsNumber(int nValue);
+        void dSetElevation(double dValue);
+        void dSetWaterFlow(double dValue);
         void dAppend2Vector(string strItem, double dValue);
+
+
         // void dSetElevation(double dValue);
         // void dSetWidth(double dValue);
 //        void dSetArea(double dArea);
@@ -111,7 +121,7 @@ class CCrossSection {
         int nGetSectionNumber();
         double dGetX();
         double dGetZ();
-        double dGetManningNo();
+        double dGetManningNumber();
         double dGetXUTM();
         double dGetYUTM();
         double dGetRightRBAngle();
@@ -127,5 +137,10 @@ class CCrossSection {
         double dGetRightY(int nValue);
         double dGetBeta(int nValue);
         double dGetI1(int nValue);
+        double dGetI2(int nValue);
+
+        vector<double> vGetArea();
+        vector<double> vGetHydraulicRadius();
+        vector<double> vGetElevation();
 };
 #endif

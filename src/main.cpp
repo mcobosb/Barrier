@@ -42,8 +42,9 @@ int main(int argc, char const* argv[])
     bool nRtn = pDataReader->bOpenLogFile(&pSimulation);
     //! Read the .ini file and get the name of the run-data file, and path for output etc.
     nRtn = pDataReader->bReadConfigurationFile(&pSimulation);
-    nRtn = pDataReader->bReadAlongChannelGeometryFile(&pSimulation);
+    nRtn = pDataReader->bReadAlongChannelDataFile(&pSimulation);
     nRtn = pDataReader->bReadCrossSectionGeometryFile(&pSimulation);
+    nRtn = pDataReader->bReadDownwardBoundaryConditionFile(&pSimulation);
     nRtn = pDataReader->bReadHydrographsFile(&pSimulation);
 
 

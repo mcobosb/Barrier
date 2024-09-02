@@ -43,7 +43,7 @@ CCrossSection::CCrossSection(){
 
     m_dX =
     m_dZ =
-    m_dManningNo =
+    m_dManningNumber =
     m_dLeftRBAngle =
     m_dXUTM =
     m_dYUTM =
@@ -99,8 +99,8 @@ void CCrossSection::dSetZ(double dValue){
     m_dZ = dValue;
 }
 
-void CCrossSection::dSetManningNo(double dValue) {
-    m_dManningNo = dValue;
+void CCrossSection::dSetManningNumber(double dValue) {
+    m_dManningNumber = dValue;
 }
 void CCrossSection::dSetXUTM(double dValue) {
     m_dXUTM = dValue;
@@ -114,7 +114,12 @@ void CCrossSection::dSetRightRBAngle(double dValue) {
 void CCrossSection::dSetLeftRBAngle(double dValue) {
     m_dLeftRBAngle = dValue;
 }
-
+void CCrossSection::dSetElevation(double dValue) {
+    m_dElevation = dValue;
+}
+void CCrossSection::dSetWaterFlow(double dValue) {
+    m_dWaterFlow = dValue;
+}
 void CCrossSection::nSetElevationSectionsNumber(int nValue) {
     m_nElevationSectionNumber = nValue;
 }
@@ -132,8 +137,8 @@ double CCrossSection::dGetZ(){
   return m_dZ;
 }
 
-double CCrossSection::dGetManningNo(){
-  return m_dManningNo;
+double CCrossSection::dGetManningNumber(){
+  return m_dManningNumber;
 }
 double CCrossSection::dGetXUTM(){
   return m_dXUTM;
@@ -184,3 +189,18 @@ double CCrossSection::dGetI1(int nZ){
     return m_vI1[nZ];
 }
 
+double CCrossSection::dGetI2(int nZ){
+    return m_vI2[nZ];
+}
+
+vector<double> CCrossSection::vGetArea() {
+    return m_vArea;
+}
+
+vector<double> CCrossSection::vGetHydraulicRadius() {
+    return m_vHydraulicRadius;
+}
+
+vector<double> CCrossSection::vGetElevation() {
+    return m_vElevation;
+}

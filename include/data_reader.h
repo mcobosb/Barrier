@@ -51,22 +51,20 @@ private:
     string m_strOutFile;
 
     //! Name of along channel geometry file
-    string m_strAlongChannelGeometryFilename;
+    string m_strAlongChannelDataFilename;
 
     //! Name of cross-sections file
     string m_strCrossSectionsFilename;
-
-    //! Name of along channel water flow file
-    string m_strInitialAlongChannelWaterFlowFilename;
-
-    //! Name of along channel salinity file
-    string m_strInitialAlongChannelSalinityFilename;
 
     //! Name of the sediment properties
     string m_strSedimentPropertiesFilename;
 
     //! Name of downward boundary tidal elevation file
     string m_strTidalFilename;
+
+    //! Name of downward boundary water flow file
+    string m_strWaterFlowFilename;
+
 
     //! Name of hydro file
     string m_strHydroFilename;
@@ -134,8 +132,9 @@ public:
     string const LOG_EXT = ".log";
 
     bool bReadConfigurationFile(CSimulation* m_pSimulation);
-    bool bReadAlongChannelGeometryFile(CSimulation* m_pSimulation);
+    bool bReadAlongChannelDataFile(CSimulation* m_pSimulation);
     bool bReadCrossSectionGeometryFile(CSimulation* m_pSimulation);
+    bool bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation);
     bool bReadHydrographsFile(CSimulation* m_pSimulation);
     bool bOpenLogFile(CSimulation* m_pSimulation);
 
