@@ -98,6 +98,8 @@ class CCrossSection {
         void dSetLeftRBAngle(double dValue);
         void nSetElevationSectionsNumber(int nValue);
         void dAppend2Vector(string strItem, double dValue);
+
+
         // void dSetElevation(double dValue);
         // void dSetWidth(double dValue);
 //        void dSetArea(double dArea);
@@ -111,7 +113,7 @@ class CCrossSection {
         int nGetSectionNumber();
         double dGetX();
         double dGetZ();
-        double dGetManningNo();
+        double dGetManningNumber();
         double dGetXUTM();
         double dGetYUTM();
         double dGetRightRBAngle();
@@ -127,5 +129,10 @@ class CCrossSection {
         double dGetRightY(int nValue);
         double dGetBeta(int nValue);
         double dGetI1(int nValue);
+        double dGetI2(int nValue);
+
+        vector<double> vGetArea();
+        vector<double> vGetHydraulicRadius();
+        vector<double> vGetElevation();
 };
 #endif

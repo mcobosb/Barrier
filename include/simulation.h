@@ -57,14 +57,8 @@ class CSimulation
     //! The length of an iteration (a timestep) in hours
     double m_dSimTimestep;
 
-    //! The initial estuarine condition, IEC [0: filename, 1: constant water flow and 2:constant elevation]
-    int m_nInitialEstuarineCondition;
-
-    //! The constant initial along channel water flow [if IEC = 1]
-    double m_dInitialConstantWaterFlow;
-
-    //! The constant initial along channel elevation [if IEC = 2]
-    double m_dInitialConstantElevation;
+    //! The initial estuarine condition, IEC ["Q": water flow or "E" water elevation]
+    string m_strInitialEstuarineCondition;
 
     //! Compute water density?
     bool m_bDoWaterDensity;
@@ -79,10 +73,7 @@ class CSimulation
     int m_nUpwardEstuarineCondition;
 
     //! The downward estuarine condition
-    int m_nDownwardEstuarineCondition;
-
-    //! The downward fix water flow
-    double m_dDownwardWaterFlow;
+    string m_strDownwardEstuarineCondition;
 
     //! The Courant Number
     double m_dCourantNumber;
@@ -114,11 +105,98 @@ class CSimulation
     //! Do Murillo condition?
     bool m_bDoMurilloCondition;
 
-    //! Number of hydrographs
-    int m_nHydrographsNo;
+    //! Number of cross-sections
+    int m_nCrossSectionsNumber;
 
-    //! Names of output variables
+    //! Number of hydrographs
+    int m_nHydrographsNumber;
+
+    //! Vector with output variable names
     vector<string> m_vOutputVariables;
+
+    //! Cross-section Bed slope
+    vector<double> m_vCrossSectionBedSlope;
+
+    //! Cross-section areas
+    vector<double> m_vCrossSectionArea;
+    //! Predicted cross-section areas
+    vector<double> m_vPredictedCrossSectionArea;
+    //! Corrected cross-section areas
+    vector<double> m_vCorrectedCrossSectionArea;
+
+    //! Cross-section water flows
+    vector<double> m_vCrossSectionQ;
+    //! Predicted cross-section water flows
+    vector<double> m_vPredictedCrossSectionQ;
+    //! Corrected cross-section water flows
+    vector<double> m_vCorrectedCrossSectionQ;
+
+    //! Cross-section hydraulic radius
+    vector<double> m_vCrossSectionHydraulicRadius;
+    //! Predicted cross-section hydraulic radius
+    vector<double> m_vPredictedCrossSectionHydraulicRadius;
+    //! Corrected cross-section hydraulic radius
+    vector<double> m_vCorrectedCrossSectionHydraulicRadius;
+
+    //! Predicted cross-section hydraulic widths
+    vector<double> m_vPredictedCrossSectionWidth;
+    //! Corrected cross-section widths
+    vector<double> m_vCorrectedCrossSectionWidth;
+
+    //! Cross-section elevation
+    vector<double> m_vCrossSectionElevation;
+    //! Predicted cross-section elevations
+    vector<double> m_vPredictedCrossSectionElevation;
+    //! Corrected cross-section elevations
+    vector<double> m_vCorrectedCrossSectionElevation;
+
+    //! Predicted cross-section betas
+    vector<double> m_vPredictedCrossSectionBeta;
+    //! Corrected cross-section betas
+    vector<double> m_vCorrectedCrossSectionBeta;
+
+    //! Predicted cross-section I1s
+    vector<double> m_vPredictedCrossSectionI1;
+    //! Corrected cross-section I1s
+    vector<double> m_vCorrectedCrossSectionI1;
+
+    //! Predicted cross-section I2s
+    vector<double> m_vPredictedCrossSectionI2;
+    //! Corrected cross-section I2s
+    vector<double> m_vCorrectedCrossSectionI2;
+
+    //! Predicted cross-section water densities
+    vector<double> m_vPredictedCrossSectionRho;
+    //! Corrected cross-section water densities
+    vector<double> m_vCorrectedCrossSectionRho;
+
+    //! Predicted cross-section left river bank locations
+    vector<double> m_vPredictedCrossSectionLeftRBLocation;
+    //! Corrected cross-section left river bank locations
+    vector<double> m_vCorrectedCrossSectionLeftRBLocation;
+
+    //! Predicted cross-section right river bank locations
+    vector<double> m_vPredictedCrossSectionRightRBLocation;
+    //! Corrected cross-section right river bank locations
+    vector<double> m_vCorrectedCrossSectionRightRBLocation;
+
+    //! Cross-section mean water velocity
+    vector<double> m_vCrossSectionU;
+
+    //! Cross-section perturbation water velocities
+    vector<double> m_vCrossSectionC;
+
+    //! Cross-section salinities
+    vector<double> m_vCrossSectionSalinity;
+
+    //! Cross-section bottom sediment transport
+    vector<double> m_vCrossSectionQb;
+
+    //! Cross-section suspended sediment transport
+    vector<double> m_vCrossSectionQs;
+
+    //! Cross-section total sediment transport
+    vector<double> m_vCrossSectionQt;
 
     //! A vector with cross-sections objects along the estuary
     vector<CCrossSection> estuary;
@@ -142,19 +220,9 @@ class CSimulation
     void dSetSimulationTimestep(double simTimestep);
 
     //! Method for getting the initial estuarine condition
-    [[nodiscard]] int nGetInitialEstuarineCondition();
+    [[nodiscard]] string strGetInitialEstuarineCondition();
     //! Method for setting the initial estuarine condition
-    void nSetInitialEstuarineCondition(int initialCondition);
-
-    //! Method for getting the along channel constant water flow
-    [[nodiscard]] double dGetInitialConstantWaterFlow();
-    //! Method for setting the along channel constant water flow
-    void dSetInitialConstantWaterFlow(double constWaterFlow);
-
-    //! Method for getting the along channel constant elevation
-    [[nodiscard]] double dGetInitialConstantElevation();
-    //! Method for setting the along channel constant elevation
-    void dSetInitialConstantElevation(double constElevation);
+    void strSetInitialEstuarineCondition(string initialCondition);
 
     //! Method for getting the compute water density
     [[nodiscard]] bool bGetDoWaterDensity();
@@ -177,14 +245,9 @@ class CSimulation
     void nSetUpwardEstuarineCondition(int upwardEstuarineCondition);
 
     //! Method for getting the downward estuarine condition
-    [[nodiscard]] int nGetDownwardEstuarineCondition();
+    [[nodiscard]] string strGetDownwardEstuarineCondition();
     //! Method for setting the downward estuarine condition
-    void nSetDownwardEstuarineCondition(int downwardEstuarineCondition);
-
-    //! Method for getting the downward water flow
-    [[nodiscard]] double dGetDownwardWaterFlow();
-    //! Method for setting the downward estuarine condition
-    void dSetDownwardWaterFlow(double downwardWaterFlow);
+    void strSetDownwardEstuarineCondition(string downwardEstuarineCondition);
 
     //! Method for getting the courant number
     [[nodiscard]] double dGetCourantNumber();
@@ -253,6 +316,14 @@ class CSimulation
 
     //! Runs the simulation
     bool bDoSimulation(int, char const* []);
+    void calculateBedSlope();
+    void calculateAlongEstuaryInitialConditions();
+    double linearInterpolation1d(double dValue, vector<double> vX, vector<double> vY);
+    void calculateHydraulicParameters(bool bPredictedParameters);
+    void interpolateHydraulicParameters(double dArea, int nCrossSection, int nElevationNode, bool bPredictedParameters);
+    void getFirstHydraulicParameters(int nCrossSection, bool bPredictedParameters);
+    void getLastHydraulicParameters(int nCrossSection, bool bPredictedParameters);
+    void calculateCourantNumber();
     void calculateIs();
 
     //! Carries out end-of-simulation tidying (error messages etc.)

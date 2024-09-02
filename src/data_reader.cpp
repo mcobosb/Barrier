@@ -342,7 +342,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
 	            	else {
 	            		if (strRH == "full") {
-	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rh", "Rhp", "I1", "I1p", "B", "Bp", "eta", "etap", "beta", "betap", "I2", "I2p", "U", "c", "S", "Qb", "Qs", "Qt", "rho", "rhop", "xl", "xr", "xlp", "xrp"};
+	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rhp", "Rhc", "I1p", "I1c", "Bp", "Bc", "etap", "etac", "betap", "betac", "I2p", "I2c", "U", "c", "S", "Qb", "Qs", "Qt", "rhop", "rhoc", "xlp", "xlc", "xrp", "xrc"};
 	            		}
 	            		else {
 	            			vector<string> vOutputVariables;
@@ -383,55 +383,18 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            }
 
 	            case 9: {
-            		// Get the initial estuarine condition
-            		if (strRH.empty())
-            			strErr = "line " + to_string(nLine) + ":  initial estuarine condition";
-            		else
-            		{
-            			// Convert string to int
-            			m_pSimulation->nSetInitialEstuarineCondition(strtol(strRH.c_str(), nullptr, 10));
-            		}
-            		break;
-	            }
-
-	            case 10: {
-            		// Get the along channel water flow filename
-            		if (strRH.empty())
-            			strErr = "line " + to_string(nLine) + ": along channel water flow filename";
-
-					if (m_pSimulation->nGetInitialEstuarineCondition() == 0)
-            		{
-            			m_strInitialAlongChannelWaterFlowFilename = strRH;
-						m_strInitialAlongChannelWaterFlowFilename.append(".csv");
-            		}
-            		break;
-	            }
-
-            	case 11: {
-            		// Get the along channel constant water flow
-            		if (strRH.empty())
-            			strErr = "line " + to_string(nLine) + ": along channel constant water flow";
-
-	            	if (m_pSimulation->nGetInitialEstuarineCondition() == 1)
-            		{
-            			m_pSimulation->dSetInitialConstantWaterFlow(strtod(strRH.c_str(), nullptr));
-            		}
-            		break;
-            	}
-
-            	case 12: {
-            		// Get the along channel constant elevation
-            		if (strRH.empty())
-            			strErr = "line " + to_string(nLine) + ": along channel constant elevation";
-
-	            	if (m_pSimulation->nGetInitialEstuarineCondition() == 2)
-            		{
-            			m_pSimulation->dSetInitialConstantElevation(strtod(strRH.c_str(), nullptr));
-            		}
+		            // Get the initial estuarine condition
+	            	if (strRH.empty())
+	            		strErr = "line " + to_string(nLine) + ":  initial estuarine condition";
+	            	else
+	            	{
+	            		// Convert string to int
+	            		m_pSimulation->strSetInitialEstuarineCondition(strRH);
+	            	}
 	            	break;
-            	}
+	            }
 
-            	case 13: {
+            	case 10: {
 	            	// Compute water density?
 	            	strRH = strToLower(&strRH);
 
@@ -445,7 +408,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	break;
             	}
 
-            	case 14: {
+            	case 11: {
 	            	// Get the beta constant for salinity if compute water density
 	            	if (strRH.empty())
 	            		strErr = "line " + to_string(nLine) + ": beta constant for salinity";
@@ -457,7 +420,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	break;
             	}
 
-            	case 15: {
+            	case 12: {
 	            	// Get the longitudinal dispersion constant, KH if compute water density
 	            	if (strRH.empty())
 	            		strErr = "line " + to_string(nLine) + ": longitudinal dispersion constant, KH";
@@ -469,20 +432,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	break;
             	}
 
-            	case 16: {
-	            	// Get the along channel salinity file name
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": along channel constant elevation";
-
-	            	if (m_pSimulation->bGetDoWaterDensity())
-	            	{
-	            		m_strInitialAlongChannelSalinityFilename = strRH;
-	            		m_strInitialAlongChannelSalinityFilename.append(".csv");
-	            	}
-	            	break;
-            	}
-
-            	case 17: {
+            	case 13: {
 	            	// Get the sediment properties file name
 	            	if (strRH.empty())
 	            		strErr = "line " + to_string(nLine) + ": along channel constant elevation";
@@ -495,7 +445,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	break;
             	}
 
-            	case 18: {
+            	case 14: {
 	            	// Get the upward estuarine boundary condition
 	            	if (strRH.empty())
 	            		strErr = "line " + to_string(nLine) + ":  upward estuarine boundary condition";
@@ -507,25 +457,30 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	break;
             	}
 
-            	case 19: {
+            	case 15: {
 	            	// Get the downward estuarine boundary condition
 	            	if (strRH.empty())
 	            		strErr = "line " + to_string(nLine) + ":  downward estuarine boundary condition";
 	            	else
 	            	{
-	            		// Convert string to int
-	            		m_pSimulation->nSetDownwardEstuarineCondition(strtol(strRH.c_str(), nullptr, 10));
+	            		if (strRH != "Q" || strRH != "E") {
+	            			//! TODO 007: return an error code
+	            		}
+	            		else {
+	            			m_pSimulation->strSetDownwardEstuarineCondition(strRH);
+	            		}
+
 	            	}
 	            	break;
             	}
 
 
-            	case 20: {
-	            	// Get the tidal filename [if DEBC = 0]
+            	case 16: {
+	            	// Get the tidal filename [if DEBC = E]
 	            	if (strRH.empty())
 	            		strErr = "line " + to_string(nLine) + ": tidal filename";
 
-	            	if (m_pSimulation->nGetDownwardEstuarineCondition() == 0)
+	            	if (m_pSimulation->strGetDownwardEstuarineCondition() == "E")
 	            	{
 	            		m_strTidalFilename = strRH;
 	            		m_strTidalFilename.append(".csv");
@@ -533,19 +488,20 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	break;
             	}
 
-            	case 21: {
-	            	// Get the fix water flow [if DEBC = 1]
+            	case 17: {
+	            	// Get the water flow [if DEBC = Q]
 	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": fix water flow";
+	            		strErr = "line " + to_string(nLine) + ": water flow filename";
 
-	            	if (m_pSimulation->nGetDownwardEstuarineCondition() == 1)
+	            	if (m_pSimulation->strGetDownwardEstuarineCondition() == "Q")
 	            	{
-	            		m_pSimulation->dSetDownwardWaterFlow(strtod(strRH.c_str(), nullptr));
+	            		m_strWaterFlowFilename = strRH;
+	            		m_strWaterFlowFilename.append(".csv");
 	            	}
 	            	break;
             	}
 
-				case 22:
+				case 18:
             		// Get the hydro file name
 					if (strRH.empty())
                			strErr = "line " + to_string(nLine) + ": hydro file name";
@@ -555,7 +511,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						m_strHydroFilename.append(".csv");
 					}
 
-            	case 23: {
+            	case 19: {
             		// Get the courant number
             		if (strRH.empty())
             			strErr = "line " + to_string(nLine) + ": courant number";
@@ -564,7 +520,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		break;
             	}
 
-            	case 24: {
+            	case 20: {
 					// Use McComarck limiter flux?
 					strRH = strToLower(&strRH);
 
@@ -578,7 +534,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					break;
             	}
 
-            	case 25: {
+            	case 21: {
 					// Equation for the limiter flux
 					if (strRH.empty())
 						strErr = "line " + to_string(nLine) + ": equation for the limiter flux ";
@@ -589,7 +545,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					}
 					break;
             	}
-            	case 26: {
+            	case 22: {
 					// Psi formula
 					if (strRH.empty())
 						strErr = "line " + to_string(nLine) + ": psi formula ";
@@ -601,7 +557,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					break;
             	}
 
-            	case 27: {
+            	case 23: {
 						// delta value
 					if (strRH.empty())
 						strErr = "line " + to_string(nLine) + ": delta value ";
@@ -612,7 +568,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					}
 					break;
             	}
-            	case 28: {
+            	case 24: {
 						// Use Surface Gradient method?
 						strRH = strToLower(&strRH);
 
@@ -626,7 +582,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
             	}
 
-            	case 29: {
+            	case 25: {
 						// Use Source Term balance?
 						strRH = strToLower(&strRH);
 
@@ -640,7 +596,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
             	}
 
-            	case 30: {
+            	case 26: {
 						// Use beta coefficient?
 						strRH = strToLower(&strRH);
 
@@ -654,7 +610,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
             	}
 
-            	case 31: {
+            	case 27: {
 						// Use Dry bed?
 						strRH = strToLower(&strRH);
 
@@ -668,7 +624,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
             	}
 
-            	case 32: {
+            	case 28: {
 						// Use Murillo condition?
 						strRH = strToLower(&strRH);
 
@@ -716,7 +672,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 //======================================================================================================================
 //!	Read Along Channel geometry file
 //======================================================================================================================
-bool CDataReader::bReadAlongChannelGeometryFile(CSimulation* m_pSimulation) {
+bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 	// Create an ifstream object
 	ifstream InStream;
 
@@ -731,11 +687,10 @@ bool CDataReader::bReadAlongChannelGeometryFile(CSimulation* m_pSimulation) {
 		return true;
 	}
 
-	int nLine = 0;
+	int nCrossSectionNumber = 0;
 	// int i = 0;
 	// size_t nPos;
 	string strRec, strErr;
-	// CEstuary CEstuary;
 
 	while (getline(InStream, strRec)) {
 
@@ -749,7 +704,7 @@ bool CDataReader::bReadAlongChannelGeometryFile(CSimulation* m_pSimulation) {
 			m_pSimulation->AddCrossSection();
 
 			// Update section number
-			m_pSimulation->estuary[nLine].nSetSectionNumber(nLine);
+			m_pSimulation->estuary[nCrossSectionNumber].nSetSectionNumber(nCrossSectionNumber);
 
 			// Obtain the new line
 			stringstream sline(strRec);
@@ -762,31 +717,31 @@ bool CDataReader::bReadAlongChannelGeometryFile(CSimulation* m_pSimulation) {
 				double dValue = strtod(token.c_str(), nullptr);
 
 				if (j == 0) {
-					m_pSimulation->estuary[nLine].dSetX(dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dSetX(dValue);
 				}
 
 				if (j == 1) {
-					m_pSimulation->estuary[nLine].dSetZ(dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dSetZ(dValue);
 				}
 
 				if (j == 2) {
-					m_pSimulation->estuary[nLine].dSetManningNo(dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dSetManningNo(dValue);
 				}
 
 				if (j == 3) {
-					m_pSimulation->estuary[nLine].dSetXUTM(dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dSetXUTM(dValue);
 				}
 
 				if (j == 4) {
-					m_pSimulation->estuary[nLine].dSetYUTM(dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dSetYUTM(dValue);
 				}
 
 				if (j == 5) {
-					m_pSimulation->estuary[nLine].dSetRightRBAngle(dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dSetRightRBAngle(dValue);
 				}
 
 				if (j == 6) {
-					m_pSimulation->estuary[nLine].dSetLeftRBAngle(dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(dValue);
 				}
 
 				// Increment counter
@@ -795,10 +750,11 @@ bool CDataReader::bReadAlongChannelGeometryFile(CSimulation* m_pSimulation) {
 			}
 
 			// Increment counter
-			nLine++;
+			nCrossSectionNumber++;
 		}
 
 	}
+	m_pSimulation->m_nCrossSectionsNumber = nCrossSectionNumber - 1;
 	return false;
 }
 
@@ -826,12 +782,12 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) {
 	// int i = 0;
 	// size_t nPos;
 	string strRec, strErr;
-	int nCrossSectionNo = 0;
+	int nCrossSectionNumber = 0;
 	// CEstuary* CEstuary;
 
 	while (getline(InStream, strRec)) {
 
-		bool bSetElevationSectionsNo = true;
+		bool bSetElevationSectionsNumber = true;
 
 		// Trim off leading and trailing whitespace
 		strRec = strTrim(&strRec);
@@ -850,59 +806,59 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) {
 
 				double dValue = strtod(token.c_str(), nullptr);
 
-				if (j == 0 && m_pSimulation->estuary[nCrossSectionNo].dGetX() != dValue) {
-					if (bSetElevationSectionsNo) {
-						m_pSimulation->estuary[nCrossSectionNo].nSetElevationSectionsNumber(nLine - nLastElevationLine);
-						bSetElevationSectionsNo = false;
+				if (j == 0 && m_pSimulation->estuary[nCrossSectionNumber].dGetX() != dValue) {
+					if (bSetElevationSectionsNumber) {
+						m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine);
+						bSetElevationSectionsNumber = false;
 						nLastElevationLine = nLine;
 					}
-					nCrossSectionNo++;
+					nCrossSectionNumber++;
 				}
 
 
 				if (j == 2) {
 					string strItem = "elevation";
-					m_pSimulation->estuary[nCrossSectionNo].dAppend2Vector(strItem, dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
 
 				if (j == 3) {
 					string strItem = "width";
-					m_pSimulation->estuary[nCrossSectionNo].dAppend2Vector(strItem, dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
 
 				if (j == 4) {
 					string strItem = "area";
-					m_pSimulation->estuary[nCrossSectionNo].dAppend2Vector(strItem, dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
 
 				if (j == 5) {
 					string strItem = "perimeter";
-					m_pSimulation->estuary[nCrossSectionNo].dAppend2Vector(strItem, dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
 
 				if (j == 6) {
 					string strItem = "hydraulic radius";
-					m_pSimulation->estuary[nCrossSectionNo].dAppend2Vector(strItem, dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
 
 				if (j == 7) {
 					string strItem = "sigma";
-					m_pSimulation->estuary[nCrossSectionNo].dAppend2Vector(strItem, dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
 
 				if (j == 8) {
 					string strItem = "left river bank location";
-					m_pSimulation->estuary[nCrossSectionNo].dAppend2Vector(strItem, dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
 
 				if (j == 9) {
 					string strItem = "right river bank location";
-					m_pSimulation->estuary[nCrossSectionNo].dAppend2Vector(strItem, dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
 
 				if (j == 10) {
 					string strItem = "beta";
-					m_pSimulation->estuary[nCrossSectionNo].dAppend2Vector(strItem, dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
 
 				// Increase counter
@@ -913,7 +869,7 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) {
 
 	}
 	// Number of elevation sections for the last Cross-Section
-	m_pSimulation->estuary[nCrossSectionNo].nSetElevationSectionsNumber(nLine - nLastElevationLine + 1);
+	m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine + 1);
 
 	return false;
 }

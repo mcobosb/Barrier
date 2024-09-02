@@ -132,7 +132,7 @@ double CCrossSection::dGetZ(){
   return m_dZ;
 }
 
-double CCrossSection::dGetManningNo(){
+double CCrossSection::dGetManningNumber(){
   return m_dManningNo;
 }
 double CCrossSection::dGetXUTM(){
@@ -184,3 +184,18 @@ double CCrossSection::dGetI1(int nZ){
     return m_vI1[nZ];
 }
 
+double CCrossSection::dGetI2(int nZ){
+    return m_vI2[nZ];
+}
+
+vector<double> CCrossSection::vGetArea() {
+    return m_vArea;
+}
+
+vector<double> CCrossSection::vGetHydraulicRadius() {
+    return m_vHydraulicRadius;
+}
+
+vector<double> CCrossSection::vGetElevation() {
+    return m_vElevation;
+}
