@@ -88,3 +88,23 @@ bool bIsStringValidInt(string& str)
     // Now check that the string contains only numbers
     return (str.find_first_not_of("0123456789") == string::npos);
 }
+
+//===============================================================================================================================
+//! Compute the min value of a vector
+//===============================================================================================================================
+double min(const std::vector<double>& vec) {
+    // if (vec.empty()) {
+    //     std::cerr << "El vector está vacío." << std::endl;
+    //     return std::numeric_limits<int>::max(); // Retorna el mayor valor posible de int
+    // }
+
+    double minValue = vec[0]; // Starting value
+
+    for (int i = 1; i < vec.size(); ++i) {
+        if (vec[i] < minValue) {
+            minValue = vec[i]; // Update the min value
+        }
+    }
+
+    return minValue;
+}

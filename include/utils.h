@@ -29,6 +29,7 @@ constexpr int TIME_YEARS = 3;
 
 bool bIsStringValidDouble(string &);
 bool bIsStringValidInt(string &);
+double dMin(vector<double> &);
 string strToLower(string const*);
 vector<string> VstrSplit2(string const*, char, vector<string>*);
 vector<string> VstrSplit(string const*, char);

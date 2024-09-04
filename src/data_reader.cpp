@@ -342,7 +342,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
 	            	else {
 	            		if (strRH == "full") {
-	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rhp", "Rhc", "I1p", "I1c", "Bp", "Bc", "etap", "etac", "betap", "betac", "I2p", "I2c", "U", "c", "S", "Qb", "Qs", "Qt", "rhop", "rhoc", "xlp", "xlc", "xrp", "xrc"};
+	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rhp", "Rhc", "I1p", "I1c", "I2p", "I2c", "Bp", "Bc", "etap", "etac", "betap", "betac", "U", "c", "S", "Qb", "Qs", "Qt", "rhop", "rhoc", "xlp", "xlc", "xrp", "xrc"};
 	            		}
 	            		else {
 	            			vector<string> vOutputVariables;
@@ -383,69 +383,18 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            }
 
 	            case 9: {
-		            // Get the initial estuarine condition
+		            // Get the initial along-channel estuarine condition
 	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ":  initial estuarine condition";
+	            		strErr = "line " + to_string(nLine) + ":  initial along-channel estuarine condition";
 	            	else
 	            	{
 	            		// Convert string to int
-	            		m_pSimulation->strSetInitialEstuarineCondition(strRH);
+	            		m_pSimulation->nSetInitialEstuarineCondition(strtol(strRH.c_str(), nullptr, 10));
 	            	}
 	            	break;
 	            }
 
             	case 10: {
-	            	// Compute water density?
-	            	strRH = strToLower(&strRH);
-
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": Compute water density?";
-
-	            	if  (strRH.find("y") != string::npos)
-	            		m_pSimulation->bSetDoWaterDensity(true);
-	            	else
-	            		m_pSimulation->bSetDoWaterDensity(false);
-	            	break;
-            	}
-
-            	case 11: {
-	            	// Get the beta constant for salinity if compute water density
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": beta constant for salinity";
-
-	            	if (m_pSimulation->bGetDoWaterDensity())
-	            	{
-	            		m_pSimulation->dSetBetaSalinityConstant(strtod(strRH.c_str(), nullptr));
-	            	}
-	            	break;
-            	}
-
-            	case 12: {
-	            	// Get the longitudinal dispersion constant, KH if compute water density
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": longitudinal dispersion constant, KH";
-
-	            	if (m_pSimulation->bGetDoWaterDensity())
-	            	{
-	            		m_pSimulation->dSetLongitudinalDispersionConstant(strtod(strRH.c_str(), nullptr));
-	            	}
-	            	break;
-            	}
-
-            	case 13: {
-	            	// Get the sediment properties file name
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": sediment properties file name";
-
-	            	if (m_pSimulation->bGetDoWaterDensity())
-	            	{
-	            		m_strSedimentPropertiesFilename = strRH;
-	            		m_strSedimentPropertiesFilename.append(".csv");
-	            	}
-	            	break;
-            	}
-
-            	case 14: {
 	            	// Get the upward estuarine boundary condition
 	            	if (strRH.empty())
 	            		strErr = "line " + to_string(nLine) + ": upward estuarine boundary condition";
@@ -457,51 +406,60 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	break;
             	}
 
-            	case 15: {
+            	case 11: {
+	            	// Get the UEBC filename
+
+	            	// if (strRH.empty())
+	            	// 	strErr = "line " + to_string(nLine) + ": tidal filename";
+
+	            	if (m_pSimulation->nGetDownwardEstuarineCondition() == 1 || m_pSimulation->nGetUpwardEstuarineCondition() == 2)
+	            	{
+	            		m_pSimulation->m_strUpwardBoundaryConditionFilename = strRH;
+	            		m_pSimulation->m_strUpwardBoundaryConditionFilename.append(".csv");
+	            	}
+	            	else {
+	            		m_pSimulation->m_strUpwardBoundaryConditionFilename = "";
+	            	}
+
+	            	break;
+            	}
+
+            	case 12: {
 	            	// Get the downward estuarine boundary condition
 	            	if (strRH.empty())
 	            		strErr = "line " + to_string(nLine) + ": downward estuarine boundary condition";
 	            	else
 	            	{
-	            		if (strRH != "Q" || strRH != "E") {
+	            		int nEstuaryCondition = strtol(strRH.c_str(), nullptr, 10);
+	            		if (nEstuaryCondition != 0 && nEstuaryCondition != 1 && nEstuaryCondition != 2) {
 	            			//! TODO 007: return an error code
 	            		}
 	            		else {
-	            			m_pSimulation->strSetDownwardEstuarineCondition(strRH);
+	            			m_pSimulation->nSetDownwardEstuarineCondition(nEstuaryCondition);
 	            		}
 
 	            	}
 	            	break;
             	}
 
+            	case 13: {
+		            // Get the tidal filename [if DEBC = E]
+	            	// if (strRH.empty())
+	            	// 	strErr = "line " + to_string(nLine) + ": - DEBC file name ";
 
-            	case 16: {
-	            	// Get the tidal filename [if DEBC = E]
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": tidal filename";
-
-	            	if (m_pSimulation->strGetDownwardEstuarineCondition() == "E")
-	            	{
-	            		m_strTidalFilename = strRH;
-	            		m_strTidalFilename.append(".csv");
+	            	if (m_pSimulation->nGetDownwardEstuarineCondition() == 1 || m_pSimulation->nGetDownwardEstuarineCondition() == 2) {
+	            		m_pSimulation->m_strDownwardBoundaryConditionFilename = strRH;
+	            		m_pSimulation->m_strDownwardBoundaryConditionFilename.append(".csv");
+		            }
+	            	else {
+	            		m_pSimulation->m_strDownwardBoundaryConditionFilename = "";
 	            	}
+
 	            	break;
             	}
 
-            	case 17: {
-	            	// Get the water flow [if DEBC = Q]
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": water flow filename";
 
-	            	if (m_pSimulation->strGetDownwardEstuarineCondition() == "Q")
-	            	{
-	            		m_strWaterFlowFilename = strRH;
-	            		m_strWaterFlowFilename.append(".csv");
-	            	}
-	            	break;
-            	}
-
-				case 18:
+				case 14:
             		// Get the hydro file name
 					if (strRH.empty())
                			strErr = "line " + to_string(nLine) + ": hydro file name";
@@ -511,7 +469,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						m_strHydroFilename.append(".csv");
 					}
 
-            	case 19: {
+            	case 15: {
             		// Get the courant number
             		if (strRH.empty())
             			strErr = "line " + to_string(nLine) + ": courant number";
@@ -520,7 +478,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		break;
             	}
 
-            	case 20: {
+            	case 16: {
 					// Use McComarck limiter flux?
 					strRH = strToLower(&strRH);
 
@@ -534,7 +492,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					break;
             	}
 
-            	case 21: {
+            	case 17: {
 					// Equation for the limiter flux
 					if (strRH.empty())
 						strErr = "line " + to_string(nLine) + ": equation for the limiter flux ";
@@ -545,7 +503,8 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					}
 					break;
             	}
-            	case 22: {
+
+            	case 18: {
 					// Psi formula
 					if (strRH.empty())
 						strErr = "line " + to_string(nLine) + ": psi formula ";
@@ -557,8 +516,8 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					break;
             	}
 
-            	case 23: {
-						// delta value
+            	case 19: {
+					//! Delta value
 					if (strRH.empty())
 						strErr = "line " + to_string(nLine) + ": delta value ";
 
@@ -568,7 +527,8 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					}
 					break;
             	}
-            	case 24: {
+
+            	case 20: {
 						// Use Surface Gradient method?
 						strRH = strToLower(&strRH);
 
@@ -582,7 +542,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
             	}
 
-            	case 25: {
+            	case 21: {
 						// Use Source Term balance?
 						strRH = strToLower(&strRH);
 
@@ -596,7 +556,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
             	}
 
-            	case 26: {
+            	case 22: {
 						// Use beta coefficient?
 						strRH = strToLower(&strRH);
 
@@ -610,7 +570,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
             	}
 
-            	case 27: {
+            	case 23: {
 						// Use Dry bed?
 						strRH = strToLower(&strRH);
 
@@ -624,7 +584,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
             	}
 
-            	case 28: {
+            	case 24: {
 						// Use Murillo condition?
 						strRH = strToLower(&strRH);
 
@@ -635,6 +595,57 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 							m_pSimulation->bSetDoMurilloCondition(true);
 						else
 							m_pSimulation->bSetDoMurilloCondition(false);
+						break;
+            	}
+
+            	case 25: {
+						// Compute water density?
+						strRH = strToLower(&strRH);
+
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": Compute water density?";
+
+						if  (strRH.find("y") != string::npos)
+							m_pSimulation->bSetDoWaterDensity(true);
+						else
+							m_pSimulation->bSetDoWaterDensity(false);
+						break;
+            	}
+
+            	case 26: {
+						// Get the beta constant for salinity if compute water density
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": beta constant for salinity";
+
+						if (m_pSimulation->bGetDoWaterDensity())
+						{
+							m_pSimulation->dSetBetaSalinityConstant(strtod(strRH.c_str(), nullptr));
+						}
+						break;
+            	}
+
+            	case 27: {
+						// Get the longitudinal dispersion constant, KH if compute water density
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": longitudinal dispersion constant, KH";
+
+						if (m_pSimulation->bGetDoWaterDensity())
+						{
+							m_pSimulation->dSetLongitudinalDispersionConstant(strtod(strRH.c_str(), nullptr));
+						}
+						break;
+            	}
+
+            	case 28: {
+						// Get the sediment properties file name
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": sediment properties file name";
+
+						if (m_pSimulation->bGetDoWaterDensity())
+						{
+							m_strSedimentPropertiesFilename = strRH;
+							m_strSedimentPropertiesFilename.append(".csv");
+						}
 						break;
             	}
 
@@ -742,6 +753,21 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 
 				if (j == 6) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(dValue);
+				}
+
+				if (j == 7)
+				{
+					if  (m_pSimulation->nGetInitialEstuarineCondition() == 0)
+					{
+						continue;
+					}
+					else if (m_pSimulation->nGetInitialEstuarineCondition() == 1) {
+						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
+					}
+					else
+					{
+						m_pSimulation->m_vCrossSectionElevation.push_back(dValue);
+					}
 				}
 
 				// Increment counter
@@ -878,24 +904,63 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) {
 //!	Read Downward Boundary Condition file
 //======================================================================================================================
 bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation) {
+
+	int nCrossSectionsNumber = m_pSimulation->m_nCrossSectionsNumber - 1;
 	// Create an ifstream object
 	ifstream InStream;
-	//! TODO 010: Continue ...
-	if (m_pSimulation->strGetDownwardEstuarineCondition() == "E") {
-		// Try to open run details file for input
-		InStream.open(m_strAlongChannelDataFilename.c_str(), ios::in);
 
-		// Did it open OK?
-		if (!InStream.is_open())
-		{
-			// Error: cannot open run details file for input
-			cerr << ERR << "cannot open " << m_strAlongChannelDataFilename << " for input" << endl;
-			return true;
-		}
+	// Try to open run details file for input
+	InStream.open(m_pSimulation->m_strUpwardBoundaryConditionFilename.c_str(), ios::in);
 
-		int nCrossSectionNumber = 0;
+	// Did it open OK?
+	if (!InStream.is_open())
+	{
+		// Error: cannot open run details file for input
+		cerr << ERR << "cannot open " << m_pSimulation->m_strUpwardBoundaryConditionFilename << " for input" << endl;
+		return true;
 	}
+
+	int nLine = 0;
+	int i = 0;
+	size_t nPos;
+	string strRec, strErr;
+
+	while (getline(InStream, strRec)) {
+		nLine++;
+
+		// Trim off leading and trailing whitespace
+		strRec = strTrim(&strRec);
+
+		// If it is a blank line or a comment then ignore it
+		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			stringstream string_line(strRec);
+
+			string token;
+			int j = 0;
+
+			// Using getline for spliting the string line by commas
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				if (j == 0) {
+					//! TODO 010: Setter and getter
+					m_pSimulation->m_vUpwardBoundaryConditionTime.push_back(dValue);
+				}
+
+				if (j == 1) {
+					m_pSimulation->m_vUpwardBoundaryConditionValue.push_back(dValue);
+				}
+
+				// Increment counter
+				j++;
+			}
+
+			// Increment counter
+			i++;
+		}
+	}
+	return false;
 }
+
 
 
 //======================================================================================================================
