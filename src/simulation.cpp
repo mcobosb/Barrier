@@ -459,6 +459,27 @@ void CSimulation::interpolateHydraulicParameters(double dArea, int nCrossSection
 //======================================================================================================================
 //! Get first node hydraulic parameters
 //======================================================================================================================
+void CSimulation::getFirstHydraulicParameters(const int nCrossSection, const bool bPredictedParameters) {
+    if (bPredictedParameters) {
+        m_vPredictedCrossSectionHydraulicRadius[nCrossSection] = this->estuary[nCrossSection].dGetHydraulicRadius(0);
+        m_vPredictedCrossSectionWidth[nCrossSection] =  this->estuary[nCrossSection].dGetWidth(0);
+        m_vPredictedCrossSectionElevation[nCrossSection] = this->estuary[nCrossSection].dGetElevation(0);
+        m_vPredictedCrossSectionBeta[nCrossSection] = this->estuary[nCrossSection].dGetBeta(0);
+        m_vPredictedCrossSectionI1[nCrossSection] = this->estuary[nCrossSection].dGetI1(0);
+        m_vPredictedCrossSectionI2[nCrossSection] = this->estuary[nCrossSection].dGetI2(0);
+        m_vPredictedCrossSectionLeftRBLocation[nCrossSection] = this->estuary[nCrossSection].dGetLeftY(0);
+        m_vPredictedCrossSectionRightRBLocation[nCrossSection] = this->estuary[nCrossSection].dGetRightY(0);
+    }
+    else {
+        m_vCorrectedCrossSectionHydraulicRadius[nCrossSection] = this->estuary[nCrossSection].dGetHydraulicRadius(0);
+        m_vCorrectedCrossSectionWidth[nCrossSection] =  this->estuary[nCrossSection].dGetWidth(0);
+        m_vCorrectedCrossSectionElevation[nCrossSection] = this->estuary[nCrossSection].dGetElevation(0);
+        m_vCorrectedCrossSectionBeta[nCrossSection] = this->estuary[nCrossSection].dGetBeta(0);
+        m_vCorrectedCrossSectionI1[nCrossSection] = this->estuary[nCrossSection].dGetI1(0);
+        m_vCorrectedCrossSectionI2[nCrossSection] = this->estuary[nCrossSection].dGetI2(0);
+        m_vCorrectedCrossSectionLeftRBLocation[nCrossSection] = this->estuary[nCrossSection].dGetLeftY(0);
+        m_vCorrectedCrossSectionRightRBLocation[nCrossSection] = this->estuary[nCrossSection].dGetRightY(0);
+    }
 void CSimulation::getFirstHydraulicParameters(const int nCrossSection) {
     m_vCrossSectionHydraulicRadius[nCrossSection] = this->estuary[nCrossSection].dGetHydraulicRadius(0);
     m_vCrossSectionWidth[nCrossSection] =  this->estuary[nCrossSection].dGetWidth(0);
