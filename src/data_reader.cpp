@@ -342,7 +342,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
 	            	else {
 	            		if (strRH == "full") {
-	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rhp", "Rhc", "I1p", "I1c", "Bp", "Bc", "etap", "etac", "betap", "betac", "I2p", "I2c", "U", "c", "S", "Qb", "Qs", "Qt", "rhop", "rhoc", "xlp", "xlc", "xrp", "xrc"};
+	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rhp", "Rhc", "I1p", "I1c", "I2p", "I2c", "Bp", "Bc", "etap", "etac", "betap", "betac", "U", "c", "S", "Qb", "Qs", "Qt", "rhop", "rhoc", "xlp", "xlc", "xrp", "xrc"};
 	            		}
 	            		else {
 	            			vector<string> vOutputVariables;
@@ -463,7 +463,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            		strErr = "line " + to_string(nLine) + ":  downward estuarine boundary condition";
 	            	else
 	            	{
-	            		if (strRH != "Q" || strRH != "E") {
+	            		if (strRH != "Q" && strRH != "E") {
 	            			//! TODO 007: return an error code
 	            		}
 	            		else {
@@ -744,6 +744,17 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(dValue);
 				}
 
+				if (j == 7)
+				{
+					if (m_pSimulation->strGetDownwardEstuarineCondition() == "E")
+					{
+						m_pSimulation->m_vCrossSectionElevation.push_back(dValue);
+					}
+					else
+					{
+						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
+					}
+				}
 				// Increment counter
 				j++;
 

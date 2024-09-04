@@ -23,7 +23,7 @@ inline double DRY_BED = 1e-8;
 
 
 // float const INITIAL_CONDITION = 0.00;
-string const INITIAL_Q_FILENAME = "initial_along_estuary_water_flow.csv";
+// string const INITIAL_Q_FILENAME = "initial_along_estuary_water_flow.csv";
 // float const QCI = 1.00;
 // float const ETACI =	0.02;
 float const COURANTNO =	0.20;

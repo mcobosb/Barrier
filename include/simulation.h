@@ -54,8 +54,11 @@ class CSimulation
     //! Duration of simulation, in hours
     double m_dSimDuration;
 
-    //! The length of an iteration (a timestep) in hours
+    //! Timestep to be saved in hours
     double m_dSimTimestep;
+
+    //! Computational timestep obtained from Courant number
+    double m_dTimestep;
 
     //! The initial estuarine condition, IEC ["Q": water flow or "E" water elevation]
     string m_strInitialEstuarineCondition;
@@ -119,66 +122,66 @@ class CSimulation
 
     //! Cross-section areas
     vector<double> m_vCrossSectionArea;
-    //! Predicted cross-section areas
-    vector<double> m_vPredictedCrossSectionArea;
-    //! Corrected cross-section areas
-    vector<double> m_vCorrectedCrossSectionArea;
+    // //! Predicted cross-section areas
+    // vector<double> m_vPredictedCrossSectionArea;
+    // //! Corrected cross-section areas
+    // vector<double> m_vCorrectedCrossSectionArea;
 
     //! Cross-section water flows
     vector<double> m_vCrossSectionQ;
-    //! Predicted cross-section water flows
-    vector<double> m_vPredictedCrossSectionQ;
-    //! Corrected cross-section water flows
-    vector<double> m_vCorrectedCrossSectionQ;
+    // //! Predicted cross-section water flows
+    // vector<double> m_vPredictedCrossSectionQ;
+    // //! Corrected cross-section water flows
+    // vector<double> m_vCorrectedCrossSectionQ;
 
     //! Cross-section hydraulic radius
     vector<double> m_vCrossSectionHydraulicRadius;
-    //! Predicted cross-section hydraulic radius
-    vector<double> m_vPredictedCrossSectionHydraulicRadius;
-    //! Corrected cross-section hydraulic radius
-    vector<double> m_vCorrectedCrossSectionHydraulicRadius;
+    // //! Predicted cross-section hydraulic radius
+    // vector<double> m_vPredictedCrossSectionHydraulicRadius;
+    // //! Corrected cross-section hydraulic radius
+    // vector<double> m_vCorrectedCrossSectionHydraulicRadius;
 
-    //! Predicted cross-section hydraulic widths
-    vector<double> m_vPredictedCrossSectionWidth;
-    //! Corrected cross-section widths
-    vector<double> m_vCorrectedCrossSectionWidth;
+    //! Cross-section hydraulic widths
+    vector<double> m_vCrossSectionWidth;
+    // //! Corrected cross-section widths
+    // vector<double> m_vCorrectedCrossSectionWidth;
 
     //! Cross-section elevation
     vector<double> m_vCrossSectionElevation;
-    //! Predicted cross-section elevations
-    vector<double> m_vPredictedCrossSectionElevation;
-    //! Corrected cross-section elevations
-    vector<double> m_vCorrectedCrossSectionElevation;
+    // //! Predicted cross-section elevations
+    // vector<double> m_vPredictedCrossSectionElevation;
+    // //! Corrected cross-section elevations
+    // vector<double> m_vCorrectedCrossSectionElevation;
 
-    //! Predicted cross-section betas
-    vector<double> m_vPredictedCrossSectionBeta;
-    //! Corrected cross-section betas
-    vector<double> m_vCorrectedCrossSectionBeta;
+    //! Cross-section betas
+    vector<double> m_vCrossSectionBeta;
+    // //! Corrected cross-section betas
+    // vector<double> m_vCorrectedCrossSectionBeta;
 
-    //! Predicted cross-section I1s
-    vector<double> m_vPredictedCrossSectionI1;
-    //! Corrected cross-section I1s
-    vector<double> m_vCorrectedCrossSectionI1;
+    //! Cross-section I1s
+    vector<double> m_vCrossSectionI1;
+    // //! Corrected cross-section I1s
+    // vector<double> m_vCorrectedCrossSectionI1;
 
-    //! Predicted cross-section I2s
-    vector<double> m_vPredictedCrossSectionI2;
-    //! Corrected cross-section I2s
-    vector<double> m_vCorrectedCrossSectionI2;
+    //! Cross-section I2s
+    vector<double> m_vCrossSectionI2;
+    // //! Corrected cross-section I2s
+    // vector<double> m_vCorrectedCrossSectionI2;
 
-    //! Predicted cross-section water densities
-    vector<double> m_vPredictedCrossSectionRho;
-    //! Corrected cross-section water densities
-    vector<double> m_vCorrectedCrossSectionRho;
+    //! Cross-section water densities
+    vector<double> m_vCrossSectionRho;
+    // //! Corrected cross-section water densities
+    // vector<double> m_vCorrectedCrossSectionRho;
 
-    //! Predicted cross-section left river bank locations
-    vector<double> m_vPredictedCrossSectionLeftRBLocation;
-    //! Corrected cross-section left river bank locations
-    vector<double> m_vCorrectedCrossSectionLeftRBLocation;
+    //! Cross-section left river bank locations
+    vector<double> m_vCrossSectionLeftRBLocation;
+    // //! Corrected cross-section left river bank locations
+    // vector<double> m_vCorrectedCrossSectionLeftRBLocation;
 
-    //! Predicted cross-section right river bank locations
-    vector<double> m_vPredictedCrossSectionRightRBLocation;
-    //! Corrected cross-section right river bank locations
-    vector<double> m_vCorrectedCrossSectionRightRBLocation;
+    //! Cross-section right river bank locations
+    vector<double> m_vCrossSectionRightRBLocation;
+    // //! Corrected cross-section right river bank locations
+    // vector<double> m_vCorrectedCrossSectionRightRBLocation;
 
     //! Cross-section mean water velocity
     vector<double> m_vCrossSectionU;
@@ -316,15 +319,17 @@ class CSimulation
 
     //! Runs the simulation
     bool bDoSimulation(int, char const* []);
+    void initializeVectors();
     void calculateBedSlope();
     void calculateAlongEstuaryInitialConditions();
     double linearInterpolation1d(double dValue, vector<double> vX, vector<double> vY);
-    void calculateHydraulicParameters(bool bPredictedParameters);
-    void interpolateHydraulicParameters(double dArea, int nCrossSection, int nElevationNode, bool bPredictedParameters);
-    void getFirstHydraulicParameters(int nCrossSection, bool bPredictedParameters);
-    void getLastHydraulicParameters(int nCrossSection, bool bPredictedParameters);
-    void calculateCourantNumber();
+    void calculateHydraulicParameters();
+    void interpolateHydraulicParameters(double dArea, int nCrossSection, int nElevationNode);
+    void getFirstHydraulicParameters(int nCrossSection);
+    void getLastHydraulicParameters(int nCrossSection);
+    void calculateTimestep();
     void calculateIs();
+    void drySoil();
 
     //! Carries out end-of-simulation tidying (error messages etc.)
     void DoSimulationEnd(int);
