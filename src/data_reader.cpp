@@ -342,7 +342,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
 	            	else {
 	            		if (strRH == "full") {
-	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rh", "Rhp", "I1", "I1p", "B", "Bp", "eta", "etap", "beta", "betap", "I2", "I2p", "U", "c", "S", "Qb", "Qs", "Qt", "rho", "rhop", "xl", "xr", "xlp", "xrp"};
+	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rhp", "Rhc", "I1p", "I1c", "Bp", "Bc", "etap", "etac", "betap", "betac", "I2p", "I2c", "U", "c", "S", "Qb", "Qs", "Qt", "rhop", "rhoc", "xlp", "xlc", "xrp", "xrc"};
 	            		}
 	            		else {
 	            			vector<string> vOutputVariables;
@@ -742,15 +742,6 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 
 				if (j == 6) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(dValue);
-				}
-
-				if (j == 7) {
-					if (m_pSimulation->strGetDownwardEstuarineCondition() == "E") {
-						m_pSimulation->estuary[nCrossSectionNumber].dSetElevation(dValue);
-					}
-					else {
-						m_pSimulation->estuary[nCrossSectionNumber].dSetWaterFlow(dValue);
-					}
 				}
 
 				// Increment counter
