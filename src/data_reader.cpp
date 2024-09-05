@@ -198,9 +198,9 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	                {
 	                    m_strRunName = strRH;
 
-	                    m_strOutFile = m_strOutPath;
-	                    m_strOutFile.append(strRH);
-	                    m_strOutFile.append(OUT_EXT);
+	                    m_pSimulation->m_strOutFile = m_strOutPath;
+	                    m_pSimulation->m_strOutFile.append(strRH);
+	                    m_pSimulation->m_strOutFile.append(OUT_EXT);
 
 	                    m_strLogFile = m_strOutPath;
 	                    m_strLogFile.append(strRH);
@@ -261,6 +261,10 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		strRH = strToLower(&strRH);
 
             		nRet = nSimulationTimeMultiplier(&strRH);
+
+	            	//! TODO 020: Options for another time unit
+	            	m_pSimulation->m_dTimeFactor = 3600.0;
+
             		if (nRet != RTN_OK)
             		{
             			strErr = "line " + to_string(nLine) + ": units for duration of simulation";
@@ -282,7 +286,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		strRH = strTrimRight(&strRH);
 
             		// Calculate the duration of the simulation in hours
-            		double dSimDuration = strtod(strRH.c_str(), nullptr) * m_dDurationUnitsMultiplier;
+            		double dSimDuration = strtod(strRH.c_str(), nullptr) * m_dDurationUnitsMultiplier*m_pSimulation->m_dTimeFactor;
 
             		if (dSimDuration <= 0)
             			strErr = "line " + to_string(nLine) + ": duration of simulation must be > 0";
@@ -297,6 +301,9 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		strRH = strToLower(&strRH);
 
             		dMult = dGetTimeMultiplier(&strRH);
+	            	//! TODO 020: Options for another time unit
+	            	m_pSimulation->m_dTimeFactor = 3600.0;
+
             		if (static_cast<int>(dMult) == TIME_UNKNOWN)
             		{
             			strErr = "line " + to_string(nLine) + ": units for simulation timestep";
@@ -324,7 +331,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             			break;
             		}
 
-            		double dTimeStep = strtod(strRH.c_str(), nullptr) * dMult; // in hours
+            		double dTimeStep = strtod(strRH.c_str(), nullptr) * dMult*m_pSimulation->m_dTimeFactor; // in hours
 
             		if (dTimeStep <= 0)
             			strErr = "line " + to_string(nLine) + ": timestep of simulation must be > 0";
@@ -901,9 +908,9 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) {
 
 
 //======================================================================================================================
-//!	Read Downward Boundary Condition file
+//!	Read Upward Boundary Condition file
 //======================================================================================================================
-bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation) {
+bool CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
 	int nCrossSectionsNumber = m_pSimulation->m_nCrossSectionsNumber - 1;
 	// Create an ifstream object
@@ -962,6 +969,67 @@ bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 }
 
 
+//======================================================================================================================
+//!	Read Downward Boundary Condition file
+//======================================================================================================================
+bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation) {
+
+	int nCrossSectionsNumber = m_pSimulation->m_nCrossSectionsNumber - 1;
+	// Create an ifstream object
+	ifstream InStream;
+
+	// Try to open run details file for input
+	InStream.open(m_pSimulation->m_strDownwardBoundaryConditionFilename.c_str(), ios::in);
+
+	// Did it open OK?
+	if (!InStream.is_open())
+	{
+		// Error: cannot open run details file for input
+		cerr << ERR << "cannot open " << m_pSimulation->m_strDownwardBoundaryConditionFilename << " for input" << endl;
+		return true;
+	}
+
+	int nLine = 0;
+	int i = 0;
+	size_t nPos;
+	string strRec, strErr;
+
+	while (getline(InStream, strRec)) {
+		nLine++;
+
+		// Trim off leading and trailing whitespace
+		strRec = strTrim(&strRec);
+
+		// If it is a blank line or a comment then ignore it
+		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			stringstream string_line(strRec);
+
+			string token;
+			int j = 0;
+
+			// Using getline for spliting the string line by commas
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				if (j == 0) {
+					//! TODO 010: Setter and getter
+					m_pSimulation->m_vDownwardBoundaryConditionTime.push_back(dValue);
+				}
+
+				if (j == 1) {
+					m_pSimulation->m_vDownwardBoundaryConditionValue.push_back(dValue);
+				}
+
+				// Increment counter
+				j++;
+			}
+
+			// Increment counter
+			i++;
+		}
+	}
+	return false;
+}
+
 
 //======================================================================================================================
 //! Read Hydro input file
@@ -1001,7 +1069,7 @@ bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) {
 
 			if (!bReadHydrographsNo) {
 				int nValue = strtol(strRec.c_str(), nullptr, 10);
-				m_pSimulation->nSetHydrographsNo(nValue);
+				m_pSimulation->nSetHydrographsNumber(nValue);
 
 				for (int ii = 0; ii < nValue; ii++) {
 					// Create a new hydrograph object

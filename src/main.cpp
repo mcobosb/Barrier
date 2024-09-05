@@ -44,6 +44,7 @@ int main(int argc, char const* argv[])
     nRtn = pDataReader->bReadConfigurationFile(&pSimulation);
     nRtn = pDataReader->bReadAlongChannelDataFile(&pSimulation);
     nRtn = pDataReader->bReadCrossSectionGeometryFile(&pSimulation);
+    nRtn = pDataReader->bReadUpwardBoundaryConditionFile(&pSimulation);
     nRtn = pDataReader->bReadDownwardBoundaryConditionFile(&pSimulation);
     nRtn = pDataReader->bReadHydrographsFile(&pSimulation);
 

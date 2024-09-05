@@ -16,4 +16,24 @@ include_directories(include)
 
 # Agregar ejecutable y especificar los archivos fuente.
 add_executable(SV src/main.cpp src/simulation.cpp src/screen_presenter.cpp src/data_reader.cpp
-        src/utils.cpp src/error_handling.cpp src/cross_section.cpp src/hydrograph.cpp)
+        src/utils.cpp src/error_handling.cpp src/cross_section.cpp src/hydrograph.cpp src/data_writer.cpp
+        src/data_writer.cpp)
+
+# Busca la ruta de las cabeceras de NetCDF
+find_path(NETCDF_INCLUDE_DIR netcdf.h
+        HINTS "C:/msys64/mingw64/include"
+        REQUIRED)
+
+# Busca la biblioteca de NetCDF
+find_library(NETCDF_LIBRARY NAMES netcdf
+        HINTS "C:/msys64/mingw64/lib"
+        REQUIRED)
+
+set(STATUS ${NETCDF_INCLUDE_DIR})
+set(STATUS ${NETCDF_LIBRARY})
+
+# Añadir directorios de cabeceras
+target_include_directories(SV PRIVATE ${NETCDF_INCLUDE_DIR})
+
+# Enlazar la biblioteca de NetCDF
+target_link_libraries(SV PRIVATE ${NETCDF_LIBRARY})

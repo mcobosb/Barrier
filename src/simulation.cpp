@@ -23,6 +23,7 @@ using std::pow;
 #include "screen_presenter.h"
 #include "hydrograph.h"
 #include "cross_section.h"
+#include "utils.h"
 
 //===============================================================================================================================
 //! The CSimulation constructor
@@ -47,7 +48,7 @@ CSimulation::~CSimulation () = default;
 
 
 //! Method for getting the simulation duration
-double CSimulation::dGetSimulationDuration() {
+double CSimulation::dGetSimulationDuration() const {
     return m_dSimDuration;
 }
 
@@ -57,7 +58,7 @@ void CSimulation::dSetSimulationDuration(double simDuration) {
 };
 
 //! Method for getting the simulation timestep
-double CSimulation::dGetSimulationTimestep() {
+double CSimulation::dGetSimulationTimestep() const {
     return m_dSimTimestep;
 }
 
@@ -67,7 +68,7 @@ void CSimulation::dSetSimulationTimestep(double simTimestep) {
 };
 
 //! Method for getting the initial estuarine condition
-int CSimulation::nGetInitialEstuarineCondition() {
+int CSimulation::nGetInitialEstuarineCondition() const {
     return m_nInitialEstuarineCondition;
 }
 
@@ -77,7 +78,7 @@ void CSimulation::nSetInitialEstuarineCondition(int initialCondition) {
 };
 
 //! Method for getting the computation of water density
-bool CSimulation::bGetDoWaterDensity() {
+bool CSimulation::bGetDoWaterDensity() const {
     return m_bDoWaterDensity;
 }
 
@@ -87,7 +88,7 @@ void CSimulation::bSetDoWaterDensity(bool computeWaterDensity) {
 };
 
 //! Method for getting the along channel constant elevation
-double CSimulation::dGetBetaSalinityConstant() {
+double CSimulation::dGetBetaSalinityConstant() const {
     return m_dBetaSalinityConstant;
 }
 
@@ -97,7 +98,7 @@ void CSimulation::dSetBetaSalinityConstant(double betaSalinity) {
 };
 
 //! Method for getting the along channel constant elevation
-double CSimulation::dGetLongitudinalDispersionConstant() {
+double CSimulation::dGetLongitudinalDispersionConstant() const {
     return m_dLongitudinalDispersion;
 }
 
@@ -107,7 +108,7 @@ void CSimulation::dSetLongitudinalDispersionConstant(double longitudinalDispersi
 };
 
 //! Method for getting the upward estuarine condition
-int CSimulation::nGetUpwardEstuarineCondition() {
+int CSimulation::nGetUpwardEstuarineCondition() const {
     return m_nUpwardEstuarineCondition;
 }
 
@@ -117,7 +118,7 @@ void CSimulation::nSetUpwardEstuarineCondition(int upwardEstuarineCondition) {
 };
 
 //! Method for getting the downward estuarine condition
-int CSimulation::nGetDownwardEstuarineCondition() {
+int CSimulation::nGetDownwardEstuarineCondition() const {
     return m_nDownwardEstuarineCondition;
 }
 
@@ -127,7 +128,7 @@ void CSimulation::nSetDownwardEstuarineCondition(int downwardEstuarineCondition)
 };
 
 //! Method for getting the courant number
-double CSimulation::dGetCourantNumber() {
+double CSimulation::dGetCourantNumber() const {
     return m_dCourantNumber;
 }
 
@@ -137,7 +138,7 @@ void CSimulation::dSetCourantNumber(double courantNumber) {
 }
 
 //! Method for getting if McComarck limiter flux is applied
-bool CSimulation::bGetDoMcComarckLimiterFlux() {
+bool CSimulation::bGetDoMcComarckLimiterFlux() const {
     return m_bDoMackComarckLimiterFlux;
 }
 //! Method for setting if McComarck limiter flux is applied
@@ -146,7 +147,7 @@ void CSimulation::bSetDoMcComarckLimiterFlux(bool doMcComarckLimiterFlux) {
 }
 
 //! Method for getting equation limiter flux
-int CSimulation::nGetEquationLimiterFlux() {
+int CSimulation::nGetEquationLimiterFlux() const {
     return m_nEquationMacComarckLimiterFlux;
 }
 //! Method for setting equation limiter flux
@@ -155,7 +156,7 @@ void CSimulation::nSetEquationLimiterFlux(int equationLimiterFlux) {
 }
 
 //! Method for getting Psi formula
-int CSimulation::nGetPsiFormula() {
+int CSimulation::nGetPsiFormula() const {
     return m_nPsiFormula;
 }
 //! Method for setting Psi formula
@@ -164,7 +165,7 @@ void CSimulation::nSetPsiFormula(int psiFormula) {
 }
 
 //! Method for getting Delta Value
-double CSimulation::dGetDeltaValue() {
+double CSimulation::dGetDeltaValue() const {
     return m_dDeltaValue;
 }
 //! Method for setting Delta Value
@@ -173,7 +174,7 @@ void CSimulation::dSetDeltaValue(double deltaValue) {
 }
 
 //! Method for getting if surface gradient method is applied
-bool CSimulation::bGetDoSurfaceGradientMethod() {
+bool CSimulation::bGetDoSurfaceGradientMethod() const {
     return m_bDoSurfaceGradientMethod;
 }
 //! Method for setting if surface gradient method is applied
@@ -182,7 +183,7 @@ void CSimulation::bSetDoSurfaceGradientMethod(bool doSurfaceGradientMethod) {
 }
 
 //! Method for getting if source term balance is applied
-bool CSimulation::bGetDoSurfaceTermBalance() {
+bool CSimulation::bGetDoSurfaceTermBalance() const {
     return m_bDoSourceTermBalance;
 }
 //! Method for setting if source term balance is applied
@@ -191,7 +192,7 @@ void CSimulation::bSetDoSurfaceTermBalance(bool doSourceTermBalance) {
 }
 
 //! Method for getting if beta coefficient is applied
-bool CSimulation::bGetDoBetaCoefficient() {
+bool CSimulation::bGetDoBetaCoefficient() const {
     return m_bDoBetaCoefficient;
 }
 //! Method for setting if beta coefficient is applied
@@ -200,7 +201,7 @@ void CSimulation::bSetDoBetaCoefficient(bool doBetaCoefficient) {
 }
 
 //! Method for getting if dry bed is applied
-bool CSimulation::bGetDoDryBed() {
+bool CSimulation::bGetDoDryBed() const {
     return m_bDoDryBed;
 }
 //! Method for setting if dry bed is applied
@@ -209,7 +210,7 @@ void CSimulation::bSetDoDryBed(bool doDryBed) {
 }
 
 //! Method for getting if Murillo condition is applied
-bool CSimulation::bGetDoMurilloCondition() {
+bool CSimulation::bGetDoMurilloCondition() const {
     return m_bDoMurilloCondition;
 }
 //! Method for setting if Murillo condition is applied
@@ -220,7 +221,7 @@ void CSimulation::bSetDoMurilloCondition(bool doMurilloCondition) {
 //===============================================================================================================================
 //! Appends output variables
 //===============================================================================================================================
-void CSimulation::strAddOutputVariable(string strItem){
+void CSimulation::strAddOutputVariable(const string& strItem){
     m_vOutputVariables.push_back(strItem);
 }
 
@@ -235,11 +236,11 @@ void CSimulation::AddHydrograph(){
 
 
 //! Method for getting the number of hydrographs
-int CSimulation::nGetHydrographsNo(){
+int CSimulation::nGetHydrographsNumber() const{
     return m_nHydrographsNumber;
 }
 //! Method for setting the number of hydrographs
-void CSimulation::nSetHydrographsNo(int nValue) {
+void CSimulation::nSetHydrographsNumber(int nValue) {
     m_nHydrographsNumber = nValue;
 }
 
@@ -258,21 +259,23 @@ void CSimulation::AddCrossSection(){
 //===============================================================================================================================
 bool CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
-
-    double dTimeTmp = 0.0;
-
     initializeVectors();
     calculateBedSlope();
     calculateAlongEstuaryInitialConditions();
     calculateIs();
 
+    //! Create the NetCDF file with dimensions, coordinates and variables
+    int nRtn = writer.defineNetCDFFile(this);
+
     //! Check if any part of the estuary is dry
     if (bGetDoDryBed())
         dryArea();
 
+    m_nTimeId = 0;
     //! TODO 013: Hydrographs along the estuary have to be reduced by dX of the input location
-    while (dTimeTmp < m_dSimDuration)
+    while (m_dCurrentTime < m_dSimDuration)
     {
+        // cout << "Simulation time: " << m_dCurrentTime << endl;
         calculateBoundaryConditions();
         //! Calculate the hydraulic parameters for prediction
         calculateHydraulicParameters();
@@ -284,9 +287,6 @@ bool CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         ///! Calculate the timestep using the Courant Number
         calculateTimestep();
 
-        m_dLambda = m_dSimDuration / dMin(m_vCrossSectionDX);
-
-        //! TODO 012: Compute the tidal level or water flow at seaward
         //! Calculate the friction slope
         calculateFrictionSlope();
 
@@ -311,7 +311,7 @@ bool CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             dryArea();
 
         //! Save predicted variables
-        // if (bSavePredicted) {
+        // if (m_bSaveTime) {
         //
         // }
 
@@ -343,7 +343,7 @@ bool CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             dryArea();
 
         //! Save corrected variables
-        // if (bSaveCorrected) {
+        // if (m_bSaveTime) {
         //
         // }
 
@@ -360,12 +360,15 @@ bool CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         // }
 
         //! Save variables
-        // if (bSaveFiles) {
+        // if (m_bSaveTime) {
         //
         // }
 
         //! Increase counter
-        dTimeTmp = dTimeTmp + m_dTimestep;
+        m_dCurrentTime = m_dCurrentTime + m_dTimestep;
+        if ((m_nTimeId < static_cast<int>(m_vOutputTimes.size())) && (m_dCurrentTime == m_vOutputTimes[m_nTimeId+1])) {
+            m_nTimeId++;
+        }
     }
 
     return false;
@@ -378,13 +381,14 @@ bool CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 void CSimulation::initializeVectors()
 {
     const double nCrossSectionsNumber = this->m_nCrossSectionsNumber;
-    const vector<double> vZeros(nCrossSectionsNumber, 0.0);
+    const vector<double> vZeros(static_cast<size_t>(nCrossSectionsNumber), 0.0);
 
     m_vCrossSectionArea =
     m_vPredictedCrossSectionArea =
     m_vCorrectedCrossSectionArea =
-    m_vPredictedCrossSectionQ =
     m_vCrossSectionQ =
+    m_vPredictedCrossSectionQ =
+    m_vCorrectedCrossSectionQ =
     m_vCrossSectionHydraulicRadius =
     m_vCrossSectionI1 =
     m_vCrossSectionI2 =
@@ -407,10 +411,10 @@ void CSimulation::initializeVectors()
     m_vCrossSectiongASf =
     m_vCrossSectionF0 =
     m_vCrossSectionF1 =
-    m_vCrossSectionF0 =
-    m_vCrossSectionF1 =
-    m_vCrossSectionF0 =
-    m_vCrossSectionF1 =  vZeros;
+    m_vCrossSectionGv0 =
+    m_vCrossSectionGv1 = vZeros;
+    // m_vCrossSectionF0 =
+    // m_vCrossSectionF1 =  vZeros;
 
     if (this->nGetDownwardEstuarineCondition() == 0) {
         m_vCrossSectionQ =
@@ -418,11 +422,18 @@ void CSimulation::initializeVectors()
     }
     else if (this->nGetDownwardEstuarineCondition() == 1)
     {
-        m_vCrossSectionQ = vZeros;
+        m_vCrossSectionElevation = vZeros;
     }
     else
     {
-        m_vCrossSectionElevation = vZeros;
+        m_vCrossSectionQ = vZeros;
+    }
+
+    int nTimestepsNumber = static_cast<int> (m_dSimDuration/m_dSimTimestep);
+    m_vOutputTimesIds = vector<int>(nTimestepsNumber, 0);
+
+    for (int i = 0; i < nTimestepsNumber ; i++) {
+        m_vOutputTimes.push_back(static_cast<double>(i)*m_dSimTimestep);
     }
 }
 
@@ -468,7 +479,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
 
     if (m_nInitialEstuarineCondition == 1) {
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            double dManningFactor = this->m_vCrossSectionQ[i]*this->estuary[i].dGetManningNumber()/(sqrt(this->m_vCrossSectionBedSlope[i]));
+            const double dManningFactor = this->m_vCrossSectionQ[i]*this->estuary[i].dGetManningNumber()/(sqrt(this->m_vCrossSectionBedSlope[i]));
 
             vector<double> vCrossSectionAreaTmp = this->estuary[i].vGetArea();
             vector<double> vCrossSectionHydraulicRadiusTmp = this->estuary[i].vGetHydraulicRadius();
@@ -506,19 +517,17 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
 //======================================================================================================================
 //! Interpolate function
 //======================================================================================================================
-double CSimulation::linearInterpolation1d(double dValue, vector<double> vX, vector<double> vY) {
+double CSimulation::linearInterpolation1d(const double dValue, const vector<double> &vX, const vector<double> &vY) {
     //! Encuentra el intervalo adecuado [x[i], x[i+1]]
-    for (size_t i = 0; i < vX.size() - 1; ++i) {
+    for (size_t i = 0; i < vX.size() - 1; i++) {
         if (dValue >= vX[i] && dValue <= vX[i+1]) {
             // Do the linear interpolation
             double slope = (vY[i+1] - vY[i]) / (vX[i+1] - vX[i]);
             return vY[i] + slope * (dValue - vX[i]);
         }
-        else {
-            //! TODO 005: Return an interpolation error
-            return 0.0;
-        }
     }
+    //! TODO 017: Error if dValue is outside the range ...
+    return 0.0;
 }
 //======================================================================================================================
 //! Obtain the hydraulic parameters from the cross-sectional data
@@ -614,6 +623,7 @@ void CSimulation::calculateTimestep() {
 
     for (int i=0; i< this->m_nCrossSectionsNumber-1; i++) {
         if (m_vCrossSectionArea[i] != DRY_AREA) {
+            //! TODO 016: if all cross-sections are dry?
             dX = (this->estuary[i+1].dGetX() - this->estuary[i].dGetX());
             //! Mean water flow
             m_vCrossSectionU[i] = m_vCrossSectionQ[i]/m_vCrossSectionArea[i];
@@ -640,6 +650,21 @@ void CSimulation::calculateTimestep() {
         }
     }
     m_dTimestep = dMinTimestep;
+
+    //! Check if the timestep must be reduced to the following save step
+    if ((m_nTimeId < static_cast<int>(m_vOutputTimes.size())) && (m_dCurrentTime == m_vOutputTimes[m_nTimeId+1])) {
+        m_nTimeId++;
+
+        double dNextTimestep = m_vOutputTimes[m_nTimeId+1];
+        if (dNextTimestep - (m_dTimestep + m_dCurrentTime) < 0.0) {
+            m_dTimestep = dNextTimestep - m_dCurrentTime;
+            m_bSaveTime = true;
+        }
+    }
+    else {
+            m_bSaveTime = false;
+    }
+    m_dLambda = m_dTimestep / dMinVectorValue(m_vCrossSectionDX);
 }
 
 //===============================================================================================================================
@@ -660,7 +685,7 @@ void CSimulation::calculateIs()
         }
     }
 
-    double dhdx = 0.0;
+
     double dI1dx = 0.0;
     double dX1 = 0.0;
     double dX2 = 0.0;
@@ -682,7 +707,7 @@ void CSimulation::calculateIs()
         }
 
         for (int j = 0; j < estuary[i].nGetElevationSectionsNumber(); j++) {
-
+            double dhdx = 0.0;
             if (i == 0) {
                 // Upward finite-difference
                 dhdx = (this->estuary[i+1].dGetElevation(j) - this->estuary[i].dGetElevation(j))/dX1;
@@ -710,8 +735,32 @@ void CSimulation::calculateIs()
 //! Calculate the boundary conditions at time t
 //===============================================================================================================================
 void CSimulation::calculateBoundaryConditions() {
-    m_dDownwardBoundaryValue = linearInterpolation1d(m_dTimestep, m_vDownwardBoundaryConditionTime, m_vDownwardBoundaryConditionTime);
-    m_dUpwardBoundaryValue = linearInterpolation1d(m_dTimestep, m_vUpwardBoundaryConditionTime, m_vUpwardBoundaryConditionValue);
+    //! Calculate upward boundary condition at time t
+    if (this->nGetUpwardEstuarineCondition() == 1) {
+        //! Water flow given upstream
+        m_dUpwardBoundaryValue = linearInterpolation1d(m_dTimestep, m_vUpwardBoundaryConditionTime, m_vUpwardBoundaryConditionValue);
+        m_dNextUpwardBoundaryValue = m_dUpwardBoundaryValue;
+    }
+    else if (this->nGetUpwardEstuarineCondition() == 2) {
+        //! Elevation given upstream
+        double dUpwardBoundaryValue = linearInterpolation1d(m_dTimestep, m_vUpwardBoundaryConditionTime, m_vUpwardBoundaryConditionValue);
+        m_dUpwardBoundaryValue = linearInterpolation1d(-m_vCrossSectionElevation[0] + dUpwardBoundaryValue, estuary[0].vGetElevation(), estuary[0].vGetArea());
+        m_dNextUpwardBoundaryValue = linearInterpolation1d(-m_vCrossSectionElevation[1] + dUpwardBoundaryValue, estuary[1].vGetElevation(), estuary[1].vGetArea());
+    }
+    else {};
+
+    //! Calculate downward boundary condition at time t
+    if (this->nGetDownwardEstuarineCondition() == 1) {
+        //! Water flow given upstream
+        m_dDownwardBoundaryValue = linearInterpolation1d(m_dTimestep, m_vDownwardBoundaryConditionTime, m_vDownwardBoundaryConditionTime);
+        m_dNextDownwardBoundaryValue = m_dDownwardBoundaryValue;
+    }
+    else if (this->nGetUpwardEstuarineCondition() == 2) {
+        double dDownwardBoundaryValue = linearInterpolation1d(m_dTimestep, m_vDownwardBoundaryConditionTime, m_vDownwardBoundaryConditionTime);
+        m_dDownwardBoundaryValue = linearInterpolation1d(-m_vCrossSectionElevation[m_nCrossSectionsNumber-1] + dDownwardBoundaryValue, estuary[m_nCrossSectionsNumber-1].vGetElevation(), estuary[m_nCrossSectionsNumber-1].vGetArea());
+        m_dNextDownwardBoundaryValue = linearInterpolation1d(-m_vCrossSectionElevation[m_nCrossSectionsNumber-2] + dDownwardBoundaryValue, estuary[m_nCrossSectionsNumber-2].vGetElevation(), estuary[m_nCrossSectionsNumber-2].vGetArea());
+    }
+    else {};
 }
 
 //===============================================================================================================================
@@ -868,11 +917,13 @@ void CSimulation::updatePredictorBoundaries() {
     }
     else if (nGetUpwardEstuarineCondition() == 1) {
         //! Reflected boundary condition
-        m_vPredictedCrossSectionQ[0] = m_vCrossSectionQ[0];
+        m_vPredictedCrossSectionQ[0] = m_dUpwardBoundaryValue;
+        m_vPredictedCrossSectionQ[1] = m_dNextUpwardBoundaryValue;
     }
     else {
         //! Water elevation boundary condition
-        m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[0];
+        m_vPredictedCrossSectionArea[0] = m_dUpwardBoundaryValue;
+        m_vPredictedCrossSectionArea[1] = m_dNextUpwardBoundaryValue;
     }
 
     if (nGetDownwardEstuarineCondition() == 0) {
@@ -883,12 +934,12 @@ void CSimulation::updatePredictorBoundaries() {
     else if (nGetDownwardEstuarineCondition() == 1) {
         //! Given the water flow
         m_vPredictedCrossSectionQ[m_nCrossSectionsNumber-1] = m_dDownwardBoundaryValue;
-        m_vPredictedCrossSectionQ[m_nCrossSectionsNumber-2] = m_dNextDownwardBoundary;
+        m_vPredictedCrossSectionQ[m_nCrossSectionsNumber-2] = m_dNextDownwardBoundaryValue;
     }
     else {
         //! Given tidal elevation seaward and previous to seaward
-        m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-1] = m_dDownwardBoundary;
-        m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-2] = m_dNextDownwardBoundary;
+        m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-1] = m_dDownwardBoundaryValue;
+        m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-2] = m_dNextDownwardBoundaryValue;
     }
 }
 
@@ -903,10 +954,12 @@ void CSimulation::updateCorrectorBoundaries() {
     else if (nGetUpwardEstuarineCondition() == 1) {
         //! Reflected boundary condition
         m_vCorrectedCrossSectionQ[0] = m_vPredictedCrossSectionQ[0];
+        m_vCorrectedCrossSectionQ[1] = m_vPredictedCrossSectionQ[1];
     }
     else {
         //! Water elevation boundary condition
         m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[0];
+        m_vCorrectedCrossSectionArea[1] = m_vPredictedCrossSectionArea[1];
     }
 
     if (nGetDownwardEstuarineCondition() == 0) {
@@ -916,14 +969,14 @@ void CSimulation::updateCorrectorBoundaries() {
     }
     else if (nGetDownwardEstuarineCondition() == 1) {
         //! Given the water flow
-        m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-1] = m_dDownwardBoundary;
-        m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-2] = m_dNextDownwardBoundary;
+        m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-1] = m_dDownwardBoundaryValue;
+        m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-2] = m_dNextDownwardBoundaryValue;
     }
     else {
         //! Given tidal elevation seaward and previous to seaward
-        m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-1] = m_dDownwardBoundary;
-        m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-2] = m_dNextDownwardBoundary;
-        m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-1] = m_vPredictedCrossSectionQ[m_nCrossSectionsNumber-1];
+        m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-1] = m_dDownwardBoundaryValue;
+        m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-2] = m_dNextDownwardBoundaryValue;
+        // m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-1] = m_vPredictedCrossSectionQ[m_nCrossSectionsNumber-1];
     }
 }
 
@@ -931,9 +984,8 @@ void CSimulation::updateCorrectorBoundaries() {
 //! Merge Predictor and Corrector
 //======================================================================================================================
 void CSimulation::mergePredictorCorrector() {
-    if bGetDoMcComarckLimiterFlux() {
+    if (bGetDoMcComarckLimiterFlux()) {
         //! TODO 015: Include TVD-McComarck
-        continue;
     }
     else {
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
@@ -950,6 +1002,7 @@ void CSimulation::smoothSolution() {
     for (int i = 0; i < m_nCrossSectionsNumber-1; i++) {
         m_vCrossSectionArea[i] = 0.5*(m_vCrossSectionArea[i+1] + m_vCrossSectionArea[i]);
         m_vCrossSectionQ[i] = 0.5*(m_vCrossSectionQ[i+1] + m_vCrossSectionQ[i]);
+    }
 }
 
 //===============================================================================================================================

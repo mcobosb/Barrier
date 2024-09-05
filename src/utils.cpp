@@ -92,7 +92,7 @@ bool bIsStringValidInt(string& str)
 //===============================================================================================================================
 //! Compute the min value of a vector
 //===============================================================================================================================
-double min(const std::vector<double>& vec) {
+double dMinVectorValue(const vector<double>& vec) {
     // if (vec.empty()) {
     //     std::cerr << "El vector está vacío." << std::endl;
     //     return std::numeric_limits<int>::max(); // Retorna el mayor valor posible de int

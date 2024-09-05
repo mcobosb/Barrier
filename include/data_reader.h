@@ -20,15 +20,15 @@
 using std::string;
 
 class CSimulation;
-class CEstuary;
+// class CEstuary;
 
 class CDataReader {
 
     //! The CSimulation class is a friend of the CDataReader class
     friend class CSimulation;
 
-    //! The CEstuary class is a friend of the CDataReader class
-    friend class CEstuary;
+    // //! The CEstuary class is a friend of the CDataReader class
+    // friend class CEstuary;
 
 private:
 
@@ -46,9 +46,6 @@ private:
 
     //! Path for all output files
     string m_strOutPath;
-
-    //! Name of main output file
-    string m_strOutFile;
 
     //! Name of along channel geometry file
     string m_strAlongChannelDataFilename;
@@ -134,7 +131,8 @@ public:
     bool bReadConfigurationFile(CSimulation* m_pSimulation);
     bool bReadAlongChannelDataFile(CSimulation* m_pSimulation);
     bool bReadCrossSectionGeometryFile(CSimulation* m_pSimulation);
-    bool bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation);
+    static bool bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation);
+    static bool bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation);
     bool bReadHydrographsFile(CSimulation* m_pSimulation);
     bool bOpenLogFile(CSimulation* m_pSimulation);
 
