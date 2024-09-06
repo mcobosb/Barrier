@@ -76,6 +76,9 @@ class CSimulation
     //! Name of main output file
     string m_strOutFile;
 
+    //! Name of main log file
+    string m_strLogFile;
+
     //! Is this timestep saved?
     bool m_bSaveTime;
 
@@ -168,6 +171,9 @@ class CSimulation
 
     //! Number of hydrographs
     int m_nHydrographsNumber{};
+
+    //! Predictor phase? (0: initial calculation; 1: yes, 2: correction phase
+    int m_nPredictor;
 
     //! Vector with output variable names
     vector<string> m_vOutputVariables;
@@ -396,6 +402,9 @@ class CSimulation
     [[nodiscard]] int nGetHydrographsNumber() const;
     //! Method for setting the number of hydrographs
     void nSetHydrographsNumber(int nValue);
+
+    //! Get the vector of a variable
+    vector<double> vGetVariable(string strVariableName);
 
     void AddHydrograph();
 

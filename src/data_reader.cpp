@@ -77,20 +77,18 @@ CDataReader::~CDataReader() = default;
 //===============================================================================================================================
 bool CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 {
-	if (m_nLogFileDetail == 0)
+	if (m_nLogFileDetail != 1)
 	{
 		m_pSimulation->LogStream.open("/dev/null", ios::out | ios::trunc);
-		cout << "Warning: log file is not writting" << endl;
+
 	}
 	else
-		m_pSimulation->LogStream.open(m_strLogFile.c_str(), ios::out | ios::trunc);
+		m_pSimulation->LogStream.open(m_pSimulation->m_strLogFile.c_str(), ios::out | ios::trunc);
 
 
 	if (!m_pSimulation->LogStream)
 	{
-		// Error, cannot open log file
-		cerr << ERR << "cannot open " << m_strLogFile << " for output" << endl;
-		return false;
+		cout << "Warning: log file is not writting" << endl;
 	}
 
 	return true;
@@ -202,9 +200,9 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	                    m_pSimulation->m_strOutFile.append(strRH);
 	                    m_pSimulation->m_strOutFile.append(OUT_EXT);
 
-	                    m_strLogFile = m_strOutPath;
-	                    m_strLogFile.append(strRH);
-	                    m_strLogFile.append(LOG_EXT);
+	                    m_pSimulation->m_strLogFile = m_strOutPath;
+	                    m_pSimulation->m_strLogFile.append(strRH);
+	                    m_pSimulation->m_strLogFile.append(LOG_EXT);
 	                }
 	                break;
 
@@ -349,7 +347,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
 	            	else {
 	            		if (strRH == "full") {
-	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "q", "Qp", "Qc", "Rhp", "Rhc", "I1p", "I1c", "I2p", "I2c", "Bp", "Bc", "etap", "etac", "betap", "betac", "U", "c", "S", "Qb", "Qs", "Qt", "rhop", "rhoc", "xlp", "xlc", "xrp", "xrc"};
+	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", "eta", "beta", "I1", "I2", "rho", "U", "c", "S", "Qb", "Qs", "Qt", "xl", "xr"};
 	            		}
 	            		else {
 	            			vector<string> vOutputVariables;
@@ -419,7 +417,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	// if (strRH.empty())
 	            	// 	strErr = "line " + to_string(nLine) + ": tidal filename";
 
-	            	if (m_pSimulation->nGetDownwardEstuarineCondition() == 1 || m_pSimulation->nGetUpwardEstuarineCondition() == 2)
+	            	if (m_pSimulation->nGetUpwardEstuarineCondition() == 1 || m_pSimulation->nGetUpwardEstuarineCondition() == 2)
 	            	{
 	            		m_pSimulation->m_strUpwardBoundaryConditionFilename = strRH;
 	            		m_pSimulation->m_strUpwardBoundaryConditionFilename.append(".csv");

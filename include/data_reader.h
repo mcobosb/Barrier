@@ -125,7 +125,7 @@ public:
 
     string const SV_INI = "configuration.ini";
 
-    string const OUT_EXT = ".out";
+    string const OUT_EXT = ".nc";
     string const LOG_EXT = ".log";
 
     bool bReadConfigurationFile(CSimulation* m_pSimulation);
