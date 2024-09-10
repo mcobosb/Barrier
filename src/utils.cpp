@@ -108,3 +108,23 @@ double dMinVectorValue(const vector<double>& vec) {
 
     return minValue;
 }
+
+//===============================================================================================================================
+//! Compute the max value of a vector
+//===============================================================================================================================
+double dMaxVectorValue(const vector<double>& vec) {
+    // if (vec.empty()) {
+    //     std::cerr << "El vector está vacío." << std::endl;
+    //     return std::numeric_limits<int>::max(); // Retorna el mayor valor posible de int
+    // }
+
+    double maxValue = vec[0]; // Starting value
+
+    for (int i = 1; i < vec.size(); ++i) {
+        if (vec[i] > maxValue) {
+            maxValue = vec[i]; // Update the max value
+        }
+    }
+
+    return maxValue;
+}

@@ -43,6 +43,7 @@ using std::put_time;
 
 #include "simulation.h"
 #include "data_writer.h"
+#include "main.h"
 #include "error_handling.h"
 #include "utils.h"
 
@@ -76,7 +77,7 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["I1"]["units"] = "";
 
     m_mVariableDefinitions["eta"]["description"] = "Free surface elevation";
-    m_mVariableDefinitions["eta"]["longname"] = "fooding water depth";
+    m_mVariableDefinitions["eta"]["longname"] = "flooding water depth";
     m_mVariableDefinitions["eta"]["units"] = "m";
 
     m_mVariableDefinitions["beta"]["description"] = "Beta coefficient";
@@ -162,9 +163,9 @@ int CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     }
 
     //! Include global attributes
-    nc_put_att_text(m_ncId, NC_GLOBAL, "Program", 40, "Saint-Venant Equation Solver");
-    nc_put_att_text(m_ncId, NC_GLOBAL, "Author", 20, "Manuel Cobos");
-    nc_put_att_text(m_ncId, NC_GLOBAL, "Version", 17, "v0.0.1 - 20240906");
+    nc_put_att_text(m_ncId, NC_GLOBAL, "Program", 40, NAME);
+    nc_put_att_text(m_ncId, NC_GLOBAL, "Author", 20, AUTHOR);
+    nc_put_att_text(m_ncId, NC_GLOBAL, "Version", 17, VERSION);
 
     // time_t m_tSysTime = time(nullptr);
     // nc_put_att_text(m_ncId, NC_GLOBAL, "Running on", 20, put_time(localtime(&m_tSysTime), "%H:%M on %A %d %B %Y"));

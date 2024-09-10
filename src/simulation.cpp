@@ -387,11 +387,12 @@ void CSimulation::initializeVectors()
 
     const double nCrossSectionsNumber = this->m_nCrossSectionsNumber;
     const vector<double> vZeros(static_cast<size_t>(nCrossSectionsNumber), 0.0);
+    const vector<double> vOnes(static_cast<size_t>(nCrossSectionsNumber), 1.0);
 
     m_vCrossSectionArea =
     m_vPredictedCrossSectionArea =
     m_vCorrectedCrossSectionArea =
-    m_vCrossSectionQ =
+    // m_vCrossSectionQ =
     m_vPredictedCrossSectionQ =
     m_vCorrectedCrossSectionQ =
     m_vCrossSectionHydraulicRadius =
@@ -421,21 +422,28 @@ void CSimulation::initializeVectors()
     // m_vCrossSectionF0 =
     // m_vCrossSectionF1 =  vZeros;
 
-    if (this->nGetDownwardEstuarineCondition() == 0) {
-        m_vCrossSectionQ =
-        m_vCrossSectionArea = vZeros;
-    }
-    else if (this->nGetDownwardEstuarineCondition() == 1)
-    {
-        m_vCrossSectionElevation = vZeros;
-    }
-    else
-    {
-        m_vCrossSectionQ = vZeros;
-    }
+    m_vCrossSectionD1Factor =
+    m_vCrossSectionD2Factor = vOnes;
+
+    // if (this->nGetDownwardEstuarineCondition() == 0) {
+    //     m_vCrossSectionQ =
+    //     m_vCrossSectionArea = vZeros;
+    // }
+    // else if (this->nGetDownwardEstuarineCondition() == 1)
+    // {
+    //     m_vCrossSectionElevation = vZeros;
+    // }
+    // else
+    // {
+    //     m_vCrossSectionQ = vZeros;
+    // }
 
     int nTimestepsNumber = static_cast<int> (m_dSimDuration/m_dSimTimestep);
     m_vOutputTimesIds = vector<int>(nTimestepsNumber, 0);
+    for (int i = 0; i < nTimestepsNumber; i++)
+    {
+        m_vOutputTimesIds[i] = i;
+    }
 
     for (int i = 0; i < nTimestepsNumber ; i++) {
         m_vOutputTimes.push_back(static_cast<double>(i)*m_dSimTimestep);
@@ -495,6 +503,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
                 dSecondTerm.push_back(vCrossSectionAreaTmp[j]*pow(vCrossSectionHydraulicRadiusTmp[j], 2.0/3.0));
             }
             this->m_vCrossSectionArea[i] = linearInterpolation1d(dManningFactor, dSecondTerm, vCrossSectionAreaTmp);
+            this->m_vCrossSectionElevation.push_back(m_vCrossSectionArea[i]/m_vCrossSectionWidth[i]);
         }
     }
     else if (m_nInitialEstuarineCondition == 2) {
@@ -556,20 +565,21 @@ void CSimulation::calculateHydraulicParameters() {
     for (int i = 0; i < nCrossSections; i++) {
         //! TODO 008: Create getter and setter for cross-section area, hydraulic radius, elevation and slope
         double dArea = this->m_vCrossSectionArea[i];
+        const int nElevationSectionsNumber = estuary[i].nGetElevationSectionsNumber();
 
         if (estuary[i].dGetArea(0) > dArea) {
             //! Take the first node if dArea < the Area of the first elevation node
             vElevationSection.push_back(0);
             getFirstHydraulicParameters(i);
         }
-        else if (estuary[i].dGetArea(nCrossSections -1) < dArea) {
+        else if (estuary[i].dGetArea(nElevationSectionsNumber -1) < dArea) {
             //! Take the last node if dArea > the Area of the last elevation node
             vElevationSection.push_back(nCrossSections - 1);
             getLastHydraulicParameters(i);
         }
         else
         {
-            for (int j = 0; j < estuary[i].nGetElevationSectionsNumber()-1; j++) {
+            for (int j = 0; j < nElevationSectionsNumber; j++) {
                 //! Getting the elevations node which Area is below dArea and next node Area higher than dArea
                 if ((estuary[i].dGetArea(j) < dArea) && (estuary[i].dGetArea(j+1) > dArea)) {
                     vElevationSection.push_back(j);
@@ -749,6 +759,7 @@ void CSimulation::calculateIs()
 
             }
             double dValue = dI1dx - this->estuary[i].dGetArea(j)*dhdx;
+            dValue = 0.0; //! TODO 026: verify I2
             this->estuary[i].dAppend2Vector("I2", dValue);
         }
     }
@@ -834,7 +845,7 @@ void CSimulation::dryTerms()
         for (int i = 0; i < this->m_nCrossSectionsNumber; i++)
         {
             //! Define the dry area as a water elevation of 1 cm
-            if (m_vPredictedCrossSectionArea[i] <= DRY_AREA) {
+            if (m_vCrossSectionArea[i] <= DRY_AREA) {
                 m_vCrossSectionF0[i] = 0.0;
                 m_vCrossSectionF1[i] = 0.0;
                 m_vCrossSectionGv1[i] = 0.0;
@@ -845,7 +856,7 @@ void CSimulation::dryTerms()
         for (int i = 0; i < this->m_nCrossSectionsNumber; i++)
         {
             //! Define the dry area as a water elevation of 1 cm
-            if (m_vCorrectedCrossSectionArea[i] <= DRY_AREA) {
+            if (m_vPredictedCrossSectionArea[i] <= DRY_AREA) {
                 m_vCrossSectionF0[i] = 0.0;
                 m_vCrossSectionF1[i] = 0.0;
                 m_vCrossSectionGv1[i] = 0.0;
@@ -863,7 +874,7 @@ void CSimulation::doMurilloCondition()
     double dValue = 0.0;
     for (int i = 0; i < this->m_nCrossSectionsNumber; i++)
     {
-        dValue = CDX_MURILLO*sqrt(2*pow(m_vCrossSectionArea[i], 2.0/3.0)/(G*m_vCrossSectionDX[i]));
+        dValue = CDX_MURILLO*sqrt(2*pow(m_vCrossSectionHydraulicRadius[i], 2.0/3.0)/(G*m_vCrossSectionDX[i]));
 
         if (dValue < estuary[i].dGetManningNumber()) {
             const double murilloFactor = dValue/m_vCrossSectionManningNumber[i];
@@ -898,22 +909,32 @@ void CSimulation::calculateGSAterms() {
         double dMeanArea = 0.0;
 
         //! Average between sections
-        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            if (i < m_nCrossSectionsNumber - 1) {
-                dMeanArea = (m_vCrossSectionArea[i] + m_vCrossSectionArea[i+1])/2.0;
-                dMeanElevation = (m_vCrossSectionElevation[i] + m_vCrossSectionElevation[i+1])/2.0;
-                dMeanQ = (m_vCrossSectionQ[i] + m_vCrossSectionQ[i+1])/2.0;
-                dMeanHydraulicRadius = (m_vCrossSectionHydraulicRadius[i] + m_vCrossSectionHydraulicRadius[i+1])/2.0;
+        if (m_nPredictor == 1) {
+            for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+                if (i < m_nCrossSectionsNumber - 1) {
+                    dMeanArea = (m_vCrossSectionArea[i] + m_vCrossSectionArea[i+1])/2.0;
+                    dMeanElevation = (m_vCrossSectionElevation[i] + m_vCrossSectionElevation[i+1])/2.0;
+                    dMeanQ = (m_vCrossSectionQ[i] + m_vCrossSectionQ[i+1])/2.0;
+                    dMeanHydraulicRadius = (m_vCrossSectionHydraulicRadius[i] + m_vCrossSectionHydraulicRadius[i+1])/2.0;
+                }
+                else {
+                    dMeanArea = (m_vCrossSectionArea[i] + m_vCrossSectionArea[i-1])/2.0;
+                    dMeanElevation = (m_vCrossSectionElevation[i] + m_vCrossSectionElevation[i-1])/2.0;
+                    dMeanQ = (m_vCrossSectionQ[i] + m_vCrossSectionQ[i-1])/2.0;
+                    dMeanHydraulicRadius = (m_vCrossSectionHydraulicRadius[i] + m_vCrossSectionHydraulicRadius[i-1])/2.0;
+                }
+                m_vCrossSectiongAS0[i] = G*dMeanArea*m_vCrossSectionBedSlope[i];
+                m_vCrossSectiongASf[i] = G*pow(m_vCrossSectionManningNumber[i], 2.0)*pow(dMeanQ, 2.0)/(dMeanArea*pow(dMeanHydraulicRadius, 4.0/3.0));
             }
-            else {
-                dMeanArea = (m_vCrossSectionArea[i] + m_vCrossSectionArea[i-1])/2.0;
-                dMeanElevation = (m_vCrossSectionElevation[i] + m_vCrossSectionElevation[i-1])/2.0;
-                dMeanQ = (m_vCrossSectionQ[i] + m_vCrossSectionQ[i-1])/2.0;
-                dMeanHydraulicRadius = (m_vCrossSectionHydraulicRadius[i] + m_vCrossSectionHydraulicRadius[i-1])/2.0;
-            }
-            m_vCrossSectiongAS0[i] = G*dMeanArea*dMeanElevation;
-            m_vCrossSectiongASf[i] = G*pow(m_vCrossSectionManningNumber[i], 2.0)*pow(dMeanQ, 2.0)/(dMeanArea*pow(dMeanHydraulicRadius, 4.0/3.0));
         }
+        else
+        {
+            for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+                m_vCrossSectiongAS0[i] = G*m_vPredictedCrossSectionArea[i]*m_vCrossSectionBedSlope[i];
+                m_vCrossSectiongASf[i] = G*pow(m_vCrossSectionManningNumber[i], 2.0)*pow(m_vPredictedCrossSectionQ[i], 2.0)/(m_vPredictedCrossSectionArea[i]*pow(dMeanHydraulicRadius, 4.0/3.0));
+            }
+        }
+
     }
     else {
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
@@ -946,7 +967,7 @@ void CSimulation::calculateFlowTerms() {
 void CSimulation::calculateSourceTerms() {
 
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-        m_vCrossSectionGv0[i] = m_vCrossSectionQ[i]/m_vCrossSectionDX[i];
+        m_vCrossSectionGv0[i] = 0.0; //! TODO 025: aquí va el q
         m_vCrossSectionGv1[i] = G*m_vCrossSectionI2[i] + m_vCrossSectiongAS0[i] - m_vCrossSectiongASf[i];
     }
 }
@@ -1053,13 +1074,141 @@ void CSimulation::updateCorrectorBoundaries() {
 //======================================================================================================================
 void CSimulation::mergePredictorCorrector() {
     if (bGetDoMcComarckLimiterFlux()) {
-        //! TODO 015: Include TVD-McComarck
-    }
-    else {
-        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            m_vCrossSectionArea[i] = 0.5*(m_vPredictedCrossSectionArea[i] + m_vCorrectedCrossSectionArea[i]);
-            m_vCrossSectionQ[i] = 0.5*(m_vPredictedCrossSectionQ[i] + m_vCorrectedCrossSectionQ[i]);
+        //! Include TVD-McComarck?
+        double u_med = 0.;
+        double c_med = 0.;
+        double A_med = 0.;
+        double a1_med = 0.;
+        double a2_med = 0.;
+        const double nCrossSectionsNumber = this->m_nCrossSectionsNumber;
+        vector<double> alfa1_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
+        vector<double> alfa2_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
+        double psi1_med = 0;
+        double psi2_med = 0.;
+        double r1_med = 0;
+        double r2_med = 0.;
+        double fi1_med = 0;
+        double fi2_med = 0.;
+        double dFactor1 = 0;
+        double dFactor2 = 0.;
+
+        //! García-Navarro Psi formula
+        double delta1 = m_dDeltaValue;
+        double delta2 = m_dDeltaValue;
+        for (int i = 1; i < m_nCrossSectionsNumber; i++)
+        {
+            u_med = (m_vCrossSectionQ[i]/sqrt(m_vCrossSectionArea[i]) + m_vCrossSectionQ[i-1]/sqrt(m_vCrossSectionArea[i-1]))/(sqrt(m_vCrossSectionArea[i]) + sqrt(m_vCrossSectionArea[i-1]));
+            A_med = (m_vCrossSectionArea[i] + m_vCrossSectionArea[i-1])/2.0;
+            u_med = (m_vCrossSectionU[i] + m_vCrossSectionU[i-1])/2.0;
+            a1_med = u_med + c_med;
+            a2_med = u_med - c_med;
+
+            if (!bGetDoSurfaceGradientMethod()) {
+                alfa1_med[i] = ((m_vCrossSectionQ[i] - m_vCrossSectionQ[i-1]) - a2_med*(A_med - m_vCrossSectionArea[i-1]))/(2.0*c_med);
+                alfa2_med[i] = ((m_vCrossSectionQ[i] - m_vCrossSectionQ[i-1]) - a1_med*(A_med - m_vCrossSectionArea[i-1]))/(2.0*c_med);
+            }
+            else {
+                alfa1_med[i] = ((m_vCrossSectionQ[i]/m_vCrossSectionWidth[i] - m_vCrossSectionQ[i-1]/m_vCrossSectionWidth[i-1])-a2_med*(m_vCrossSectionElevation[i] - m_vCrossSectionElevation[i-1]))/(2.0*c_med);
+                alfa1_med[i] = ((m_vCrossSectionQ[i]/m_vCrossSectionWidth[i] - m_vCrossSectionQ[i-1]/m_vCrossSectionWidth[i-1])-a1_med*(m_vCrossSectionElevation[i] - m_vCrossSectionElevation[i-1]))/(2.0*c_med);
+            }
+
+            if (nGetPsiFormula() != 1) {
+                //! Tseng Psi formula
+                vector<double> deltaValues = {0.0, a1_med - (m_vCrossSectionU[i-1] + m_vCrossSectionC[i-1]), m_vCrossSectionU[i] + m_vCrossSectionC[i] - a1_med};
+                delta1 = dMaxVectorValue(deltaValues);
+
+                deltaValues ={0.0, a1_med - (m_vCrossSectionU[i-1] + m_vCrossSectionC[i-1]), m_vCrossSectionU[i] + m_vCrossSectionC[i] - a1_med};
+                delta2 = dMaxVectorValue(deltaValues);
+            }
+
+            //! Computing psi_i
+            if (abs(a1_med)>= delta1)
+            {
+                psi1_med = abs(a1_med);
+            }
+            else
+            {
+                psi1_med = delta1;
+            }
+
+            if (abs(a2_med)>= delta2)
+            {
+                psi2_med = abs(a2_med);
+            }
+            else
+            {
+                psi2_med = delta2;
+            }
         }
+
+
+        for (int i = 1; i  < m_nCrossSectionsNumber; i++)
+        {
+            //! Computing alfai
+            if (alfa1_med[i] < 0)
+            {
+                r1_med = alfa1_med[i]/alfa1_med[i-1];
+            }
+            else if (alfa1_med[i] == 0.0)
+            {
+                r1_med = 1.0;
+            }
+            else
+            {
+                r1_med = alfa1_med[i-1]/alfa1_med[i];
+            }
+
+            if (alfa2_med[i] < 0)
+            {
+                r2_med = alfa2_med[i]/alfa2_med[i-1];
+            }
+            else if (alfa2_med[i] == 0.0)
+            {
+                r2_med = 1.0;
+            }
+            else
+            {
+                r2_med = alfa2_med[i-1]/alfa2_med[i];
+            }
+
+            //! Computing fi_i
+            if (nGetEquationLimiterFlux() == 1)
+            {
+                //! MinMod
+                fi1_med = dMaxVectorValue({0.0, dMinVectorValue({1., r1_med})});
+                fi2_med = dMaxVectorValue({0.0, dMinVectorValue({1., r2_med})});
+            }
+            else if (nGetEquationLimiterFlux() == 2)
+            {
+                //! Roe's Superbee
+                fi1_med = dMaxVectorValue({0.0, dMinVectorValue({2*r1_med, 1.}), dMinVectorValue({r1_med, 2.})});
+                fi2_med = dMaxVectorValue({0.0, dMinVectorValue({2*r2_med, 1.}), dMinVectorValue({r2_med, 2.})});
+            }
+            else if (nGetEquationLimiterFlux() == 3)
+            {
+                //! Van Leer
+                fi1_med = (abs(r1_med) + r1_med)/(1+abs(r1_med));
+                fi2_med = (abs(r2_med) + r2_med)/(1+abs(r2_med));
+            }
+            else if (nGetEquationLimiterFlux() == 4)
+            {
+                fi1_med = (r1_med*r1_med + r1_med)/(1+r1_med*r1_med);
+                fi2_med = (r2_med*r2_med + r2_med)/(1+r2_med*r2_med);
+            }
+
+            //! Computing factor
+            dFactor1 = alfa1_med[i]*psi1_med*(1-m_dLambda*abs(a1_med))*(1-fi1_med);
+            dFactor2= alfa2_med[i]*psi2_med*(1-m_dLambda*abs(a2_med))*(1-fi2_med);
+
+            m_vCrossSectionD1Factor[i] = 0.5*(dFactor1 + dFactor2);
+            m_vCrossSectionD2Factor[i] = 0.5*(dFactor1*a1_med + dFactor2*a2_med);
+        }
+        m_vCrossSectionD1Factor[0] = m_vCrossSectionD1Factor[1];
+        m_vCrossSectionD2Factor[0] = m_vCrossSectionD2Factor[1];
+    }
+    for (int i = 1; i < m_nCrossSectionsNumber; i++) {
+        m_vCrossSectionArea[i] = 0.5*(m_vPredictedCrossSectionArea[i] + m_vCorrectedCrossSectionArea[i]) +m_dLambda*(m_vCrossSectionD1Factor[i] - m_vCrossSectionD1Factor[i-1]);
+        m_vCrossSectionQ[i] = 0.5*(m_vPredictedCrossSectionQ[i] + m_vCorrectedCrossSectionQ[i]) +m_dLambda*(m_vCrossSectionD2Factor[i] - m_vCrossSectionD2Factor[i-1]);
     }
 }
 

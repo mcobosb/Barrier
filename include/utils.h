@@ -21,15 +21,18 @@ constexpr char TILDE = '~';
 
 // Time unit codes
 constexpr int TIME_UNKNOWN = -1;
-constexpr int TIME_HOURS = 0;
-constexpr int TIME_DAYS = 1;
-constexpr int TIME_MONTHS = 2;
-constexpr int TIME_YEARS = 3;
+constexpr int TIME_SECONDS = 0;
+constexpr int TIME_HOURS = 1;
+constexpr int TIME_DAYS = 2;
+constexpr int TIME_MONTHS = 3;
+constexpr int TIME_YEARS = 4;
 
 
 bool bIsStringValidDouble(string &);
 bool bIsStringValidInt(string &);
 double dMinVectorValue(const vector<double> &);
+double dMaxVectorValue(const vector<double> &);
+
 string strToLower(string const*);
 vector<string> VstrSplit2(string const*, char, vector<string>*);
 vector<string> VstrSplit(string const*, char);

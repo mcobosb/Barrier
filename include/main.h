@@ -23,6 +23,11 @@ inline double DRY_AREA = 1e-8;
 //! minimum cross-section water flow (to ensure that U = Q/A ~ 0)
 inline double DRY_Q = 1e-5;
 
+inline const char* NAME = "Saint-Venant Equations Solver";
+inline const char* AUTHOR =  "Manuel Cobos (GDFA, University of Granada)";
+inline const char* VERSION = "v0.0.1 - 20240909";
+
+
 
 // float const INITIAL_CONDITION = 0.00;
 // string const INITIAL_Q_FILENAME = "initial_along_estuary_water_flow.csv";

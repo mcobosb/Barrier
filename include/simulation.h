@@ -289,6 +289,12 @@ class CSimulation
     //! Gv1 terms
     vector<double> m_vCrossSectionGv1;
 
+    //! D1 terms
+    vector<double> m_vCrossSectionD1Factor;
+
+    //! D2 terms
+    vector<double> m_vCrossSectionD2Factor;
+
     //! A vector with cross-sections objects along the estuary
     vector<CCrossSection> estuary;
 

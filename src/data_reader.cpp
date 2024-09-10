@@ -261,7 +261,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		nRet = nSimulationTimeMultiplier(&strRH);
 
 	            	//! TODO 020: Options for another time unit
-	            	m_pSimulation->m_dTimeFactor = 3600.0;
+	            	m_pSimulation->m_dTimeFactor = 1.0;
 
             		if (nRet != RTN_OK)
             		{
@@ -300,7 +300,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 
             		dMult = dGetTimeMultiplier(&strRH);
 	            	//! TODO 020: Options for another time unit
-	            	m_pSimulation->m_dTimeFactor = 3600.0;
+	            	m_pSimulation->m_dTimeFactor = 1.0;
 
             		if (static_cast<int>(dMult) == TIME_UNKNOWN)
             		{
@@ -972,57 +972,60 @@ bool CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 //======================================================================================================================
 bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
-	int nCrossSectionsNumber = m_pSimulation->m_nCrossSectionsNumber - 1;
-	// Create an ifstream object
-	ifstream InStream;
-
-	// Try to open run details file for input
-	InStream.open(m_pSimulation->m_strDownwardBoundaryConditionFilename.c_str(), ios::in);
-
-	// Did it open OK?
-	if (!InStream.is_open())
+	if (m_pSimulation->nGetDownwardEstuarineCondition() != 0)
 	{
-		// Error: cannot open run details file for input
-		cerr << ERR << "cannot open " << m_pSimulation->m_strDownwardBoundaryConditionFilename << " for input" << endl;
-		return true;
-	}
+		int nCrossSectionsNumber = m_pSimulation->m_nCrossSectionsNumber - 1;
+		// Create an ifstream object
+		ifstream InStream;
 
-	int nLine = 0;
-	int i = 0;
-	size_t nPos;
-	string strRec, strErr;
+		// Try to open run details file for input
+		InStream.open(m_pSimulation->m_strDownwardBoundaryConditionFilename.c_str(), ios::in);
 
-	while (getline(InStream, strRec)) {
-		nLine++;
+		// Did it open OK?
+		if (!InStream.is_open())
+		{
+			// Error: cannot open run details file for input
+			cerr << ERR << "cannot open " << m_pSimulation->m_strDownwardBoundaryConditionFilename << " for input" << endl;
+			return true;
+		}
 
-		// Trim off leading and trailing whitespace
-		strRec = strTrim(&strRec);
+		int nLine = 0;
+		int i = 0;
+		size_t nPos;
+		string strRec, strErr;
 
-		// If it is a blank line or a comment then ignore it
-		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
-			stringstream string_line(strRec);
+		while (getline(InStream, strRec)) {
+			nLine++;
 
-			string token;
-			int j = 0;
+			// Trim off leading and trailing whitespace
+			strRec = strTrim(&strRec);
 
-			// Using getline for spliting the string line by commas
-			while (getline(string_line, token, ',')) {
-				double dValue = strtod(token.c_str(), nullptr);
-				if (j == 0) {
-					//! TODO 010: Setter and getter
-					m_pSimulation->m_vDownwardBoundaryConditionTime.push_back(dValue);
-				}
+			// If it is a blank line or a comment then ignore it
+			if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+				stringstream string_line(strRec);
 
-				if (j == 1) {
-					m_pSimulation->m_vDownwardBoundaryConditionValue.push_back(dValue);
+				string token;
+				int j = 0;
+
+				// Using getline for spliting the string line by commas
+				while (getline(string_line, token, ',')) {
+					double dValue = strtod(token.c_str(), nullptr);
+					if (j == 0) {
+						//! TODO 010: Setter and getter
+						m_pSimulation->m_vDownwardBoundaryConditionTime.push_back(dValue);
+					}
+
+					if (j == 1) {
+						m_pSimulation->m_vDownwardBoundaryConditionValue.push_back(dValue);
+					}
+
+					// Increment counter
+					j++;
 				}
 
 				// Increment counter
-				j++;
+				i++;
 			}
-
-			// Increment counter
-			i++;
 		}
 	}
 	return false;
@@ -1141,6 +1144,9 @@ double CDataReader::dGetTimeMultiplier(string const *strIn)
 		default:
 			return TIME_UNKNOWN;
 
+		case TIME_SECONDS:
+				return 1; // Multiplier for hours
+
 		case TIME_HOURS:
 			return 1; // Multiplier for hours
 
@@ -1167,6 +1173,12 @@ int CDataReader::nSimulationTimeMultiplier(string const *strIn)
     // Next set up the correct multiplier, since m_dTimeStep is in hours
     switch (nTimeUnits)
     {
+    	//! TODO 023: multiplier for seconds
+	    case TIME_SECONDS:
+    		m_dDurationUnitsMultiplier = 1; // Multiplier for seconds
+    		m_strDurationUnits = "seconds";
+    		break;
+
         case TIME_HOURS:
             m_dDurationUnitsMultiplier = 1; // Multiplier for hours
 	        m_strDurationUnits = "hours";
@@ -1198,15 +1210,17 @@ int CDataReader::nSimulationTimeMultiplier(string const *strIn)
 //===============================================================================================================================
 int CDataReader::nDoTimeUnits(string const *strIn)
 {
-    if (strIn->find("hour") != string::npos)
+	if (strIn->find("second") != string::npos)
+		return TIME_SECONDS;
+	else if (strIn->find("hour") != string::npos)
         return TIME_HOURS;
-    else if (strIn->find("day") != string::npos)
+	else if (strIn->find("day") != string::npos)
         return TIME_DAYS;
-    else if (strIn->find("month") != string::npos)
+	else if (strIn->find("month") != string::npos)
         return TIME_MONTHS;
-    else if (strIn->find("year") != string::npos)
+	else if (strIn->find("year") != string::npos)
         return TIME_YEARS;
-    else
+	else
         return TIME_UNKNOWN;
 }
 
