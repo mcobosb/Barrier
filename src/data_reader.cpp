@@ -785,7 +785,7 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 		}
 
 	}
-	m_pSimulation->m_nCrossSectionsNumber = nCrossSectionNumber - 1;
+	m_pSimulation->m_nCrossSectionsNumber = nCrossSectionNumber;
 	return false;
 }
 

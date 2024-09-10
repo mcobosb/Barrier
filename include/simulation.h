@@ -295,6 +295,9 @@ class CSimulation
     //! D2 terms
     vector<double> m_vCrossSectionD2Factor;
 
+    //! Murillo Factor vector
+    vector<double> m_vCrossSectionMurilloFactor;
+
     //! A vector with cross-sections objects along the estuary
     vector<CCrossSection> estuary;
 
