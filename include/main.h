@@ -21,11 +21,11 @@ inline double G = 9.81;
 //! minimum cross-section area
 inline double DRY_AREA = 1;
 //! minimum cross-section water flow (to ensure that U = Q/A ~ 0)
-inline double DRY_Q = 1;
+inline double DRY_Q = 1e-2;
 
 inline const char* NAME = "Saint-Venant Equations Solver";
 inline const char* AUTHOR =  "Manuel Cobos (GDFA, University of Granada)";
-inline const char* VERSION = "v0.0.1 - 20240909";
+inline const char* VERSION = "v0.3.0 - 20240911";
 
 
 

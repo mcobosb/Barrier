@@ -764,14 +764,18 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 				{
 					if  (m_pSimulation->nGetInitialEstuarineCondition() == 0)
 					{
-						continue;
+						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
+						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
 					}
 					else if (m_pSimulation->nGetInitialEstuarineCondition() == 1) {
 						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
+						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
 					}
 					else
 					{
 						m_pSimulation->m_vCrossSectionElevation.push_back(dValue);
+						m_pSimulation->m_vCrossSectionQ.push_back(0.0);
+						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
 					}
 				}
 
