@@ -37,7 +37,7 @@ int main(int argc, char const* argv[])
 
 
     //! Announce Start -------------------------------------------------------------------------------------------------
-    pScreenPresenter->StartingRun(argc, argv);
+    pScreenPresenter->StartingRun(argc, argv, &pSimulation);
     //! Read the .ini file and get the name of the run-data file, and path for output etc.
     bool nRtn = pDataReader->bReadConfigurationFile(&pSimulation);
     nRtn = pDataReader->bOpenLogFile(&pSimulation);

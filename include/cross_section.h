@@ -2,7 +2,7 @@
 *
  * \class CCrossSection
  * \brief
- * \details TODO 001 This is a more detailed description of the CCrossSection class
+ * \details Definition of CCrossSection class that represents estuarine cross-section geometry.
  * \author Manuel Cobos Budia
 
  * \date 2024
@@ -36,10 +36,10 @@ class CCrossSection {
         double m_dManningNumber;
 
         //! The X coordinate in UTM
-        double m_dXUTM;
+        double m_dX_UTM;
 
         //! The Y coordinate in UTM
-        double m_dYUTM;
+        double m_dY_UTM;
 
         //! The right river bank angle
         double m_dRightRBAngle;
@@ -94,51 +94,43 @@ class CCrossSection {
         CCrossSection();
         ~CCrossSection();
 
+        //! Setter
         void nSetSectionNumber(int nValue);
         void dSetX(double dValue);
         void dSetZ(double dValue);
         void dSetManningNumber(double dValue);
-        void dSetXUTM(double dValue);
-        void dSetYUTM(double dValue);
+        void dSetX_UTM(double dValue);
+        void dSetY_UTM(double dValue);
         void dSetRightRBAngle(double dValue);
         void dSetLeftRBAngle(double dValue);
         void nSetElevationSectionsNumber(int nValue);
         void dSetElevation(double dValue);
         void dSetWaterFlow(double dValue);
-        void dAppend2Vector(string strItem, double dValue);
+        void dAppend2Vector(const string& strItem, double dValue);
 
+        //! Getter
+        [[nodiscard]] int nGetSectionNumber() const;
+        [[nodiscard]] double dGetX() const;
+        [[nodiscard]] double dGetZ() const;
+        [[nodiscard]] double dGetManningNumber() const;
+        [[nodiscard]] double dGetX_UTM() const;
+        [[nodiscard]] double dGetY_UTM() const;
+        [[nodiscard]] double dGetRightRBAngle() const;
+        [[nodiscard]] double dGetLeftRBAngle() const;
+        [[nodiscard]] int nGetElevationSectionsNumber() const;
+        [[nodiscard]] double dGetElevation(int nValue) const;
+        [[nodiscard]] double dGetWidth(int nValue) const;
+        [[nodiscard]] double dGetArea(int nValue) const;
+        [[nodiscard]] double dGetPerimeter(int nValue) const;
+        [[nodiscard]] double dGetHydraulicRadius(int nValue) const;
+        [[nodiscard]] double dGetSigma(int nValue) const;
+        [[nodiscard]] double dGetLeftY(int nValue) const;
+        [[nodiscard]] double dGetRightY(int nValue) const;
+        [[nodiscard]] double dGetBeta(int nValue) const;
+        [[nodiscard]] double dGetI1(int nValue) const;
+        [[nodiscard]] double dGetI2(int nValue) const;
 
-        // void dSetElevation(double dValue);
-        // void dSetWidth(double dValue);
-//        void dSetArea(double dArea);
-//        void dSetPerimeter(double dPerimeter);
-//        void dSetHydraulicRadius(double dHydraulicRadius);
-//        void dSetSigma(double dSigma);
-//        void dSetLeftY(double dLeftY);
-//        void dSetRightY(double dRightY);
-//        void dSetBeta(double dBeta);
-
-        int nGetSectionNumber();
-        double dGetX();
-        double dGetZ();
-        double dGetManningNumber();
-        double dGetXUTM();
-        double dGetYUTM();
-        double dGetRightRBAngle();
-        double dGetLeftRBAngle();
-        int nGetElevationSectionsNumber();
-        double dGetElevation(int nValue);
-        double dGetWidth(int nValue);
-        double dGetArea(int nValue);
-        double dGetPerimeter(int nValue);
-        double dGetHydraulicRadius(int nValue);
-        double dGetSigma(int nValue);
-        double dGetLeftY(int nValue);
-        double dGetRightY(int nValue);
-        double dGetBeta(int nValue);
-        double dGetI1(int nValue);
-        double dGetI2(int nValue);
-
+        //! Vector getter
         vector<double> vGetArea();
         vector<double> vGetHydraulicRadius();
         vector<double> vGetElevation();

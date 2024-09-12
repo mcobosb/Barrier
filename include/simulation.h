@@ -1,8 +1,8 @@
 /*!
 *
  * \class CSimulation
- * \brief This class runs Saint Venant simulations
- * \details TODO 001 This is a more detailed description of the CSimulation class
+ * \brief This class runs Saint-Venant simulations
+ * \details Description of CSimulation class
  * \author Manuel Cobos Budia
 
  * \date 2024
@@ -32,11 +32,10 @@ using std::vector;
 #include <fstream>
 using std::ofstream;
 
-// #include "data_reader.h"
 #include "hydrograph.h"
-// #include "estuary.h"
 #include "cross_section.h"
 #include "data_writer.h"
+#include "data_reader.h"
 
 class CSimulation
 {
@@ -49,8 +48,21 @@ class CSimulation
     // friend class CCrossSection;
     friend class CCrossSection;
 
+    // friend class CDataReader;
+    friend class CDataReader;
+
+
     public:
+    //! System start-simulation time
+    time_t m_tSysStartTime{};
+
     ofstream LogStream;
+
+    //! Detail of the log file
+    int m_nLogFileDetail{};
+
+    //! Output Log time id
+    int m_nTimeLogId{};
 
     //! Duration of simulation, in seconds
     double m_dSimDuration;
@@ -59,10 +71,10 @@ class CSimulation
     double m_dSimTimestep;
 
     //! Current time in seconds
-    double m_dCurrentTime;
+    double m_dCurrentTime{};
 
     //! Factor for updating the time
-    double m_dTimeFactor;
+    double m_dTimeFactor{};
 
     //! Vector of output times
     vector<double> m_vOutputTimes;
@@ -71,7 +83,7 @@ class CSimulation
     vector<int> m_vOutputTimesIds;
 
     //! Output timestep id
-    int m_nTimeId;
+    int m_nTimeId{};
 
     //! Name of main output file
     string m_strOutFile;
@@ -80,7 +92,7 @@ class CSimulation
     string m_strLogFile;
 
     //! Is this timestep saved?
-    bool m_bSaveTime;
+    bool m_bSaveTime{};
 
     //! Computational timestep obtained from Courant number
     double m_dTimestep{};
@@ -139,11 +151,11 @@ class CSimulation
     //! The Courant Number
     double m_dCourantNumber{};
 
-    //! Do MackComarck Limiter Flux?
-    bool m_bDoMackComarckLimiterFlux{};
+    //! Do McCormack Limiter Flux?
+    bool m_bDoMcCormackLimiterFlux{};
 
-    //! The equation for MackComarck Limiter Flux
-    int m_nEquationMacComarckLimiterFlux{};
+    //! The equation for McCormack Limiter Flux
+    int m_nEquationMcCormackLimiterFlux{};
 
     //! Psi Formula
     int m_nPsiFormula{};
@@ -173,10 +185,13 @@ class CSimulation
     int m_nHydrographsNumber{};
 
     //! Predictor phase? (0: initial calculation; 1: yes, 2: correction phase
-    int m_nPredictor;
+    int m_nPredictor{};
 
     //! Vector with output variable names
     vector<string> m_vOutputVariables;
+
+    //! Cross-section Location X
+    vector<double> m_vCrossSectionX;
 
     //! Cross-section Bed slope
     vector<double> m_vCrossSectionBedSlope;
@@ -203,55 +218,33 @@ class CSimulation
 
     //! Cross-section hydraulic radius
     vector<double> m_vCrossSectionHydraulicRadius;
-    // //! Predicted cross-section hydraulic radius
-    // vector<double> m_vPredictedCrossSectionHydraulicRadius;
-    // //! Corrected cross-section hydraulic radius
-    // vector<double> m_vCorrectedCrossSectionHydraulicRadius;
 
     //! Cross-section hydraulic dX
     vector<double> m_vCrossSectionDX;
 
     //! Cross-section hydraulic widths
     vector<double> m_vCrossSectionWidth;
-    // //! Corrected cross-section widths
-    // vector<double> m_vCorrectedCrossSectionWidth;
 
     //! Cross-section elevation
     vector<double> m_vCrossSectionElevation;
-    // //! Predicted cross-section elevations
-    // vector<double> m_vPredictedCrossSectionElevation;
-    // //! Corrected cross-section elevations
-    // vector<double> m_vCorrectedCrossSectionElevation;
 
     //! Cross-section betas
     vector<double> m_vCrossSectionBeta;
-    // //! Corrected cross-section betas
-    // vector<double> m_vCorrectedCrossSectionBeta;
 
     //! Cross-section I1s
     vector<double> m_vCrossSectionI1;
-    // //! Corrected cross-section I1s
-    // vector<double> m_vCorrectedCrossSectionI1;
 
     //! Cross-section I2s
     vector<double> m_vCrossSectionI2;
-    // //! Corrected cross-section I2s
-    // vector<double> m_vCorrectedCrossSectionI2;
 
     //! Cross-section water densities
     vector<double> m_vCrossSectionRho;
-    // //! Corrected cross-section water densities
-    // vector<double> m_vCorrectedCrossSectionRho;
 
     //! Cross-section left river bank locations
     vector<double> m_vCrossSectionLeftRBLocation;
-    // //! Corrected cross-section left river bank locations
-    // vector<double> m_vCorrectedCrossSectionLeftRBLocation;
 
     //! Cross-section right river bank locations
     vector<double> m_vCrossSectionRightRBLocation;
-    // //! Corrected cross-section right river bank locations
-    // vector<double> m_vCorrectedCrossSectionRightRBLocation;
 
     //! Cross-section mean water velocity
     vector<double> m_vCrossSectionU;
@@ -259,7 +252,7 @@ class CSimulation
     //! Cross-section perturbation water velocities
     vector<double> m_vCrossSectionC;
 
-    //! Cross-section salinities
+    //! Cross-section salinity
     vector<double> m_vCrossSectionSalinity;
 
     //! Cross-section bottom sediment transport
@@ -272,10 +265,10 @@ class CSimulation
     vector<double> m_vCrossSectionQt;
 
     //! gAS0 terms
-    vector<double> m_vCrossSectiongAS0;
+    vector<double> m_vCrossSection_gAS0;
 
     //! gASf terms
-    vector<double> m_vCrossSectiongASf;
+    vector<double> m_vCrossSection_gASf;
 
     //! F0 terms
     vector<double> m_vCrossSectionF0;
@@ -413,7 +406,7 @@ class CSimulation
     void nSetHydrographsNumber(int nValue);
 
     //! Get the vector of a variable
-    vector<double> vGetVariable(string strVariableName);
+    vector<double> vGetVariable(const string& strVariableName) const;
 
     void AddHydrograph();
 
@@ -435,8 +428,7 @@ class CSimulation
     void dryArea();
     void dryTerms();
     void doMurilloCondition();
-    void calculateFrictionSlope();
-    void calculateGSAterms();
+    void calculate_GS_A_terms();
     void calculateFlowTerms();
     void calculateSourceTerms();
     void calculatePredictor();
@@ -446,7 +438,9 @@ class CSimulation
     void mergePredictorCorrector();
     void smoothSolution();
 
+    void AnnounceProgress() const;
+
     //! Carries out end-of-simulation tidying (error messages etc.)
-    void DoSimulationEnd(int);
+    static void DoSimulationEnd(int);
 };
 #endif // SIMULATION_H

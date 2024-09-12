@@ -13,12 +13,8 @@
 /*==============================================================================================================================
 
 ==============================================================================================================================*/
-#include <cstdlib> // for strtol() and strtod()
 #include <fstream>
 using std::ifstream;
-
-#include <sstream>
-using std::stringstream;
 
 #include <iostream>
 using std::cerr;
@@ -42,11 +38,13 @@ CCrossSection::CCrossSection(){
     m_nElevationSectionNumber = 0;
 
     m_dX =
+    m_dElevation =
+    m_dWaterFlow =
     m_dZ =
     m_dManningNumber =
     m_dLeftRBAngle =
-    m_dXUTM =
-    m_dYUTM =
+    m_dX_UTM =
+    m_dY_UTM =
     m_dRightRBAngle =
     m_dLeftRBAngle =  0.0;
 }
@@ -60,7 +58,7 @@ CCrossSection::~CCrossSection() = default;
 //===============================================================================================================================
 //! Append a cross-section object to the estuary object
 //===============================================================================================================================
-void CCrossSection::dAppend2Vector(string strItem, double dValue){
+void CCrossSection::dAppend2Vector(const string& strItem, double dValue){
     if (strItem == "elevation")
         m_vElevation.push_back(dValue);
     else if (strItem == "width")
@@ -102,11 +100,11 @@ void CCrossSection::dSetZ(double dValue){
 void CCrossSection::dSetManningNumber(double dValue) {
     m_dManningNumber = dValue;
 }
-void CCrossSection::dSetXUTM(double dValue) {
-    m_dXUTM = dValue;
+void CCrossSection::dSetX_UTM(double dValue) {
+    m_dX_UTM = dValue;
 }
-void CCrossSection::dSetYUTM(double dValue) {
-    m_dYUTM = dValue;
+void CCrossSection::dSetY_UTM(double dValue) {
+    m_dY_UTM = dValue;
 }
 void CCrossSection::dSetRightRBAngle(double dValue) {
     m_dRightRBAngle = dValue;
@@ -127,80 +125,74 @@ void CCrossSection::nSetElevationSectionsNumber(int nValue) {
 //===============================================================================================================================
 //! The CCrossSection Getters
 //===============================================================================================================================
-int CCrossSection::nGetSectionNumber(){
+int CCrossSection::nGetSectionNumber() const{
   return m_nSectionNumber;
 }
-double CCrossSection::dGetX(){
+double CCrossSection::dGetX() const{
   return m_dX;
 }
-double CCrossSection::dGetZ(){
+double CCrossSection::dGetZ() const {
   return m_dZ;
 }
-
-double CCrossSection::dGetManningNumber(){
+double CCrossSection::dGetManningNumber() const {
   return m_dManningNumber;
 }
-double CCrossSection::dGetXUTM(){
-  return m_dXUTM;
+double CCrossSection::dGetX_UTM() const{
+  return m_dX_UTM;
 }
-double CCrossSection::dGetYUTM(){
-  return m_dYUTM;
+double CCrossSection::dGetY_UTM() const{
+  return m_dY_UTM;
 }
-double CCrossSection::dGetRightRBAngle(){
+double CCrossSection::dGetRightRBAngle() const{
   return m_dRightRBAngle;
 }
-double CCrossSection::dGetLeftRBAngle(){
+double CCrossSection::dGetLeftRBAngle() const{
   return m_dLeftRBAngle;
 }
-int CCrossSection::nGetElevationSectionsNumber(){
+int CCrossSection::nGetElevationSectionsNumber() const{
     return m_nElevationSectionNumber;
 }
-
-
-double CCrossSection::dGetElevation(int nZ){
+double CCrossSection::dGetElevation(int nZ) const {
   return m_vElevation[nZ];
 }
-double CCrossSection::dGetWidth(int nZ){
+double CCrossSection::dGetWidth(int nZ) const {
   return m_vWidth[nZ];
 }
-double CCrossSection::dGetArea(int nZ){
+double CCrossSection::dGetArea(int nZ) const {
   return m_vArea[nZ];
 }
-double CCrossSection::dGetPerimeter(int nZ){
+double CCrossSection::dGetPerimeter(int nZ) const {
   return m_vPerimeter[nZ];
 }
-double CCrossSection::dGetHydraulicRadius(int nZ){
+double CCrossSection::dGetHydraulicRadius(int nZ) const {
   return m_vHydraulicRadius[nZ];
 }
-double CCrossSection::dGetSigma(int nZ){
+double CCrossSection::dGetSigma(int nZ) const {
   return m_vSigma[nZ];
 }
-double CCrossSection::dGetLeftY(int nZ){
+double CCrossSection::dGetLeftY(int nZ) const {
   return m_vLeftRBLocation[nZ];
 }
-double CCrossSection::dGetRightY(int nZ){
+double CCrossSection::dGetRightY(int nZ) const {
   return m_vRightRBLocation[nZ];
 }
-double CCrossSection::dGetBeta(int nZ){
+double CCrossSection::dGetBeta(int nZ) const {
   return m_vBeta[nZ];
 }
-
-double CCrossSection::dGetI1(int nZ){
+double CCrossSection::dGetI1(int nZ) const {
     return m_vI1[nZ];
 }
-
-double CCrossSection::dGetI2(int nZ){
+double CCrossSection::dGetI2(int nZ) const {
     return m_vI2[nZ];
 }
 
+//! Getter for vector variables
 vector<double> CCrossSection::vGetArea() {
     return m_vArea;
 }
-
 vector<double> CCrossSection::vGetHydraulicRadius() {
     return m_vHydraulicRadius;
 }
-
 vector<double> CCrossSection::vGetElevation() {
     return m_vElevation;
 }

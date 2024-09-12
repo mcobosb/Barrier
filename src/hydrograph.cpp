@@ -1,6 +1,6 @@
 /*!
 *
- * \file hydro.cpp
+ * \file hydrograph.cpp
  * \brief
  * \details TODO 001 A more detailed description of these routines.
  * \author Manuel Cobos Budia
@@ -13,24 +13,8 @@
 /*==============================================================================================================================
 
 ==============================================================================================================================*/
-//#include <cstdlib> // for strtol() and strtod()
-//#include <fstream>
-//using std::ifstream;
-//
-//#include <sstream>
-//using std::stringstream;
-//
-//#include <iostream>
-//using std::cerr;
-//using std::cout;
-//using std::endl;
-//using std::ios;
-//
 #include <string>
 using std::to_string;
-//
-//#include <algorithm>
-//using std::find;
 
 #include <hydrograph.h>
 
@@ -64,28 +48,28 @@ void CHydrograph::dAppend2Vector(const string& strItem, const double dValue){
 //===============================================================================================================================
 //! Set the hydrograph X coordinate location
 //===============================================================================================================================
-void CHydrograph::dSetHydrographXLocation(double dValue) {
-    m_dHydrographXLocation = dValue;
+void CHydrograph::dSetHydrographXLocation(const double dHydroXLocation) {
+    m_dHydrographXLocation = dHydroXLocation;
 }
 
 //===============================================================================================================================
 //! Get the hydrograph X coordinate location
 //===============================================================================================================================
-double CHydrograph::dGetHydrographXLocation() {
+double CHydrograph::dGetHydrographXLocation() const {
     return m_dHydrographXLocation;
 }
 
 //===============================================================================================================================
 //! Set the hydrograph Y coordinate location
 //===============================================================================================================================
-void CHydrograph::dSetHydrographYLocation(double dValue) {
-    m_dHydrographYLocation = dValue;
+void CHydrograph::dSetHydrographYLocation(const double dHydroYLocation) {
+    m_dHydrographYLocation = dHydroYLocation;
 }
 
 
 //===============================================================================================================================
 //! Get the hydrograph Y coordinate location
 //===============================================================================================================================
-double CHydrograph::dGetHydrographYLocation() {
+double CHydrograph::dGetHydrographYLocation() const {
     return m_dHydrographYLocation;
 }

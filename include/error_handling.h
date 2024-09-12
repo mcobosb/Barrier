@@ -21,7 +21,7 @@ using std::string;
 // Return codes
 static constexpr int RTN_OK = 0;
 static constexpr int RTN_ERR_INI = 1;
-static constexpr int RTN_ERR_SVDIR = 2;
+static constexpr int RTN_ERR_SV_DIR = 2;
 static constexpr int RTN_ERR_BADLY_FORMAT_COLON = 3;
 static constexpr int RTN_ERR_LOGFILE = 10;
 static constexpr int RTN_ERR_OUTFILE = 11;

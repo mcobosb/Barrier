@@ -2,7 +2,7 @@
 *
  * \class CDataWriter
  * \brief
- * \details TODO 001 This is a more detailed description of the CDataWriter class
+ * \details Description of CDataWriter class which contains the method for writing output on NetCDF file
  * \author Manuel Cobos Budia
 
  * \date 2024
@@ -15,7 +15,6 @@
 #ifndef DATA_WRITER_H
 #define DATA_WRITER_H
 
-#include <simulation.h>
 #include <string>
 using std::string;
 #include <map>
@@ -33,11 +32,8 @@ class CDataWriter {
 
 private:
 
-    //! Ids for x and t
-    int n_XId, n_TId;
-
-    //! Id for the netcdf file
-    int m_ncId;
+    //! Ids for x and t and NetCDF file
+    int n_XId, n_TId, m_ncId;
 
     //! Ids for every variable
     int n_VariableId;
@@ -60,16 +56,20 @@ private:
 
 public:
 
-
     CDataWriter();
     ~CDataWriter();
 
-    const char * put_time(struct tm * tm, const char * str);
+    //! Create the file with coordinates, time and variable which is definitions
+    void nDefineNetCDFFile(const CSimulation* m_pSimulation);
 
-    int nDefineNetCDFFile(const CSimulation* m_pSimulation);
+    //! Return the metadata of every variable
     string strGetVariableMetadata(const string& strVariable, const string& strField);
-    int nSetOutputData(CSimulation* m_pSimulation) const;
-    int nCloseNetCDFFile(CSimulation* m_pSimulation);
+
+    //! Save data of every variable into NetCDF file
+    void nSetOutputData(CSimulation* m_pSimulation) const;
+
+    //! Close the NetCDF file
+    void nCloseNetCDFFile(CSimulation* m_pSimulation);
 };
 
 #endif // DATA_WRITER_H

@@ -31,6 +31,8 @@ using std::cout;
 using std::endl;
 using std::ios;
 
+// #include <psapi.h>
+#include <io.h>            // For isatty()
 
 #include <iomanip>
 using std::put_time;
@@ -50,9 +52,11 @@ using std::all_of;
 using std::transform;
 
 #include <windows.h>       // Needed for GetModuleFileName()
+
 #include "screen_presenter.h"
-#include "error_handling.h"
 #include "utils.h"
+#include "simulation.h"
+#include "main.h"
 
 
 
@@ -60,7 +64,6 @@ using std::transform;
 //! The CScreenPresenter constructor
 //===============================================================================================================================
 CScreenPresenter::CScreenPresenter() {
-   m_tSysStartTime =
    m_tSysEndTime = 0;
 }
 
@@ -73,14 +76,14 @@ CScreenPresenter::~CScreenPresenter() = default;
 //===============================================================================================================================
 //! The nDoSimulation member function of CSimulation sets up and runs the simulation
 //===============================================================================================================================
-void CScreenPresenter::StartingRun(int nArg, char const* pcArgv[])
+void CScreenPresenter::StartingRun(int nArg, char const* pcArgv[], CSimulation* pSimulation)
 {
    // ================================================== initialization section ================================================
    // Hello, World!
    AnnounceStart();
 
    // Start the clock ticking
-   StartClock();
+   StartClock(pSimulation);
 
    // Find out the folder in which the SV executable sits, in order to open the .ini file (they are assumed to be in the same folder)
    // if (! bFindExeDir(pcArgv[0]))
@@ -92,7 +95,7 @@ void CScreenPresenter::StartingRun(int nArg, char const* pcArgv[])
    //    return (nRet);
 
    // OK, we are off, tell the user about the licence and the start time
-   AnnounceLicence();
+   AnnounceLicence(pSimulation);
 }
 
 
@@ -161,7 +164,7 @@ void CScreenPresenter::AnnounceStart()
 //===============================================================================================================================
 //! Starts the clock ticking
 //===============================================================================================================================
-void CScreenPresenter::StartClock()
+void CScreenPresenter::StartClock(CSimulation* m_pSimulation)
 {
    // First start the 'CPU time' clock ticking
    if (static_cast<clock_t>(-1) == clock())
@@ -178,8 +181,9 @@ void CScreenPresenter::StartClock()
    }
 
    // And now get the actual time we started
-   m_tSysStartTime = time(nullptr);
+   m_pSimulation->m_tSysStartTime = time(nullptr);
 }
+
 
 //===============================================================================================================================
 //! Finds the folder (directory) in which the CoastalME executable is located
@@ -222,8 +226,7 @@ string CScreenPresenter::strGetComputerName()
 //===============================================================================================================================
 //! Tells the user about the licence
 //===============================================================================================================================
-void CScreenPresenter::AnnounceLicence()
-{
+void CScreenPresenter::AnnounceLicence(const CSimulation* m_pSimulation) {
    cout << COPYRIGHT << endl
         << endl;
    cout << LINE << endl;
@@ -236,6 +239,6 @@ void CScreenPresenter::AnnounceLicence()
    cout << LINE << endl
         << endl;
 
-   cout << START_NOTICE << strGetComputerName() << " at " << put_time(localtime(&m_tSysStartTime), "%H:%M on %A %d %B %Y") << endl;
+   cout << START_NOTICE << strGetComputerName() << " at " << put_time(localtime(&m_pSimulation->m_tSysStartTime), "%H:%M on %A %d %B %Y") << endl;
    cout << INITIALIZING_NOTICE << endl;
 }

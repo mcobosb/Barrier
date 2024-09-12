@@ -25,7 +25,7 @@ string strGetErrorText(int const nErr)
         case RTN_ERR_INI:
             strErr = "error reading initialization file";
             break;
-        case RTN_ERR_SVDIR:
+        case RTN_ERR_SV_DIR:
             strErr = "error in directory name";
             break;
         case RTN_ERR_BADLY_FORMAT_COLON:

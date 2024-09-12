@@ -26,6 +26,8 @@ using std::ostringstream;
 #include <fstream>
 using std::ofstream;
 
+#include "simulation.h"
+
 
 class CScreenPresenter
     {
@@ -37,9 +39,6 @@ private:
     //! The main output file stream
     ofstream OutStream;
 
-    //! System start-simulation time
-    time_t m_tSysStartTime{};
-
     //! System finish-simulation time
     time_t m_tSysEndTime{};
 
@@ -49,7 +48,8 @@ private:
     double m_dCPUClock{};
 
     // Utility routines
-    void StartClock();
+    void StartClock(CSimulation *m_pSimulation);
+
     bool bFindExeDir(char const*);
     // bool bTimeToQuit(void);
     // static int nDoTimeUnits(string const*);
@@ -61,48 +61,21 @@ private:
     static string strGetBuild();
     static string strGetComputerName();
 
+    CSimulation *m_pSimulation;
+
 
 public:
     ofstream LogStream;
-
-    // Intel x86, byte order is little-endian, 32-bit
-    string const PLATFORM = "Intel x86/GNU C++";
-
-    string const VERSION = "0.0.1";
-    string const PROGRAM_NAME = "Saint Venant Equations Solver version 0.0.1 (15 Aug 2024)";
-    string const PROGRAM_NAME_SHORT = "SV";
-
-
-    string const NOTE = "      Note ";
-    string const COPYRIGHT = "(C) 2024 Manuel Cobos";
-    string const LINE = "-------------------------------------------------------------------------------";
-    string const DISCLAIMER1 = "This program is distributed in the hope that it will be useful. but WITHOUT ANY";
-    string const DISCLAIMER2 = "WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A";
-    string const DISCLAIMER3 = "PARTICULAR PURPOSE. See the GNU General Public License for more details. You";
-    string const DISCLAIMER4 = "should have received a copy of the GNU General Public License along with this";
-    string const DISCLAIMER5 = "program; if not. contact the Free Software Foundation. Inc.. 675 Mass Ave.";
-    string const DISCLAIMER6 = "Cambridge. MA 02139. USA.";
-
-    string const START_NOTICE = "- Started on ";
-    string const INITIALIZING_NOTICE = "- Initializing";
-    string const RUN_END_NOTICE = "- Run ended at ";
-
-    // Not likely that user will need to change these
-    static constexpr int BUF_SIZE = 2048;                                     // Max length (inc. terminating NULL) of any C-type string
-
-    // clock_t is a signed long: see <time.h>
-    long const CLOCK_T_MIN = LONG_MIN;
-    double const CLOCK_T_RANGE = static_cast<double>(LONG_MAX) - static_cast<double>(CLOCK_T_MIN);
 
     CScreenPresenter();
     ~CScreenPresenter();
 
     //! Carries out init-of-simulation tidying (error messages etc.)
-    void StartingRun(int, char const* []);
+    void StartingRun(int, char const* [], CSimulation* m_pSimulation);
     void EndingRun();
 
     void AnnounceStart();
-    void AnnounceLicence();
+    static void AnnounceLicence(const CSimulation *m_pSimulation) ;
     // void AnnounceReadBasementDEM() const;
     // static void AnnounceAddLayers();
     // static void AnnounceReadRasterFiles();

@@ -13,7 +13,7 @@
 /*==============================================================================================================================
 
 ==============================================================================================================================*/
-#include <cstdlib> // for strtol() and strtod()
+#include <cstdlib>
 #include <data_reader.h>
 #include <fstream>
 using std::ifstream;
@@ -39,7 +39,6 @@ using std::vector;
 using std::find;
 
 #include "simulation.h"
-#include "data_reader.h"
 #include "error_handling.h"
 #include "utils.h"
 
@@ -57,8 +56,7 @@ CDataReader::CDataReader() {
 	m_nSimStartHour =
 	m_nSimStartDay =
 	m_nSimStartMonth =
-	m_nSimStartYear =
-	m_nLogFileDetail = 0;
+	m_nSimStartYear = 0;
 
 	m_dDurationUnitsMultiplier = 0.0;
 
@@ -77,19 +75,13 @@ CDataReader::~CDataReader() = default;
 //===============================================================================================================================
 bool CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 {
-	if (m_nLogFileDetail != 1)
+	if (m_pSimulation->m_nLogFileDetail == 0)
 	{
 		m_pSimulation->LogStream.open("/dev/null", ios::out | ios::trunc);
 
 	}
 	else
 		m_pSimulation->LogStream.open(m_pSimulation->m_strLogFile.c_str(), ios::out | ios::trunc);
-
-
-	if (!m_pSimulation->LogStream)
-	{
-		cout << "Warning: log file is not writting" << endl;
-	}
 
 	return true;
 }
@@ -99,7 +91,7 @@ bool CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 //======================================================================================================================
 bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 {
-    // Create an ifstream object
+    // Create a read object
     ifstream InStream;
 
     // Try to open run details file for input
@@ -117,6 +109,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
     }
 
     int nLine = 0;
+	int nRet = 0;
     int i = 0;
     size_t nPos;
     string strRec, strErr;
@@ -174,16 +167,14 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
                 strRH = strTrimRight(&strRH);
             }
 
-            int nRet = 0,
-				nHour = 0,
+            int nHour = 0,
 				nMin = 0,
 				nSec = 0,
 				nDay = 0,
 				nMonth = 0,
 				nYear = 0;
-            double dMult = 0;
             string strTmp;
-            vector<string> VstrTmp;
+            vector<string> vStrTmp;
 
             switch (i)
             {
@@ -214,32 +205,32 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
                			break;
             		}
 
-            		m_nLogFileDetail = stoi(strRH);
+            		m_pSimulation->m_nLogFileDetail = stoi(strRH);
 
-            		if ((m_nLogFileDetail < NO_LOG_FILE) || (m_nLogFileDetail > LOG_FILE_HIGH_DETAIL))
+            		if ((m_pSimulation->m_nLogFileDetail < NO_LOG_FILE) || (m_pSimulation->m_nLogFileDetail > LOG_FILE_HIGH_DETAIL))
                			strErr = "line " + to_string(nLine) + ": log file detail level";
             		break;
 
          		case 3:
             		// Get the start date/time of the simulation, format is [hh-mm-ss dd/mm/yyyy]
-            		VstrTmp = VstrSplit(&strRH, SPACE);
+            		vStrTmp = VstrSplit(&strRH, SPACE);
 
             		// Both date and time here?
-            		if (VstrTmp.size() < 2)
+            		if (vStrTmp.size() < 2)
             		{
                			strErr = "line " + to_string(nLine) + ": must have both date and time for simulation start in '" + SV_INI + "'";
                			break;
             		}
 
             		// OK, first sort out the time
-            		if (! bParseTime(&VstrTmp[0], nHour, nMin, nSec))
+            		if (! bParseTime(&vStrTmp[0], nHour, nMin, nSec))
             		{
                			strErr = "line " + to_string(nLine) + ": could not understand simulation start time in '" + SV_INI + "'";
                			break;
             		}
 
             		// Next sort out the date
-            		if (! bParseDate(&VstrTmp[1], nDay, nMonth, nYear))
+            		if (! bParseDate(&vStrTmp[1], nDay, nMonth, nYear))
             		{
                			strErr = "line " + to_string(nLine) + ": could not understand simulation start date in '" + SV_INI + "'";
                			break;
@@ -295,14 +286,15 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            }
 
 				case 5: {
-		            // Timestep of simulation (in hours or days)
+					double dMultiplier;
+					// Timestep of simulation (in hours or days)
             		strRH = strToLower(&strRH);
 
-            		dMult = dGetTimeMultiplier(&strRH);
-	            	//! TODO 020: Options for another time unit
+            		dMultiplier = dGetTimeMultiplier(&strRH);
+	            	//! TODO 007: Options for another time unit
 	            	m_pSimulation->m_dTimeFactor = 1.0;
 
-            		if (static_cast<int>(dMult) == TIME_UNKNOWN)
+            		if (static_cast<int>(dMultiplier) == TIME_UNKNOWN)
             		{
             			strErr = "line " + to_string(nLine) + ": units for simulation timestep";
             			break;
@@ -329,7 +321,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             			break;
             		}
 
-            		double dTimeStep = strtod(strRH.c_str(), nullptr) * dMult*m_pSimulation->m_dTimeFactor; // in hours
+            		double dTimeStep = strtod(strRH.c_str(), nullptr) * dMultiplier*m_pSimulation->m_dTimeFactor; // in hours
 
             		if (dTimeStep <= 0)
             			strErr = "line " + to_string(nLine) + ": timestep of simulation must be > 0";
@@ -352,11 +344,11 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            		else {
 	            			vector<string> vOutputVariables;
 	            			// Obtain the new line
-	            			stringstream sline(strRH);
+	            			stringstream strLine(strRH);
 	            			string token;
 
-	            			// Using getline for spliting the string by commas
-	            			while (getline(sline, token, ',')) {
+	            			// Using get line for splitting the string by commas
+	            			while (getline(strLine, token, ',')) {
 	            				m_pSimulation->strAddOutputVariable(token);
 	            			}
 	            		}
@@ -412,11 +404,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             	}
 
             	case 11: {
-	            	// Get the UEBC filename
-
-	            	// if (strRH.empty())
-	            	// 	strErr = "line " + to_string(nLine) + ": tidal filename";
-
+	            	// Get the upward estuarine boundary condition filename
 	            	if (m_pSimulation->nGetUpwardEstuarineCondition() == 1 || m_pSimulation->nGetUpwardEstuarineCondition() == 2)
 	            	{
 	            		m_pSimulation->m_strUpwardBoundaryConditionFilename = strRH;
@@ -448,11 +436,8 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             	}
 
             	case 13: {
-		            // Get the tidal filename [if DEBC = E]
-	            	// if (strRH.empty())
-	            	// 	strErr = "line " + to_string(nLine) + ": - DEBC file name ";
-
-	            	if (m_pSimulation->nGetDownwardEstuarineCondition() == 1 || m_pSimulation->nGetDownwardEstuarineCondition() == 2) {
+		            // Get the tidal or water flow filename [if downward boundary condition = 1 or 2]
+		            if (m_pSimulation->nGetDownwardEstuarineCondition() == 1 || m_pSimulation->nGetDownwardEstuarineCondition() == 2) {
 	            		m_pSimulation->m_strDownwardBoundaryConditionFilename = strRH;
 	            		m_pSimulation->m_strDownwardBoundaryConditionFilename.append(".csv");
 		            }
@@ -462,7 +447,6 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 
 	            	break;
             	}
-
 
 				case 14:
             		// Get the hydro file name
@@ -490,7 +474,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					if (strRH.empty())
 						strErr = "line " + to_string(nLine) + ": Compute water density?";
 
-					if  (strRH.find("y") != string::npos)
+					if  (strRH.find('y') != string::npos)
 						m_pSimulation->bSetDoMcComarckLimiterFlux(true);
 					else
 						m_pSimulation->bSetDoMcComarckLimiterFlux(false);
@@ -540,7 +524,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						if (strRH.empty())
 							strErr = "line " + to_string(nLine) + ": surface gradient method";
 
-						if  (strRH.find("y") != string::npos)
+						if  (strRH.find('y') != string::npos)
 							m_pSimulation->bSetDoSurfaceGradientMethod(true);
 						else
 							m_pSimulation->bSetDoSurfaceGradientMethod(false);
@@ -554,7 +538,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						if (strRH.empty())
 							strErr = "line " + to_string(nLine) + ": source Term balance";
 
-						if  (strRH.find("y") != string::npos)
+						if  (strRH.find('y') != string::npos)
 							m_pSimulation->bSetDoSurfaceTermBalance(true);
 						else
 							m_pSimulation->bSetDoSurfaceTermBalance(false);
@@ -568,7 +552,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						if (strRH.empty())
 							strErr = "line " + to_string(nLine) + ": beta coefficient";
 
-						if  (strRH.find("y") != string::npos)
+						if  (strRH.find('y') != string::npos)
 							m_pSimulation->bSetDoBetaCoefficient(true);
 						else
 							m_pSimulation->bSetDoBetaCoefficient(false);
@@ -582,7 +566,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						if (strRH.empty())
 							strErr = "line " + to_string(nLine) + ": dry bed";
 
-						if  (strRH.find("y") != string::npos)
+						if  (strRH.find('y') != string::npos)
 							m_pSimulation->bSetDoDryBed(true);
 						else
 							m_pSimulation->bSetDoDryBed(false);
@@ -596,7 +580,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						if (strRH.empty())
 							strErr = "line " + to_string(nLine) + ": Murillo condition";
 
-						if  (strRH.find("y") != string::npos)
+						if  (strRH.find('y') != string::npos)
 							m_pSimulation->bSetDoMurilloCondition(true);
 						else
 							m_pSimulation->bSetDoMurilloCondition(false);
@@ -610,7 +594,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						if (strRH.empty())
 							strErr = "line " + to_string(nLine) + ": Compute water density?";
 
-						if  (strRH.find("y") != string::npos)
+						if  (strRH.find('y') != string::npos)
 							m_pSimulation->bSetDoWaterDensity(true);
 						else
 							m_pSimulation->bSetDoWaterDensity(false);
@@ -681,15 +665,15 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 
     // Finally, need to check that we have at least one raster file, so that we know the grid size and units (and preferably also the projection)
     // bool bNoRasterFiles = true;
-	return false;
+	return nRet;
 }
 
 
 //======================================================================================================================
 //!	Read Along Channel geometry file
 //======================================================================================================================
-bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
-	// Create an ifstream object
+bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
+	// Create an object
 	ifstream InStream;
 
 	// Try to open run details file for input
@@ -723,17 +707,18 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 			m_pSimulation->estuary[nCrossSectionNumber].nSetSectionNumber(nCrossSectionNumber);
 
 			// Obtain the new line
-			stringstream sline(strRec);
+			stringstream strLine(strRec);
 
 			string token;
 			int j = 0;
 
-			// Using getline for spliting the string by commas
-			while (getline(sline, token, ',')) {
+			// Using get line for splitting the string by commas
+			while (getline(strLine, token, ',')) {
 				double dValue = strtod(token.c_str(), nullptr);
 
 				if (j == 0) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetX(dValue);
+					m_pSimulation->m_vCrossSectionX.push_back(dValue);
 				}
 
 				if (j == 1) {
@@ -745,11 +730,11 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 				}
 
 				if (j == 3) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetXUTM(dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dSetX_UTM(dValue);
 				}
 
 				if (j == 4) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetYUTM(dValue);
+					m_pSimulation->estuary[nCrossSectionNumber].dSetY_UTM(dValue);
 				}
 
 				if (j == 5) {
@@ -762,20 +747,23 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 
 				if (j == 7)
 				{
-					if  (m_pSimulation->nGetInitialEstuarineCondition() == 0)
+					if  (m_pSimulation->nGetInitialEstuarineCondition() <= 1)
 					{
-						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
-						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
-					}
-					else if (m_pSimulation->nGetInitialEstuarineCondition() == 1) {
 						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
 						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
 					}
 					else
 					{
-						m_pSimulation->m_vCrossSectionElevation.push_back(dValue);
+						dValue = dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ();
+						if (dValue <= 0) {
+							m_pSimulation->m_vCrossSectionElevation.push_back(0.0);
+						}
+						else {
+							m_pSimulation->m_vCrossSectionElevation.push_back(dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ());
+						}
 						m_pSimulation->m_vCrossSectionQ.push_back(0.0);
 						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
+
 					}
 				}
 
@@ -796,8 +784,8 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) {
 //======================================================================================================================
 //!	Read Cross-Section geometry file
 //======================================================================================================================
-bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) {
-	// Create an ifstream object
+bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const {
+	// Create an object
 	ifstream InStream;
 
 	// Try to open run details file for input
@@ -821,23 +809,21 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) {
 	// CEstuary* CEstuary;
 
 	while (getline(InStream, strRec)) {
-
-		bool bSetElevationSectionsNumber = true;
-
 		// Trim off leading and trailing whitespace
 		strRec = strTrim(&strRec);
 		// If it is a blank line or a comment then ignore it
 		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			bool bSetElevationSectionsNumber = true;
 			// It isn't so increment counter
 			nLine++;
 
-			stringstream sline(strRec);
+			stringstream strLine(strRec);
 
 			string token;
 			int j = 0;
 
-			// Using getline for spliting the string by commas
-			while (getline(sline, token, ',')) {
+			// Using get line for splitting the string by commas
+			while (getline(strLine, token, ',')) {
 
 				double dValue = strtod(token.c_str(), nullptr);
 
@@ -914,8 +900,7 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) {
 //======================================================================================================================
 bool CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
-	int nCrossSectionsNumber = m_pSimulation->m_nCrossSectionsNumber - 1;
-	// Create an ifstream object
+	// Create an object
 	ifstream InStream;
 
 	// Try to open run details file for input
@@ -931,7 +916,6 @@ bool CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
 	int nLine = 0;
 	int i = 0;
-	size_t nPos;
 	string strRec, strErr;
 
 	while (getline(InStream, strRec)) {
@@ -947,7 +931,7 @@ bool CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 			string token;
 			int j = 0;
 
-			// Using getline for spliting the string line by commas
+			// Using get line for splitting the string line by commas
 			while (getline(string_line, token, ',')) {
 				double dValue = strtod(token.c_str(), nullptr);
 				if (j == 0) {
@@ -978,8 +962,7 @@ bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 
 	if (m_pSimulation->nGetDownwardEstuarineCondition() != 0)
 	{
-		int nCrossSectionsNumber = m_pSimulation->m_nCrossSectionsNumber - 1;
-		// Create an ifstream object
+		// Create an object
 		ifstream InStream;
 
 		// Try to open run details file for input
@@ -995,7 +978,6 @@ bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 
 		int nLine = 0;
 		int i = 0;
-		size_t nPos;
 		string strRec, strErr;
 
 		while (getline(InStream, strRec)) {
@@ -1011,7 +993,7 @@ bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 				string token;
 				int j = 0;
 
-				// Using getline for spliting the string line by commas
+				// Using get line for splitting the string line by commas
 				while (getline(string_line, token, ',')) {
 					double dValue = strtod(token.c_str(), nullptr);
 					if (j == 0) {
@@ -1039,8 +1021,8 @@ bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 //======================================================================================================================
 //! Read Hydro input file
 //======================================================================================================================
-bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) {
-	// Create an ifstream object
+bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
+	// Create an object
 	ifstream InStream;
 
 	// Try to open run details file for input
@@ -1056,7 +1038,6 @@ bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) {
 
 	int nLine = 0;
 	int i = 0;
-	size_t nPos;
 	string strRec, strErr;
 
 	int nHydrographNo = -1;
@@ -1090,7 +1071,7 @@ bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) {
 			string token;
 			int j = 0;
 
-			// Using getline for spliting the string line by commas
+			// Using get line for splitting the string line by commas
 			while (getline(string_line, token, ',')) {
 				double dValue = strtod(token.c_str(), nullptr);
 				if (bHydrographLocation) {
@@ -1139,29 +1120,26 @@ bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) {
 //===============================================================================================================================
 double CDataReader::dGetTimeMultiplier(string const *strIn)
 {
-	// First decide what the time units are
-	int nTimeUnits = nDoTimeUnits(strIn);
-
 	// Then return the correct multiplier, since m_dTimeStep is in hours
-	switch (nTimeUnits)
+	switch (nDoTimeUnits(strIn))
 	{
 		default:
 			return TIME_UNKNOWN;
 
 		case TIME_SECONDS:
-				return 1; // Multiplier for hours
-
-		case TIME_HOURS:
 			return 1; // Multiplier for hours
 
+		case TIME_HOURS:
+			return 3600; // Multiplier for hours
+
 		case TIME_DAYS:
-			return 24; // Multiplier for days -> hours
+			return 3600*24; // Multiplier for days -> hours
 
 		case TIME_MONTHS:
-			return 24 * 30.416667; // Multiplier for months -> hours (assume 30 + 5/12 day months, no leap years)
+			return 3600*24 * 30.416667; // Multiplier for months -> hours (assume 30 + 5/12 day months, no leap years)
 
 		case TIME_YEARS:
-			return 24 * 365.25; // Multiplier for years -> hours
+			return 3600*24 * 365.25; // Multiplier for years -> hours
 	}
 }
 
@@ -1171,11 +1149,8 @@ double CDataReader::dGetTimeMultiplier(string const *strIn)
 //===============================================================================================================================
 int CDataReader::nSimulationTimeMultiplier(string const *strIn)
 {
-    // First decide what the time units are
-    int nTimeUnits = nDoTimeUnits(strIn);
-
     // Next set up the correct multiplier, since m_dTimeStep is in hours
-    switch (nTimeUnits)
+    switch (nDoTimeUnits(strIn))
     {
     	//! TODO 023: multiplier for seconds
 	    case TIME_SECONDS:
@@ -1235,11 +1210,10 @@ int CDataReader::nDoTimeUnits(string const *strIn)
 string CDataReader::strTrimLeft(string const *strIn)
 {
    // Trim leading spaces
-   size_t nStartpos = strIn->find_first_not_of(" \t");
-   if (nStartpos == string::npos)
+   if (size_t nStartPosition = strIn->find_first_not_of(" \t"); nStartPosition == string::npos)
       return *strIn;
    else
-      return strIn->substr(nStartpos);
+      return strIn->substr(nStartPosition);
 }
 
 //===============================================================================================================================
@@ -1253,11 +1227,10 @@ string CDataReader::strTrimRight(string const *strIn)
    strTmp.erase(std::remove(strTmp.begin(), strTmp.end(), '\r'), strTmp.end());
 
    // Trim trailing spaces
-   size_t nEndpos = strTmp.find_last_not_of(" \t");
-   if (nEndpos == string::npos)
+   if (size_t nEndPos = strTmp.find_last_not_of(" \t"); nEndPos == string::npos)
       return strTmp;
    else
-      return strTmp.substr(0, nEndpos + 1);
+      return strTmp.substr(0, nEndPos + 1);
 }
 
 //===============================================================================================================================
@@ -1293,25 +1266,25 @@ bool CDataReader::bParseDate(string const *strDate, int &nDay, int &nMonth, int 
 {
 #ifdef _WIN32
    // For Windows, make sure has backslashes, not Unix-style slashes
-   vector<string> VstrTmp = VstrSplit(strDate, SLASH);
+   vector<string> vStrTmp = VstrSplit(strDate, SLASH);
 #else
    vector<string> VstrTmp = VstrSplit(strDate, SLASH);
 #endif
 
-   if (VstrTmp.size() < 3)
+   if (vStrTmp.size() < 3)
    {
       cerr << "date string must include day, month, and year '" << strDate << "'" << endl;
       return false;
    }
 
    // Sort out day
-   if (! bIsStringValidInt(VstrTmp[0]))
+   if (! bIsStringValidInt(vStrTmp[0]))
    {
       cerr << "invalid integer for day in date '" << strDate << "'" << endl;
       return false;
    }
 
-   nDay = stoi(VstrTmp[0]);
+   nDay = stoi(vStrTmp[0]);
 
    if ((nDay < 1) || (nDay > 31))
    {
@@ -1320,13 +1293,13 @@ bool CDataReader::bParseDate(string const *strDate, int &nDay, int &nMonth, int 
    }
 
    // Sort out month
-   if (! bIsStringValidInt(VstrTmp[1]))
+   if (! bIsStringValidInt(vStrTmp[1]))
    {
       cerr << "invalid integer for month in date '" << strDate << "'" << endl;
       return false;
    }
 
-   nMonth = stoi(VstrTmp[1]);
+   nMonth = stoi(vStrTmp[1]);
 
    if ((nMonth < 1) || (nMonth > 12))
    {
@@ -1335,13 +1308,13 @@ bool CDataReader::bParseDate(string const *strDate, int &nDay, int &nMonth, int 
    }
 
    // Sort out year
-   if (! bIsStringValidInt(VstrTmp[2]))
+   if (! bIsStringValidInt(vStrTmp[2]))
    {
       cerr << "invalid integer for year in date '" << strDate << "'" << endl;
       return false;
    }
 
-   nYear = stoi(VstrTmp[2]);
+   nYear = stoi(vStrTmp[2]);
 
    if (nYear < 0)
    {
@@ -1357,22 +1330,22 @@ bool CDataReader::bParseDate(string const *strDate, int &nDay, int &nMonth, int 
 //===============================================================================================================================
 bool CDataReader::bParseTime(string const *strTime, int &nHour, int &nMin, int &nSec)
 {
-   vector<string> VstrTmp = VstrSplit(strTime, DASH);
+   vector<string> vStrTmp = VstrSplit(strTime, DASH);
 
-   if (VstrTmp.size() < 3)
+   if (vStrTmp.size() < 3)
    {
       cerr << "time string must include hours, minutes, and seconds '" << strTime << "'" << endl;
       return false;
    }
 
    // Sort out hour
-   if (! bIsStringValidInt(VstrTmp[0]))
+   if (! bIsStringValidInt(vStrTmp[0]))
    {
       cerr << "invalid integer for hours in time '" << strTime << "'" << endl;
       return false;
    }
 
-   nHour = stoi(VstrTmp[0]);
+   nHour = stoi(vStrTmp[0]);
 
    if ((nHour < 0) || (nHour > 23))
    {
@@ -1381,28 +1354,28 @@ bool CDataReader::bParseTime(string const *strTime, int &nHour, int &nMin, int &
    }
 
    // Sort out minutes
-   if (! bIsStringValidInt(VstrTmp[1]))
+   if (! bIsStringValidInt(vStrTmp[1]))
    {
       cerr << "invalid integer for minutes in time '" << strTime << "'" << endl;
       return false;
    }
 
-   nMin = stoi(VstrTmp[1]);
+   nMin = stoi(vStrTmp[1]);
 
    if ((nMin < 0) || (nMin > 59))
    {
-      cerr << "minutes must be betwen 0 and 59 in time '" << strTime << "'" << endl;
+      cerr << "minutes must be between 0 and 59 in time '" << strTime << "'" << endl;
       return false;
    }
 
    // Sort out seconds
-   if (! bIsStringValidInt(VstrTmp[2]))
+   if (! bIsStringValidInt(vStrTmp[2]))
    {
       cerr << "invalid integer for seconds in time '" << strTime << "'" << endl;
       return false;
    }
 
-   nSec = stoi(VstrTmp[2]);
+   nSec = stoi(vStrTmp[2]);
 
    if ((nSec < 0) || (nSec > 59))
    {

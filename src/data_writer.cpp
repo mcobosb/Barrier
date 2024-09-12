@@ -13,10 +13,7 @@
 /*==============================================================================================================================
 
 ==============================================================================================================================*/
-#include <cstdlib> // for strtol() and strtod()
-#include <data_reader.h>
-#include <fstream>
-using std::ifstream;
+#include <cstdlib>
 
 #include <sstream>
 using std::stringstream;
@@ -38,17 +35,17 @@ using std::vector;
 #include <algorithm>
 using std::find;
 
+#include <ctime>
+using std::time;
+using std::localtime;
+
 #include <iomanip>
 using std::put_time;
 
 #include "simulation.h"
 #include "data_writer.h"
 #include "main.h"
-#include "error_handling.h"
-#include "utils.h"
 
-// Error handling
-#define NC_CHECK(status) if (status != NC_NOERR) { std::cerr << "Error: " << nc_strerror(status) << std::endl; return 1; }
 
 //======================================================================================================================
 //! Class constructor
@@ -128,25 +125,41 @@ CDataWriter::~CDataWriter() = default;
 //======================================================================================================================
 //! The definition of NetCDF file
 //======================================================================================================================
-int CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
+void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     //! Create a new NetCDF file
     int status = nc_create(m_pSimulation->m_strOutFile.c_str(), NC_NETCDF4 | NC_CLOBBER, &m_ncId);
-    NC_CHECK(status);
 
     //! Define the dimensions: x and t
-    status = nc_def_dim(m_ncId, "x", static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber), &n_XId);
-    NC_CHECK(status);
-    size_t time_len = NC_UNLIMITED;  // Unlimited time
-    status = nc_def_dim(m_ncId, "time", time_len, &n_TId);
-    NC_CHECK(status);
+    //==================================================================================================================
+    nc_def_dim(m_ncId, "x", static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber), &n_XId);
+    nc_def_var(m_ncId, "x", NC_DOUBLE, 1, &n_XId, &n_VariableId);
+
+    // Long name
+    nc_put_att_text(m_ncId, n_VariableId, "long_name", 30, "along estuary coordinate");
+    // Units
+    nc_put_att_text(m_ncId, n_VariableId, "units", 15, "m");
+
+    if (m_pSimulation->m_nLogFileDetail == 2) {
+        size_t time_len = NC_UNLIMITED;  // Unlimited time
+        nc_def_dim(m_ncId, "time", time_len, &n_TId);
+    }
+    else {
+        nc_def_dim(m_ncId, "time", static_cast<size_t>(m_pSimulation->m_vOutputTimes.size()), &n_TId);
+        nc_def_var(m_ncId, "time", NC_DOUBLE, 1,&n_TId, &n_VariableId);
+    }
+    // Long name
+    nc_put_att_text(m_ncId, n_VariableId, "long_name", 30, "time");
+    // Units
+    nc_put_att_text(m_ncId, n_VariableId, "units", 15, "s");
 
     // Define the variable with two dimensions (time, x)
+    //==================================================================================================================
     n_DimensionsIds[0] = n_TId;
     n_DimensionsIds[1] = n_XId;
 
     for (const auto & m_vOutputVariable : m_pSimulation->m_vOutputVariables) {
         const char *outputVariableName = m_vOutputVariable.c_str();
-        status = nc_def_var(m_ncId, outputVariableName, NC_FLOAT, 2, n_DimensionsIds, &n_VariableId);
+        nc_def_var(m_ncId, outputVariableName, NC_DOUBLE, 2, n_DimensionsIds, &n_VariableId);
 
         // Long name
         nc_put_att_text(m_ncId, n_VariableId, "long_name", 30, strGetVariableMetadata(outputVariableName, "longname").c_str());
@@ -159,7 +172,6 @@ int CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
 
         //! Include the variable Id to the dictionary
         m_mVariableIds[outputVariableName] = n_VariableId;
-        NC_CHECK(status);
     }
 
     //! Include global attributes
@@ -167,13 +179,26 @@ int CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     nc_put_att_text(m_ncId, NC_GLOBAL, "Author", 20, AUTHOR);
     nc_put_att_text(m_ncId, NC_GLOBAL, "Version", 17, VERSION);
 
-    // time_t m_tSysTime = time(nullptr);
-    // nc_put_att_text(m_ncId, NC_GLOBAL, "Running on", 20, put_time(localtime(&m_tSysTime), "%H:%M on %A %d %B %Y"));
+    //! Include running time
+    const time_t t = time(nullptr);           // Get the current time
+    const tm* m_tSysTime = localtime(&t);
+
+    // Capture the output of time
+    ostringstream oss;
+    oss << put_time(m_tSysTime, "%Y-%m-%d %H:%M:%S"); // Formatear la fecha y hora
+
+    // Give format to time
+    const string formatted_time = oss.str();
+    nc_put_att_text(m_ncId, NC_GLOBAL, "Running on", 40, formatted_time.c_str());
 
     // End the definition of NetCDF file
-    status = nc_enddef(m_ncId);
-    NC_CHECK(status);
-    return status;
+    nc_enddef(m_ncId);
+
+    //! Write coordenates and times. NetCDF only allow to write data outside the definition mode
+    nc_put_var_double(m_ncId,  n_XId, m_pSimulation->m_vCrossSectionX.data());
+    if (m_pSimulation->m_nLogFileDetail != 2) {
+        nc_put_var_double(m_ncId,  n_TId, m_pSimulation->m_vOutputTimes.data());
+    }
 }
 
 
@@ -186,17 +211,37 @@ string CDataWriter::strGetVariableMetadata(const string& strVariable, const stri
 //======================================================================================================================
 //! Set data of variables at a given timestep to the NetCDF file
 //======================================================================================================================
-int CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
+void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
 
+    int status = 0;
+    //! Choose to save all timestep if m_nLogFileDetail == 2 or only when indicated
     size_t start[2] = {static_cast<size_t>(m_pSimulation->m_nTimeId), 0};
-    size_t count[2] = {1, static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber)};
+    if (m_pSimulation->m_nLogFileDetail == 2) {
+        start[0] = static_cast<size_t>(m_pSimulation->m_nTimeLogId);
+        m_pSimulation->m_nTimeLogId++;
+    }
+
+    const size_t count[2] = {1, static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber)};
 
     //! Write variable data
     for (const auto & strOutputVariable : m_pSimulation->m_vOutputVariables) {
         vector<double> data = m_pSimulation->vGetVariable(strOutputVariable);
-        int status = nc_put_vara_double(m_ncId, m_mVariableIds.at(strOutputVariable),  start, count, data.data());
-        NC_CHECK(status);
+        status = nc_put_vara_double(m_ncId, m_mVariableIds.at(strOutputVariable),  start, count, data.data());
     }
-    return false;
-    // std::cout << "Datos del tiempo " << t << " escritos correctamente.\n";
+
+    if (status != 0) {
+        cerr << "Error while creating output variables" << endl;
+    }
+}
+
+
+
+//======================================================================================================================
+//! Close the NetCDF file
+//======================================================================================================================
+void CDataWriter::nCloseNetCDFFile(CSimulation *m_pSimulation) {
+    int status = nc_close(m_ncId);
+    if (status != NC_NOERR) {
+        std::cerr << "Error closing the NetCDF file: " << nc_strerror(status) << std::endl;
+    }
 }

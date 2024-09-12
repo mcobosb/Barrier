@@ -1,17 +1,39 @@
+/*!
+*
+ * Main function
+ * \details
+ * \author Manuel Cobos Budia
+
+ * \date 2024
+ * \copyright GNU General Public License
+ *
+ * \file main.h
+ * \brief
+ *
+ */
+
+//======================================================================================================================
+// TODO 001: A more detail description of main function.
+// TODO 002: Improve error handling functionalities.
+// TODO 003: Add computing progress function.
+// TODO 004: Save Predicted and Corrected variables for m_nLogDetail == 1 and 2.
+// TODO 005: Include hydrographs input. Add the interpolated value at node i in term Gv[0].
+// TODO 006: Include density, salinity and sediment load
+// TODO 007: Options for another time units
+
+//======================================================================================================================
+
+
 #ifndef MAIN_H
 #define MAIN_H
-/*===============================================================================================================================
-*/
 
 #include <string>
 using std::string;
 
-#include <climits>
 
 #include <sstream>
 using std::ostream;
 using std::ostringstream;
-//================================
 
 
 
@@ -23,40 +45,40 @@ inline double DRY_AREA = 1;
 //! minimum cross-section water flow (to ensure that U = Q/A ~ 0)
 inline double DRY_Q = 1e-2;
 
-inline const char* NAME = "Saint-Venant Equations Solver";
-inline const char* AUTHOR =  "Manuel Cobos (GDFA, University of Granada)";
-inline const char* VERSION = "v0.3.0 - 20240911";
+// Intel x86, byte order is little-endian, 32-bit
+string const PLATFORM = "Intel x86/GNU C++";
 
 
 
-// float const INITIAL_CONDITION = 0.00;
-// string const INITIAL_Q_FILENAME = "initial_along_estuary_water_flow.csv";
-// float const QCI = 1.00;
-// float const ETACI =	0.02;
-// float const COURANT_NUMBER = 0.20;
+inline auto NAME = "Saint-Venant Equations Solver";
+inline auto AUTHOR =  "Manuel Cobos (GDFA, University of Granada)";
+inline auto VERSION = "v0.3.0 - 20240912";
+string const PROGRAM_NAME = "Saint Venant Equations Solver version 0.3.0 (12 Sep 2024)";
+string const PROGRAM_NAME_SHORT = "SV";
+
+
+string const NOTE = "      Note ";
+string const COPYRIGHT = "(C) 2024 Manuel Cobos";
+string const LINE = "-------------------------------------------------------------------------------";
+string const DISCLAIMER1 = "This program is distributed in the hope that it will be useful. but WITHOUT ANY";
+string const DISCLAIMER2 = "WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A";
+string const DISCLAIMER3 = "PARTICULAR PURPOSE. See the GNU General Public License for more details. You";
+string const DISCLAIMER4 = "should have received a copy of the GNU General Public License along with this";
+string const DISCLAIMER5 = "program; if not. contact the Free Software Foundation. Inc.. 675 Mass Ave.";
+string const DISCLAIMER6 = "Cambridge. MA 02139. USA.";
+
+string const START_NOTICE = "    - Started on ";
+string const INITIALIZING_NOTICE = "    - Initializing";
+string const SIMULATING = "\r  - Simulating ";
+string const RUN_END_NOTICE = "    - Run ended at ";
+
+// Not likely that user will need to change these
+static constexpr int BUF_SIZE = 2048;                                     // Max length (inc. terminating NULL) of any C-type string
+
+// clock_t is a signed long: see <time.h>
+constexpr long CLOCK_T_MIN = LONG_MIN;
+constexpr double CLOCK_T_RANGE = static_cast<double>(LONG_MAX) - static_cast<double>(CLOCK_T_MIN);
+
 inline float CDX_MURILLO = 0.6;
-string const OUTPUT_FILENAME = "test_001.nc";
-// float const SAVE_TIMESTEP = 1.00;
-// float const FINAL_TIME = 100;
-// bool const DO_DENSITY = false;
-float const SALINITY_BETA = 0.00;
-float const KH = 50.00;
-string const SALINITY_FILENAME = "initial_along_estuary_salinity.csv";
-string const SEDIMENT_FILENAME = "sediments_properties.csv";
-// bool const DO_MCCOMARCK_LIMITER_FLUX = true;
-// bool const DO_SURFACE_GRADIENT_METHOD = true;
-// bool const DO_SOURCE_TERM_BALANCE = true;
-// bool const DO_BETA = false;
-// bool const DO_DRY_BED = true;
-// bool const DO_MURILLO_CONDITION = true;
-// int const INITIAL_BOUNDARY_CONDITION = 1;
-// int const FINAL_BOUNDARY_CONDITION = 0;
-// float const FIX_Q = 0;
-// string const TIDE_FILENAME = "tides.csv";
-// float const DT_MIN = 10000000000.0;
-int const FORMULA_LIMITER_FLUX = 4;
-int const PSI_FORMULA = 2.00;
-float const DELTA_VALUE = 0.20;
-
 
 #endif // MAIN_H

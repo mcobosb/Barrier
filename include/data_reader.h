@@ -2,7 +2,7 @@
 *
  * \class CDataReader
  * \brief
- * \details TODO 001 This is a more detailed description of the CDataReader class
+ * \details Description of CDataReader class which contains the methods for reading input files.
  * \author Manuel Cobos Budia
 
  * \date 2024
@@ -20,15 +20,11 @@
 using std::string;
 
 class CSimulation;
-// class CEstuary;
 
 class CDataReader {
 
     //! The CSimulation class is a friend of the CDataReader class
     friend class CSimulation;
-
-    // //! The CEstuary class is a friend of the CDataReader class
-    // friend class CEstuary;
 
 private:
 
@@ -90,37 +86,33 @@ private:
     //! The duration units for this simulation
     string m_strDurationUnits;
 
-    //! The level of detail in the log file output. Can be LOG_FILE_LOW_DETAIL, LOG_FILE_MIDDLE_DETAIL, or LOG_FILE_HIGH_DETAIL
-    int m_nLogFileDetail;
-
     //! The number of the current iteration (time step)
     unsigned long m_ulIter;
 
+    //! Trailing whitespace
     static string strTrim(string const*);
     static string strTrimLeft(string const*);
     static string strTrimRight(string const*);
+
+    //! Formatting Date and Time
     static bool bParseDate(string const*, int&, int&, int&);
     static bool bParseTime(string const*, int&, int&, int&);
+
+    //! Constants to determine simulation time-steps
     int nSimulationTimeMultiplier(string const*);
-    double dGetTimeMultiplier(string const*);
-    int nDoTimeUnits(string const*);
+    static double dGetTimeMultiplier(string const*);
+    static int nDoTimeUnits(string const*);
 
-    // A pointer to the CSimulation object
-    // CSimulation* m_pSimulation;
-
-    // A pointer to the CEstuary object
-    // CEstuary* m_pEstuary;
 
 public:
 
      CDataReader();
     ~CDataReader();
 
-    // CSimulation* pGetSimulation();
-
     // Log file detail level
     static constexpr int NO_LOG_FILE = 0;
-    static constexpr int LOG_FILE_HIGH_DETAIL = 1;
+    static constexpr int LOG_FILE_LOW_DETAIL = 1;
+    static constexpr int LOG_FILE_HIGH_DETAIL = 2;
 
 
     string const SV_INI = "configuration.ini";
@@ -128,13 +120,24 @@ public:
     string const OUT_EXT = ".nc";
     string const LOG_EXT = ".log";
 
+    //! Read configuration file with global data
     bool bReadConfigurationFile(CSimulation* m_pSimulation);
-    bool bReadAlongChannelDataFile(CSimulation* m_pSimulation);
-    bool bReadCrossSectionGeometryFile(CSimulation* m_pSimulation);
+
+    //! Read along channel data and the initial estuarine condition
+    bool bReadAlongChannelDataFile(CSimulation* m_pSimulation) const;
+
+    //! Read every cross-section geometry
+    bool bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const;
+
+    //! Read time-series with upward and downward boundary conditions
     static bool bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation);
     static bool bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation);
-    bool bReadHydrographsFile(CSimulation* m_pSimulation);
-    bool bOpenLogFile(CSimulation* m_pSimulation);
+
+    //! Read input hydrographs
+    bool bReadHydrographsFile(CSimulation* m_pSimulation) const;
+
+    //! Open log file for writing
+    static bool bOpenLogFile(CSimulation* m_pSimulation);
 
 };
 #endif // DATA_READER_H

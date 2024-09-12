@@ -128,3 +128,4 @@ double dMaxVectorValue(const vector<double>& vec) {
 
     return maxValue;
 }
+
