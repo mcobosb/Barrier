@@ -452,8 +452,12 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		// Get the hydro file name
 					if (strRH.empty())
                			strErr = "line " + to_string(nLine) + ": hydro file name";
-					else
+					else if (strRH == "-") {
+						m_pSimulation->m_bHydroFile = false;
+					}
+            		else
             		{
+            			m_pSimulation->m_bHydroFile = true;
                			m_strHydroFilename = strRH;
 						m_strHydroFilename.append(".csv");
 					}
@@ -806,7 +810,6 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 	// size_t nPos;
 	string strRec, strErr;
 	int nCrossSectionNumber = 0;
-	// CEstuary* CEstuary;
 
 	while (getline(InStream, strRec)) {
 		// Trim off leading and trailing whitespace
@@ -1022,95 +1025,98 @@ bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 //! Read Hydro input file
 //======================================================================================================================
 bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
-	// Create an object
-	ifstream InStream;
+	if (m_pSimulation->m_bHydroFile) {
+		// Create an object
+		ifstream InStream;
 
-	// Try to open run details file for input
-	InStream.open(m_strHydroFilename.c_str(), ios::in);
+		// Try to open run details file for input
+		InStream.open(m_strHydroFilename.c_str(), ios::in);
 
-	// Did it open OK?
-	if (!InStream.is_open())
-	{
-		// Error: cannot open run details file for input
-		cerr << ERR << "cannot open " << m_strHydroFilename << " for input" << endl;
-		return true;
-	}
-
-	int nLine = 0;
-	int i = 0;
-	string strRec, strErr;
-
-	int nHydrographNo = -1;
-	bool bReadHydrographsNo = false;
-	bool bHydrographLocation = true;
-
-	while (getline(InStream, strRec)) {
-		nLine++;
-
-		// Trim off leading and trailing whitespace
-		strRec = strTrim(&strRec);
-
-		// If it is a blank line or a comment then ignore it
-		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
-
-			if (!bReadHydrographsNo) {
-				int nValue = strtol(strRec.c_str(), nullptr, 10);
-				m_pSimulation->nSetHydrographsNumber(nValue);
-
-				for (int ii = 0; ii < nValue; ii++) {
-					// Create a new hydrograph object
-					m_pSimulation->AddHydrograph();
-				}
-
-				bReadHydrographsNo = true;
-				continue;
-			}
-
-			stringstream string_line(strRec);
-
-			string token;
-			int j = 0;
-
-			// Using get line for splitting the string line by commas
-			while (getline(string_line, token, ',')) {
-				double dValue = strtod(token.c_str(), nullptr);
-				if (bHydrographLocation) {
-					if (j == 0) {
-						m_pSimulation->hydrographs[nHydrographNo].dSetHydrographXLocation(dValue);
-					}
-
-					if (j == 1) {
-						m_pSimulation->hydrographs[nHydrographNo].dSetHydrographYLocation(dValue);
-						bHydrographLocation = false;
-					}
-				}
-				else {
-					if (j == 0) {
-						string strItem = "time";
-						m_pSimulation->hydrographs[nHydrographNo].dAppend2Vector(strItem, dValue);
-					}
-
-					if (j == 1) {
-						string strItem = "water flow";
-						m_pSimulation->hydrographs[nHydrographNo].dAppend2Vector(strItem, dValue);
-					}
-				}
-
-				// Increment counter
-				j++;
-
-			}
-		}
-		else {
-			if (bReadHydrographsNo) {
-				bHydrographLocation = true;
-				nHydrographNo++;
-			}
+		// Did it open OK?
+		if (!InStream.is_open())
+		{
+			// Error: cannot open run details file for input
+			cerr << ERR << "cannot open " << m_strHydroFilename << " for input" << endl;
+			return true;
 		}
 
-		// Increment counter
-		i++;
+		int nLine = 0;
+		int i = 0;
+		string strRec, strErr;
+
+		int nHydrographNo = -1;
+		bool bReadHydrographsNo = false;
+		bool bHydrographLocation = true;
+
+		while (getline(InStream, strRec)) {
+			nLine++;
+
+			// Trim off leading and trailing whitespace
+			strRec = strTrim(&strRec);
+
+			// If it is a blank line or a comment then ignore it
+			if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+
+				if (!bReadHydrographsNo) {
+					int nValue = strtol(strRec.c_str(), nullptr, 10);
+					m_pSimulation->nSetHydrographsNumber(nValue);
+
+					for (int ii = 0; ii < nValue; ii++) {
+						// Create a new hydrograph object
+						m_pSimulation->AddHydrograph();
+					}
+
+					bReadHydrographsNo = true;
+					continue;
+				}
+
+				stringstream string_line(strRec);
+
+				string token;
+				int j = 0;
+
+				// Using get line for splitting the string line by commas
+				while (getline(string_line, token, ',')) {
+					double dValue = strtod(token.c_str(), nullptr);
+					if (bHydrographLocation) {
+						if (j == 0) {
+							m_pSimulation->hydrographs[nHydrographNo].dSetHydrographXLocation(dValue);
+						}
+
+						if (j == 1) {
+							m_pSimulation->hydrographs[nHydrographNo].dSetHydrographYLocation(dValue);
+							bHydrographLocation = false;
+						}
+					}
+					else {
+						if (j == 0) {
+							string strItem = "time";
+							m_pSimulation->hydrographs[nHydrographNo].dAppend2Vector(strItem, dValue);
+						}
+
+						if (j == 1) {
+							string strItem = "water flow";
+							m_pSimulation->hydrographs[nHydrographNo].dAppend2Vector(strItem, dValue);
+						}
+					}
+
+					// Increment counter
+					j++;
+
+				}
+			}
+			else {
+				if (bReadHydrographsNo) {
+					bHydrographLocation = true;
+					nHydrographNo++;
+				}
+			}
+
+			// Increment counter
+			i++;
+		}
 	}
+
 	return false;
 }
 

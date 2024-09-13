@@ -397,6 +397,9 @@ class CSimulation
     //! Add output variable
     void strAddOutputVariable(const string& strItem);
 
+    //! Read hydrograph input?
+    bool m_bHydroFile;
+
     //! A vector with hydrograph objects
     vector<CHydrograph> hydrographs;
 
