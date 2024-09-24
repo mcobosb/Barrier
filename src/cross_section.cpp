@@ -118,6 +118,7 @@ void CCrossSection::dSetElevation(double dValue) {
 void CCrossSection::dSetWaterFlow(double dValue) {
     m_dWaterFlow = dValue;
 }
+
 void CCrossSection::nSetElevationSectionsNumber(int nValue) {
     m_nElevationSectionNumber = nValue;
 }
@@ -149,6 +150,7 @@ double CCrossSection::dGetRightRBAngle() const{
 double CCrossSection::dGetLeftRBAngle() const{
   return m_dLeftRBAngle;
 }
+
 int CCrossSection::nGetElevationSectionsNumber() const{
     return m_nElevationSectionNumber;
 }

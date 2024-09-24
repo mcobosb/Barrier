@@ -44,6 +44,12 @@ inline double G = 9.81;
 inline double DRY_AREA = 1;
 //! minimum cross-section water flow (to ensure that U = Q/A ~ 0)
 inline double DRY_Q = 1e-2;
+//! Fresh-water density 1000 kg/m3
+inline double FRESH_WATER_DENSITY = 1e3;
+//! Kinematic viscosity
+inline double NU = 1e-6;
+//! Friction factor TODO: Check this definition
+inline double KAPPA = 0.4;
 
 // Intel x86, byte order is little-endian, 32-bit
 string const PLATFORM = "Intel x86/GNU C++";

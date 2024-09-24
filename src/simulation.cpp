@@ -83,36 +83,6 @@ void CSimulation::nSetInitialEstuarineCondition(int initialCondition) {
     m_nInitialEstuarineCondition = initialCondition;
 };
 
-//! Method for getting the computation of water density
-bool CSimulation::bGetDoWaterDensity() const {
-    return m_bDoWaterDensity;
-}
-
-//! Method for setting the computation of water density
-void CSimulation::bSetDoWaterDensity(bool computeWaterDensity) {
-    m_bDoWaterDensity = computeWaterDensity;
-};
-
-//! Method for getting the along channel constant elevation
-double CSimulation::dGetBetaSalinityConstant() const {
-    return m_dBetaSalinityConstant;
-}
-
-//! Method for setting the along channel constant elevation
-void CSimulation::dSetBetaSalinityConstant(double betaSalinity) {
-    m_dBetaSalinityConstant = betaSalinity;
-};
-
-//! Method for getting the along channel constant elevation
-double CSimulation::dGetLongitudinalDispersionConstant() const {
-    return m_dLongitudinalDispersion;
-}
-
-//! Method for setting the along channel constant elevation
-void CSimulation::dSetLongitudinalDispersionConstant(double longitudinalDispersion) {
-    m_dLongitudinalDispersion = longitudinalDispersion;
-};
-
 //! Method for getting the upward estuarine condition
 int CSimulation::nGetUpwardEstuarineCondition() const {
     return m_nUpwardEstuarineCondition;
@@ -219,9 +189,91 @@ void CSimulation::bSetDoDryBed(bool doDryBed) {
 bool CSimulation::bGetDoMurilloCondition() const {
     return m_bDoMurilloCondition;
 }
+
 //! Method for setting if Murillo condition is applied
 void CSimulation::bSetDoMurilloCondition(bool doMurilloCondition) {
     m_bDoMurilloCondition = doMurilloCondition;
+}
+
+//! Method for getting the computation of water density
+bool CSimulation::bGetDoWaterSalinity() const {
+    return m_bDoWaterSalinity;
+}
+
+//! Method for setting the computation of water density
+void CSimulation::bSetDoWaterSalinity(bool computeWaterSalinity) {
+    m_bDoWaterSalinity = computeWaterSalinity;
+}
+
+//! Method for getting the upward salinity condition
+double CSimulation::dGetUpwardSalinityCondition() const {
+    return m_dUpwardSalinityCondition;
+}
+
+//! Method for setting the upward salinity condition
+void CSimulation::dSetUpwardSalinityCondition(const double dUpwardCondition) {
+    m_dUpwardSalinityCondition = dUpwardCondition;
+}
+
+//! Method for getting the downward salinity condition
+double CSimulation::dGetDownwardSalinityCondition() const {
+    return m_dDownwardSalinityCondition;
+}
+
+//! Method for setting the downward salinity condition
+void CSimulation::dSetDownwardSalinityCondition(const double dDownwardCondition) {
+    m_dDownwardSalinityCondition = dDownwardCondition;
+}
+
+//! Method for getting the along channel constant elevation
+double CSimulation::dGetBetaSalinityConstant() const {
+    return m_dBetaSalinityConstant;
+}
+
+//! Method for setting the along channel constant elevation
+void CSimulation::dSetBetaSalinityConstant(double betaSalinity) {
+    m_dBetaSalinityConstant = betaSalinity;
+}
+
+//! Method for getting the along channel constant elevation
+double CSimulation::dGetLongitudinalDispersionConstant() const {
+    return m_dLongitudinalDispersion;
+}
+
+//! Method for setting the along channel constant elevation
+void CSimulation::dSetLongitudinalDispersionConstant(double longitudinalDispersion) {
+    m_dLongitudinalDispersion = longitudinalDispersion;
+};
+
+
+//! Method for getting the computation of sediment transport
+bool CSimulation::bGetDoSedimentTransport() const {
+    return m_bDoSedimentTransport;
+}
+
+//! Method for setting the computation of sediment transport
+void CSimulation::bSetDoSedimentTransport(bool computeSedimentTransport) {
+    m_bDoSedimentTransport = computeSedimentTransport;
+}
+
+//! Method for getting equation for sediment transport
+int CSimulation::nGetEquationSedimentTransport() const {
+    return m_nEquationSedimentTransport;
+}
+
+//! Method for setting equation limiter flux
+void CSimulation::nSetEquationSedimentTransport(int equationSedimentTransport) {
+    m_nEquationSedimentTransport = equationSedimentTransport;
+}
+
+//! Method for getting the computation of water density
+bool CSimulation::bGetDoWaterDensity() const {
+    return m_bDoWaterDensity;
+}
+
+//! Method for setting the computation of water density
+void CSimulation::bSetDoWaterDensity(const bool doWaterDensity) {
+    m_bDoWaterDensity = doWaterDensity;
 }
 
 //===============================================================================================================================
@@ -309,6 +361,18 @@ bool CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         //==============================================================================================================
         m_nPredictor = 1;
 
+        if (bGetDoSedimentTransport())
+        {
+            // Compute the sediment transport
+            calculate_sediment_transport();
+        }
+
+        if (bGetDoWaterSalinity())
+        {
+            // Calculate density due to salinity and sediment concentration
+            calculate_density();
+        }
+
         //! Compute source and sink terms
         calculate_GS_A_terms();
         calculateFlowTerms();
@@ -364,14 +428,22 @@ bool CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         smoothSolution();
 
+        // If compute water density?
+        if (bGetDoWaterSalinity())
+        {
+            calculate_salinity_gradient();
+        }
+
         m_nPredictor = 0;
         //! Check if any part of the estuary is dry (corrector)
         if (bGetDoDryBed())
             dryArea();
 
-        //! Compute the salinity gradient
-        // if (bGetDoWaterDensity())
-        // }
+        //! Compute the salinity
+        if (bGetDoWaterSalinity())
+        {
+            calculate_salinity();
+        }
 
         if (m_bSaveTime || (m_nLogFileDetail == 2)) {
             writer.nSetOutputData(this);
@@ -1396,6 +1468,194 @@ void CSimulation::AnnounceProgress() const {
         if (m_bSaveTime) {
             cout << "\r    - Progress: " << std::fixed << setprecision(3) << setw(6) << 100 * m_dCurrentTime / m_dSimDuration  << '%' << std::flush;
         }
+    }
+}
+
+//===============================================================================================================================
+//! Compute the salinity TODO.
+//===============================================================================================================================
+void CSimulation::calculate_salinity()
+{
+    // TODO: add salinity variable to dry bed function
+    m_vCrossSectionSalinityASt[0] = dGetUpwardSalinityCondition();
+    m_vCrossSectionSalinityASt[m_nCrossSectionsNumber] = dGetDownwardSalinityCondition();
+
+    for (int i = 0; i < m_nCrossSectionsNumber; i++)
+    {
+        m_vCrossSectionSalinity[i] = m_vCrossSectionSalinityASt[i]/m_vCrossSectionArea[i] + m_vCrossSectionSalinity[i];
+        // Bound the minimum and maximum values of salinity to 0 a 35 psu
+        if (m_vCrossSectionSalinity[i] < 0) m_vCrossSectionSalinity[i] = 0;
+        if (m_vCrossSectionSalinity[i] > 35) m_vCrossSectionSalinity[i] = 35;
+    }
+}
+
+
+//===============================================================================================================================
+//! Compute the salinity gradient using the backward, centered and upward finite differences
+//! Diez-Minguito et al (2013).
+//===============================================================================================================================
+void CSimulation::calculate_salinity_gradient()
+{
+    vector<double> vKAS_dif_forward(m_nCrossSectionsNumber);
+    vector<double> vKAS_dif_backward(m_nCrossSectionsNumber);
+    vector<double> vAUS_dif(m_nCrossSectionsNumber);
+
+    for (int i = 1; i < m_nCrossSectionsNumber-1; i++)
+    {
+        vKAS_dif_forward[i] = m_vCrossSectionArea[i+1]*(m_vCrossSectionSalinity[i+1]-m_vCrossSectionSalinity[i]);
+        vKAS_dif_backward[i+1] = m_vCrossSectionArea[i]*(m_vCrossSectionSalinity[i+1]-m_vCrossSectionSalinity[i]);
+        vAUS_dif[i] = (m_vCrossSectionQ[i+1]*m_vCrossSectionSalinity[i+1] - m_vCrossSectionQ[i-1]*m_vCrossSectionSalinity[i-1])*m_dLambda*0.5;
+    }
+
+    // Add the end and initial values
+    vKAS_dif_forward[0] = m_vCrossSectionArea[1]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
+    vKAS_dif_forward[m_nCrossSectionsNumber] = vKAS_dif_forward[m_nCrossSectionsNumber-1];
+
+    vKAS_dif_backward[1] = m_vCrossSectionArea[0]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
+    vKAS_dif_backward[0] = vKAS_dif_backward[1];
+
+    vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*m_vCrossSectionSalinity[0])*m_dLambda;
+    vAUS_dif[m_nCrossSectionsNumber] = (m_vCrossSectionQ[m_nCrossSectionsNumber]*m_vCrossSectionSalinity[m_nCrossSectionsNumber] - m_vCrossSectionQ[m_nCrossSectionsNumber-1]*m_vCrossSectionSalinity[m_nCrossSectionsNumber-1])*m_dLambda;
+
+    //! Calculate de ASt term (temporal gradient)
+    for (int i=0; i<m_nCrossSectionsNumber; i++)
+    {
+        m_vCrossSectionSalinityASt[i] = m_dLongitudinalDispersion*m_dLambda*m_dLambda/m_dTimestep*(vKAS_dif_forward[i] - vKAS_dif_backward[i]) - vAUS_dif[i];
+    }
+}
+
+
+//===============================================================================================================================
+//! Compute the bedload and suspended sediment transport using the van Rijn equation(van Rijn, 1992)
+//===============================================================================================================================
+void CSimulation::calculate_sediment_transport()
+{
+    for (int i=0; i< m_nCrossSectionsNumber; i++)
+    {
+        // The sign should be included at the end of the calculation
+        double vel_abs = abs(m_vCrossSectionU[i]);
+
+        // Sediment transport direction (+ve upward, -ne downward)
+        double dSedimentDirection = 0.0;
+        if (m_vCrossSectionU[i] > 0) dSedimentDirection = 1;
+        else if (m_vCrossSectionU[i] < 0) dSedimentDirection = -1;
+        else dSedimentDirection = 0;
+
+
+        //====================================================================================================
+        //! Bed load sediment transport
+        //====================================================================================================
+        double c_1 = 18*log(12*m_vCrossSectionHydraulicRadius[i]/(3*m_vCrossSectionD90[i]));
+        if (c_1 < 1e-3) c_1 = 1e-3;
+
+        double u_star = pow(G, 0.5)/c_1*vel_abs;
+        double shields_crit = 0.0013*pow(m_vCrossSectionDiamX[i], 0.29);
+        if (m_vCrossSectionDiamX[i] < 150) shields_crit = 0.055;
+
+        double u_star_crit = sqrt(shields_crit*(dGetSedimentDensity()/m_vCrossSectionRho[i] - 1)*G*m_vCrossSectionD50[i]);
+        //! Sediment transport
+        double transport = (u_star*u_star - u_star_crit*u_star_crit)/(u_star_crit*u_star_crit);
+
+        // If sediment transport is negative means no sediment transport
+        if (transport < 0) transport = 0;
+
+        // Mass sediment transport
+        double gb = 0.0;
+        if (transport >= 3)
+        {
+            gb = 0.1*sqrt((dGetSedimentDensity()/m_vCrossSectionRho[i]-1)*G*pow(m_vCrossSectionD50[i], 3.0))*pow(transport, 1.5)*pow(m_vCrossSectionDiamX[i], -0.3);
+        }
+        else
+        {
+            gb = 0.053*sqrt((dGetSedimentDensity()/m_vCrossSectionRho[i]-1)*G*pow(m_vCrossSectionD50[i], 3.0))*pow(transport, 2.1)*pow(m_vCrossSectionDiamX[i], -0.3);
+        }
+        //! Volumetric sediment transport
+        m_vCrossSectionQb[i] = dSedimentDirection*gb*m_vCrossSectionWidth[i]*FRESH_WATER_DENSITY*dGetSedimentDensity()/m_vCrossSectionRho[i]*dSedimentDirection;
+
+        //====================================================================================================
+        //! Suspended sediment transport
+        //====================================================================================================
+        //! Jump height
+        double dDeltaB = m_vCrossSectionD50[i]*0.3*pow(m_vCrossSectionDiamX[i], 0.7)*sqrt(transport);
+        // Correction of delta_b
+        if (dDeltaB < 0.01*m_vCrossSectionElevation[i]) dDeltaB = 0.01*m_vCrossSectionElevation[i];
+        if (dDeltaB > 0.5*m_vCrossSectionElevation[i]) dDeltaB = 0.5*m_vCrossSectionElevation[i];
+
+        //! Shear velocity
+        double dUx = sqrt(G*m_vCrossSectionHydraulicRadius[i]*abs(m_vCrossSectionFrictionSlope[i]));
+
+        //! Reference concentration at z=delta_b with plane bottom
+        double c_a = 0.117*FRESH_WATER_DENSITY*dGetSedimentDensity()/m_vCrossSectionRho[i]*transport/m_vCrossSectionDiamX[i];
+
+        //! Representative diameter of suspended particle
+        double dRepresentativeDiameter = m_vCrossSectionD50[i]*(1.0+0.11*(m_vCrossSectionSedimentSigma[i]-1.0));
+
+        if (transport >= 25) dRepresentativeDiameter = m_vCrossSectionD50[i];
+
+        double dSettlingVelocity = 0.0;
+        //! Settling velocity of representative diameters
+        if (dRepresentativeDiameter < 0.0001)
+        {
+            dSettlingVelocity = (dGetSedimentDensity()/m_vCrossSectionRho[i] - 1.0)*G*pow(dRepresentativeDiameter, 2.0)/(18.0*NU);
+        }
+        else if ((dRepresentativeDiameter >= 0.0001) & (dRepresentativeDiameter < 0.001))
+        {
+            dSettlingVelocity = 10.0*NU*sqrt((1.0 + 0.01*G*(dGetSedimentDensity()/m_vCrossSectionRho[i] - 1.00)*pow(dRepresentativeDiameter, 3.0)/(NU*NU)) - 1.0)/dRepresentativeDiameter;
+        }
+        else
+        {
+            dSettlingVelocity = 1.1*sqrt((dGetSedimentDensity()/m_vCrossSectionRho[i] - 1.0)*G*dRepresentativeDiameter);
+        }
+
+        //! Factor that considers the different diffusion between fluid and sediment particles
+        double dBeta = 2.0;
+
+        if (dUx != 0.0) dBeta = 1.0 + 2.0*pow(dSettlingVelocity/dUx, 2.0);
+        if (dBeta > 2.0) dBeta = 2.0;
+
+        //! Rouse suspension parameter
+        double dRouse = dSettlingVelocity/(dBeta*KAPPA*dUx);
+
+        //! Maximum concentration of sediments at the reference level
+        double C0 = 0.65*FRESH_WATER_DENSITY*dGetSedimentDensity()/m_vCrossSectionRho[i];
+
+        //! Global correction factor
+        double dPsi = 2.5*pow(dSettlingVelocity/dUx, 0.8)*pow(c_a/C0, 0.4);
+
+        //! Update Rouse number
+        dRouse = dRouse + dPsi;
+
+        //! Adimensional factor A and F
+        double dA_Factor = dDeltaB/m_vCrossSectionElevation[i];
+        double dF_Factor = 0.0;
+        if (abs(pow(1.0 - dA_Factor, dRouse)*(1.2 + dRouse)) >= 1e-4)
+        {
+            dF_Factor = (pow(dA_Factor, dRouse) - pow(dA_Factor, 1.2))/(pow(1.0-dA_Factor, dRouse)*(1.2 - dRouse));
+        }
+
+        double gbs1 = c_a*m_vCrossSectionElevation[i]*vel_abs*dF_Factor;
+        //! Suspended sediment transport
+        m_vCrossSectionQs[i] = gbs1/(dGetSedimentDensity()/m_vCrossSectionRho[i]*FRESH_WATER_DENSITY)*m_vCrossSectionWidth[i]*dSedimentDirection;
+
+        //! Total sediment transport
+        m_vCrossSectionQt[i] = m_vCrossSectionQb[i] + m_vCrossSectionQs[i];
+        if (m_vCrossSectionQt[i] < 1e-6) m_vCrossSectionQt[i] = 0.0;
+
+        return;
+    }
+
+};
+
+
+//===============================================================================================================================
+//! Compute the density given the salinity and sediment concentration
+//===============================================================================================================================
+void CSimulation::calculate_density()
+{
+    for (int i = 0; i < m_nCrossSectionsNumber; i++)
+    {
+        double rhow = 1000 * (1 + dGetBetaSalinityConstant() * m_vCrossSectionSalinity[i];
+        m_vCrossSectionRho[i] = rhow + (1 - rhow/1000/m_vCrossSectionRhos[i])*m_vCrossSectionQt[i]/(m_vCrossSectionArea[i]*m_vCrossSectionDX[i])*m_dTimestep;
     }
 }
 

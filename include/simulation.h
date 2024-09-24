@@ -74,7 +74,7 @@ class CSimulation
     double m_dCurrentTime{};
 
     //! Factor for updating the time
-    double m_dTimeFactor{};
+    double m_dTimeFactor;
 
     //! Vector of output times
     vector<double> m_vOutputTimes;
@@ -83,7 +83,7 @@ class CSimulation
     vector<int> m_vOutputTimesIds;
 
     //! Output timestep id
-    int m_nTimeId{};
+    int m_nTimeId;
 
     //! Name of main output file
     string m_strOutFile;
@@ -92,24 +92,39 @@ class CSimulation
     string m_strLogFile;
 
     //! Is this timestep saved?
-    bool m_bSaveTime{};
+    bool m_bSaveTime;
 
     //! Computational timestep obtained from Courant number
-    double m_dTimestep{};
+    double m_dTimestep;
 
     //! Lambda Value
-    double m_dLambda{};
+    double m_dLambda;
 
     //! The initial estuarine condition, IEC [0 = in calm, 1 = water flow or 2 = elevation]
     int m_nInitialEstuarineCondition;
 
-    //! Compute water density?
-    bool m_bDoWaterDensity{};
+    //! Compute sediment transport?
+    bool m_bDoSedimentTransport;
 
-    //! The beta salinity constant [if compute water density]
+    //! The equation for Sediment Transport
+    int m_nEquationSedimentTransport;
+
+    //! Compute water salinity?
+    bool m_bDoWaterSalinity{};
+
+    //! Name of the initial salinity condition file [if compute water salinity]
+    string m_strInitialSalinityConditionFilename;
+
+    //! Upward salinity condition
+    double m_dUpwardSalinityCondition;
+
+    //! Downward salinity condition
+    double m_dDownwardSalinityCondition;
+
+    //! The beta salinity constant [if compute water salinity]
     double m_dBetaSalinityConstant{};
 
-    //! The longitudinal dispersion, kh [if compute water density]
+    //! The longitudinal dispersion, kh [if compute water salinity]
     double m_dLongitudinalDispersion{};
 
     //! The upward estuarine condition
@@ -177,6 +192,9 @@ class CSimulation
 
     //! Do Murillo condition?
     bool m_bDoMurilloCondition{};
+
+    //! Compute water density?
+    bool m_bDoWaterDensity{};
 
     //! Number of cross-sections
     int m_nCrossSectionsNumber{};
@@ -255,6 +273,9 @@ class CSimulation
     //! Cross-section salinity
     vector<double> m_vCrossSectionSalinity;
 
+    //! Cross-section salinity temporal gradient (ASt term)
+    vector<double> m_vCrossSectionSalinityASt;
+
     //! Cross-section bottom sediment transport
     vector<double> m_vCrossSectionQb;
 
@@ -291,6 +312,18 @@ class CSimulation
     //! Murillo Factor vector
     vector<double> m_vCrossSectionMurilloFactor;
 
+    //! D50
+    vector<double> m_vCrossSectionD50;
+
+    //! D90
+    vector<double> m_vCrossSectionD90;
+
+    //! DiamX
+    vector<double> m_vCrossSectionDiamX;
+
+    //! DiamX
+    vector<double> m_vCrossSectionSedimentSigma;
+
     //! A vector with cross-sections objects along the estuary
     vector<CCrossSection> estuary;
 
@@ -319,10 +352,35 @@ class CSimulation
     //! Method for setting the initial estuarine condition
     void nSetInitialEstuarineCondition(int initialCondition);
 
-    //! Method for getting the compute water density
-    [[nodiscard]] bool bGetDoWaterDensity() const;
-    //! Method for setting the compute water density
-    void bSetDoWaterDensity(bool doWaterDensity);
+    //! Method for getting the compute sediment transport
+    [[nodiscard]] bool bGetDoSedimentTransport() const;
+    //! Method for setting the compute sediment transport
+    void bSetDoSedimentTransport(bool doSedimentTransport);
+
+    //! Method for getting equation of sediment transport
+    [[nodiscard]] int nGetEquationSedimentTransport() const;
+    //! Method for setting equation of sediment transport
+    void nSetEquationSedimentTransport(int equationSedimentTransport);
+
+    //! Method for getting equation of sediment transport
+    [[nodiscard]] double dGetSedimentDensity() const;
+    //! Method for setting equation of sediment transport
+    void dSetSedimentDensity(double sedimentDensity);
+
+    //! Method for getting the compute water  salinity
+    [[nodiscard]] bool bGetDoWaterSalinity() const;
+    //! Method for setting the compute water salinity
+    void bSetDoWaterSalinity(bool doWaterSalinity);
+
+    //! Method for getting the compute water salinity
+    [[nodiscard]] double dGetUpwardSalinityCondition() const;
+    //! Method for setting the compute water salinity
+    void dSetUpwardSalinityCondition(double dUpwardCondition);
+
+    //! Method for getting the compute water salinity
+    [[nodiscard]] double dGetDownwardSalinityCondition() const;
+    //! Method for setting the compute water salinity
+    void dSetDownwardSalinityCondition(double dDownwardCondition);
 
     //! Method for getting the beta salinity constant
     [[nodiscard]] double dGetBetaSalinityConstant() const;
@@ -394,6 +452,11 @@ class CSimulation
     //! Method for setting if Murillo condition is applied
     void bSetDoMurilloCondition(bool doMurilloCondition);
 
+    //! Method for getting the compute water density
+    [[nodiscard]] bool bGetDoWaterDensity() const;
+    //! Method for setting the compute water density
+    void bSetDoWaterDensity(bool doWaterDensity);
+
     //! Add output variable
     void strAddOutputVariable(const string& strItem);
 
@@ -431,6 +494,8 @@ class CSimulation
     void dryArea();
     void dryTerms();
     void doMurilloCondition();
+    void calculate_sediment_transport();
+    void calculate_density();
     void calculate_GS_A_terms();
     void calculateFlowTerms();
     void calculateSourceTerms();
@@ -440,6 +505,8 @@ class CSimulation
     void updateCorrectorBoundaries();
     void mergePredictorCorrector();
     void smoothSolution();
+    void calculate_salinity_gradient();
+    void calculate_salinity();
 
     void AnnounceProgress() const;
 

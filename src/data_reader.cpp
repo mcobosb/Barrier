@@ -452,10 +452,11 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		// Get the hydro file name
 					if (strRH.empty())
                			strErr = "line " + to_string(nLine) + ": hydro file name";
-					else if (strRH == "-") {
+					else if (strRH == "-")
+					{
 						m_pSimulation->m_bHydroFile = false;
 					}
-            		else
+					else
             		{
             			m_pSimulation->m_bHydroFile = true;
                			m_strHydroFilename = strRH;
@@ -476,7 +477,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					strRH = strToLower(&strRH);
 
 					if (strRH.empty())
-						strErr = "line " + to_string(nLine) + ": Compute water density?";
+						strErr = "line " + to_string(nLine) + ": McComarck Limiter Flux";
 
 					if  (strRH.find('y') != string::npos)
 						m_pSimulation->bSetDoMcComarckLimiterFlux(true);
@@ -592,6 +593,126 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             	}
 
             	case 25: {
+						// Compute water salinity?
+						strRH = strToLower(&strRH);
+
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": Compute water salinity?";
+
+						if  (strRH.find('y') != string::npos)
+							m_pSimulation->bSetDoWaterSalinity(true);
+						else
+							m_pSimulation->bSetDoWaterSalinity(false);
+						break;
+            	}
+
+				case 26: {
+						// Get the salinity filename [if it is computed the salinity]
+						if (m_pSimulation->bGetDoWaterSalinity()) {
+							m_pSimulation->m_strInitialSalinityConditionFilename = strRH;
+							m_pSimulation->m_strInitialSalinityConditionFilename.append(".csv");
+						}
+						else {
+							m_pSimulation->m_strInitialSalinityConditionFilename = "";
+						}
+
+						break;
+				}
+
+				case 27: {
+						// Get the Upward salinity condition
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": - Upward salinity condition";
+						else
+							m_pSimulation->dSetUpwardSalinityCondition(strtod(strRH.c_str(), nullptr));
+						break;
+				}
+
+				case 28: {
+						// Get the Downward salinity condition
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": - Downward salinity condition";
+						else
+							m_pSimulation->dSetDownwardSalinityCondition(strtod(strRH.c_str(), nullptr));
+						break;
+				}
+
+            	case 29: {
+						// Get the beta constant for salinity if compute water density
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": beta constant for salinity";
+
+						if (m_pSimulation->bGetDoWaterSalinity())
+						{
+							m_pSimulation->dSetBetaSalinityConstant(strtod(strRH.c_str(), nullptr));
+						}
+						break;
+            	}
+
+            	case 30: {
+						// Get the longitudinal dispersion constant, KH if compute water density
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": longitudinal dispersion constant, KH";
+
+						if (m_pSimulation->bGetDoWaterSalinity())
+						{
+							m_pSimulation->dSetLongitudinalDispersionConstant(strtod(strRH.c_str(), nullptr));
+						}
+						break;
+            	}
+
+				case 31: {
+						// Compute sediment transport?
+						strRH = strToLower(&strRH);
+
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": Compute sediment transport?";
+
+						if  (strRH.find('y') != string::npos)
+							m_pSimulation->bSetDoSedimentTransport(true);
+						else
+							m_pSimulation->bSetDoSedimentTransport(false);
+						break;
+	            }
+
+	            case 32: {
+						// Equation for the sediment transport
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": equation for the sediment transport";
+
+						if (m_pSimulation->bGetDoSedimentTransport())
+						{
+							m_pSimulation->nSetEquationSedimentTransport(strtol(strRH.c_str(), nullptr, 10));
+						}
+						break;
+				}
+
+				case 33: {
+						// Equation for the sediment transport
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": sediment density";
+
+						if (m_pSimulation->bGetDoSedimentTransport())
+						{
+							m_pSimulation->dSetSedimentDensity(strtod(strRH.c_str(), nullptr));
+						}
+						break;
+				}
+
+            	case 34: {
+						// Get the sediment properties file name
+						if (strRH.empty())
+							strErr = "line " + to_string(nLine) + ": sediment properties file name";
+
+						if (m_pSimulation->bGetDoSedimentTransport())
+						{
+							m_strSedimentPropertiesFilename = strRH;
+							m_strSedimentPropertiesFilename.append(".csv");
+						}
+						break;
+            	}
+
+				case 35: {
 						// Compute water density?
 						strRH = strToLower(&strRH);
 
@@ -603,44 +724,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						else
 							m_pSimulation->bSetDoWaterDensity(false);
 						break;
-            	}
-
-            	case 26: {
-						// Get the beta constant for salinity if compute water density
-						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": beta constant for salinity";
-
-						if (m_pSimulation->bGetDoWaterDensity())
-						{
-							m_pSimulation->dSetBetaSalinityConstant(strtod(strRH.c_str(), nullptr));
-						}
-						break;
-            	}
-
-            	case 27: {
-						// Get the longitudinal dispersion constant, KH if compute water density
-						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": longitudinal dispersion constant, KH";
-
-						if (m_pSimulation->bGetDoWaterDensity())
-						{
-							m_pSimulation->dSetLongitudinalDispersionConstant(strtod(strRH.c_str(), nullptr));
-						}
-						break;
-            	}
-
-            	case 28: {
-						// Get the sediment properties file name
-						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": sediment properties file name";
-
-						if (m_pSimulation->bGetDoWaterDensity())
-						{
-							m_strSedimentPropertiesFilename = strRH;
-							m_strSedimentPropertiesFilename.append(".csv");
-						}
-						break;
-            	}
+				}
 
             	default: {
 						// More lines in the configuration file
