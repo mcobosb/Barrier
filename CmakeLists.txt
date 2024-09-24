@@ -8,7 +8,7 @@ project(SV)
 set(CMAKE_CXX_STANDARD 17)
 
 # Establecer el modo de depuración y asegurar que no se optimiza el código en depuración
-# que no permita inspeccionar todos los métodos y variables
+# que no permita inspeccionar todos los métodos y variables (Release or Debug)
 set(CMAKE_BUILD_TYPE Debug)
 
 # Incluir el directorio de cabeceras para el proyecto.
