@@ -1,0 +1,8 @@
+Archivo con las características de los sedimentos, unidades de longitud en metros
+0.00032799899		Diámetro medio, Dmed
+0.00043999989		D90
+0.0004059913		D84
+0.000319		D50
+0.00024899864		D16
+1.6305			Desviación estándar de lamuestra, sigmag
+2.65 			Peso específico relativo, Ss

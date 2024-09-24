@@ -1,0 +1,46 @@
+******** Archivo de datos para el programa GuadalfeoV44.for (versi�n Guadalquivir) ************* 
+------------------------- Datos y entradas: ---------------------------- 
+Guadalquivir_f21_dx50_h16.txt   	 	 Geometr�a (secciones transversales y perfil longitudinal 
+hydro.csv   	 	 Hidrogramas de entrada 
+2   	 	 	 Tipo de condici�n inicial: 1=de archivo, 2=Manning, 3=Asigna eta con Q=0 
+condici�n_inicial.txt   	 	 Archivo con la condici�n inicial (A y Q), si la c.i. es 1 
+40   	 	 	 Q para calcular la condici�n inicial,     si la c.i. es 2 
+1.710000e+000   	 	 	 Eta inicial,     si la c.i. es 3 
+ptos_salidas.txt   	 	 Archivo con coordenadas X de los puntos para guardar series temporales 
+------------------------- Salidas, archivos de salida: ----------------- 
+salida_ft.txt   	 	 Archivo de salida de series temporales: f(t,x=xi) 
+3600   	 	 	 Espaciamiento aproximado de los datos de salida, en segundos 
+1 1 1 1 1 0   	 	 Variables a escribir en series temporales: Q,A,Vel,h,B,Qst: 1=s�, 0=no 
+salida_fx.txt   	 	 Archivo de salida de distribuci�n espacial de datos (f(x),Q(x),A(x) | ti) 
+50   	 	 	 Tiempos con salida de distribuciones espaciales 
+1 1 1 1 1 0   	 	 Variables a escribir en perfiles longitudinales: Q,A,Vel,h,B,Qst: 1=s�, 0=no 
+1   	 	 	 �Escribir condicion A,Q final? 1=si, 0=no 
+condici�n_final.txt   	 	 Archivo para escribir la condicion final 
+log_opciones.txt   	 	 Archivo que guarda las opciones del programa 
+0   	 	 	 Calcular transporte de sedimentos: 1=s�, 0=no 
+sedimentos.txt   	 	 Archivo con las caracter�sticas de los sedimentos 
+------------------------- Opciones del programa: ----------------------- 
+1   	 	 	 idfl, Limitador de flujo: 0=no, 1=s� 
+0   	 	 	 idsgm, Surface Gradient Method, 0=no, 1=s� 
+1   	 	 	 idbst, Balance de t�rminos fuente, 0=no, 1=s� 
+0   	 	 	 idbeta, uso de betas, 0=no, 1=s� 
+2   	 	 	 Utilizar I2: 1) de archivo, 2) calculado con dI1/dx-Adh/dx 
+0   	 	 	 iddy, Algoritmo para lecho seco: 1=s�, 0=no 
+0   	 	 	 idmr, Algoritmo condici�n dx-n Murillo: 1=s�, 0=no 
+------------------------- Opciones de frontera final: ------------------ 
+2   	 	 	 Identificador de caudal en la frontera final: 1=abierta, 2=fija, 3=marea 
+0   	 	 	 Valor de Q fijo si la opci�n anterior es 2 
+1   	 	 	 Forma de introducir la marea (idmarea): 1=senoide, 2=archivo 
+1   	 	 	 Amplitud de marea, en metros (si idmarea=1) 
+1.245000e+001   	 	 	 Per�odo de marea, en horas (si idmarea=1) 
+1.710000e+000   	 	 	 Nivel de referencia de la marea senoidal (si idmarea=1) 
+marea.txt   	 	 	 Archivo con la marea (si idmarea=2) 
+------------------------- Opciones de avisos en pantalla: -------------- 
+25   	 	 	 N�mero de avisos en pantalla 
+------------------------- Tramo a simular: ----------------------------- 
+1   	 	 	 Secci�n inicial 
+2098   	 	 	 Secci�n final 
+------------------------- Contorno aguas arriba y m�ximos-m�nimos ------ 
+1   	 	 	 idtfaa, Contorno aguas arriba: 1=reflejante (normal),  2=abierto 
+1   	 	 	 idgvam, �Guardar m�ximos y m�nimos de A,Q,eta,vel?, 1=s�, 0=no 
+archmaxsmins.txt   	 	 	 Archivo para guardar m�ximos y m�nimos 
