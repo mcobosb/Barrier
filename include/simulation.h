@@ -250,8 +250,11 @@ class CSimulation
     //! Cross-section hydraulic widths
     vector<double> m_vCrossSectionWidth;
 
-    //! Cross-section elevation
-    vector<double> m_vCrossSectionElevation;
+    //! Cross-section water depth
+    vector<double> m_vCrossSectionWaterDepth;
+
+    //! Cross-section water elevation (over the mean water level)
+    vector<double> m_vCrossSectionWaterElevation;
 
     //! Cross-section betas
     vector<double> m_vCrossSectionBeta;

@@ -57,8 +57,8 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["A"]["longname"] = "Area";
     m_mVariableDefinitions["A"]["units"] = "m2";
 
-    m_mVariableDefinitions["Q"]["description"] = "Cross-sectional averaged water discharge";
-    m_mVariableDefinitions["Q"]["longname"] = "water discharge";
+    m_mVariableDefinitions["Q"]["description"] = "Cross-sectional averaged water flux";
+    m_mVariableDefinitions["Q"]["longname"] = "water flux";
     m_mVariableDefinitions["Q"]["units"] = "m3/s";
 
     m_mVariableDefinitions["q"]["description"] = "Fluvial contributions along the estuary";
@@ -73,8 +73,12 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["I1"]["longname"] = "I1";
     m_mVariableDefinitions["I1"]["units"] = "";
 
+    m_mVariableDefinitions["level"]["description"] = "Water depth";
+    m_mVariableDefinitions["level"]["longname"] = "water depth";
+    m_mVariableDefinitions["level"]["units"] = "m";
+
     m_mVariableDefinitions["eta"]["description"] = "Free surface elevation";
-    m_mVariableDefinitions["eta"]["longname"] = "flooding water depth";
+    m_mVariableDefinitions["eta"]["longname"] = "free surface elevation";
     m_mVariableDefinitions["eta"]["units"] = "m";
 
     m_mVariableDefinitions["beta"]["description"] = "Beta coefficient";
@@ -93,8 +97,8 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["S"]["longname"] = "salinity";
     m_mVariableDefinitions["S"]["units"] = "psu";
 
-    m_mVariableDefinitions["Qb"]["description"] = "Bedload sediment transport";
-    m_mVariableDefinitions["Qb"]["longname"] = "bedload sediment transport";
+    m_mVariableDefinitions["Qb"]["description"] = "Bed-load sediment transport";
+    m_mVariableDefinitions["Qb"]["longname"] = "bed-load sediment transport";
     m_mVariableDefinitions["Qb"]["units"] = "m3/s";
 
     m_mVariableDefinitions["Qs"]["description"] = "Suspended sediment transport";
@@ -105,7 +109,7 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["Qt"]["longname"] = "total sediment transport";
     m_mVariableDefinitions["Qt"]["units"] = "m3/s";
 
-    m_mVariableDefinitions["rho"]["description"] = "Fluid density (salinity, bedload and suspended sediment)";
+    m_mVariableDefinitions["rho"]["description"] = "Fluid density (salinity, bed-load and suspended sediment)";
     m_mVariableDefinitions["rho"]["longname"] = "fluid density";
     m_mVariableDefinitions["rho"]["units"] = "kg/m3";
 

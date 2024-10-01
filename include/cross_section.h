@@ -59,8 +59,8 @@ class CCrossSection {
         //! Water density
         double m_dWaterDensity;
 
-        //! The elevation over Z
-        vector<double> m_vElevation;
+        //! The water depth
+        vector<double> m_vWaterDepth;
 
         //! The channel width at Elevation
         vector<double> m_vWidth;
@@ -107,7 +107,7 @@ class CCrossSection {
         void dSetRightRBAngle(double dValue);
         void dSetLeftRBAngle(double dValue);
         void nSetElevationSectionsNumber(int nValue);
-        void dSetElevation(double dValue);
+        void dSetWaterDepth(double dValue);
         void dSetWaterFlow(double dValue);
         void dSetWaterDensity(double dValue);
         void dAppend2Vector(const string& strItem, double dValue);
@@ -122,7 +122,7 @@ class CCrossSection {
         [[nodiscard]] double dGetRightRBAngle() const;
         [[nodiscard]] double dGetLeftRBAngle() const;
         [[nodiscard]] int nGetElevationSectionsNumber() const;
-        [[nodiscard]] double dGetElevation(int nValue) const;
+        [[nodiscard]] double dGetWaterDepth(int nValue) const;
         [[nodiscard]] double dGetWaterDensity(int nValue) const;
         [[nodiscard]] double dGetWidth(int nValue) const;
         [[nodiscard]] double dGetArea(int nValue) const;
@@ -138,6 +138,6 @@ class CCrossSection {
         //! Vector getter
         vector<double> vGetArea();
         vector<double> vGetHydraulicRadius();
-        vector<double> vGetElevation();
+        vector<double> vGetWaterDepth();
 };
 #endif

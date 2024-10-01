@@ -339,7 +339,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
 	            	else {
 	            		if (strRH == "full") {
-	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", "eta", "beta", "I1", "I2", "rho", "U", "c", "S", "Qb", "Qs", "Qt", "xl", "xr"};
+	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", "eta", "level", "beta", "I1", "I2", "rho", "U", "c", "S", "Qb", "Qs", "Qt", "xl", "xr"};
 	            		}
 	            		else {
 	            			vector<string> vOutputVariables;
@@ -837,10 +837,10 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 					{
 						dValue = dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ();
 						if (dValue <= 0) {
-							m_pSimulation->m_vCrossSectionElevation.push_back(0.0);
+							m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
 						}
 						else {
-							m_pSimulation->m_vCrossSectionElevation.push_back(dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ());
+							m_pSimulation->m_vCrossSectionWaterElevation.push_back(dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ());
 						}
 						m_pSimulation->m_vCrossSectionQ.push_back(0.0);
 						m_pSimulation->m_vCrossSectionArea.push_back(0.0);

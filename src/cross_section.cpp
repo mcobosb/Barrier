@@ -60,7 +60,7 @@ CCrossSection::~CCrossSection() = default;
 //===============================================================================================================================
 void CCrossSection::dAppend2Vector(const string& strItem, double dValue){
     if (strItem == "elevation")
-        m_vElevation.push_back(dValue);
+        m_vWaterDepth.push_back(dValue);
     else if (strItem == "width")
         m_vWidth.push_back(dValue);
     else if (strItem == "area")
@@ -112,7 +112,7 @@ void CCrossSection::dSetRightRBAngle(double dValue) {
 void CCrossSection::dSetLeftRBAngle(double dValue) {
     m_dLeftRBAngle = dValue;
 }
-void CCrossSection::dSetElevation(double dValue) {
+void CCrossSection::dSetWaterDepth(double dValue) {
     m_dElevation = dValue;
 }
 void CCrossSection::dSetWaterFlow(double dValue) {
@@ -154,8 +154,8 @@ double CCrossSection::dGetLeftRBAngle() const{
 int CCrossSection::nGetElevationSectionsNumber() const{
     return m_nElevationSectionNumber;
 }
-double CCrossSection::dGetElevation(int nZ) const {
-  return m_vElevation[nZ];
+double CCrossSection::dGetWaterDepth(int nZ) const {
+  return m_vWaterDepth[nZ];
 }
 double CCrossSection::dGetWidth(int nZ) const {
   return m_vWidth[nZ];
@@ -195,6 +195,6 @@ vector<double> CCrossSection::vGetArea() {
 vector<double> CCrossSection::vGetHydraulicRadius() {
     return m_vHydraulicRadius;
 }
-vector<double> CCrossSection::vGetElevation() {
-    return m_vElevation;
+vector<double> CCrossSection::vGetWaterDepth() {
+    return m_vWaterDepth;
 }
