@@ -15,7 +15,6 @@
 #ifndef DATA_READER_H
 #define DATA_READER_H
 
-#include <simulation.h>
 #include <string>
 using std::string;
 
@@ -132,6 +131,9 @@ public:
     //! Read time-series with upward and downward boundary conditions
     static bool bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation);
     static bool bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation);
+
+    //! Read along channel sediments file
+    bool bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) const;
 
     //! Read input hydrographs
     bool bReadHydrographsFile(CSimulation* m_pSimulation) const;

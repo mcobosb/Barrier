@@ -12,6 +12,8 @@
  * \brief Contains CScreenPresenter definitions
  *
  */
+#ifndef SCREEN_PRESENTER_H
+#define SCREEN_PRESENTER_H
 
 #include <string>
 using std::string;
@@ -26,11 +28,14 @@ using std::ostringstream;
 #include <fstream>
 using std::ofstream;
 
-#include "simulation.h"
 
+class CSimulation;
 
 class CScreenPresenter
     {
+
+    //! The CSimulation class is a friend of the CScreenPresenter class
+    friend class CSimulation;
 private:
 
     //! The SV folder
@@ -60,9 +65,6 @@ private:
     // void DoTimestepTotals(void);
     static string strGetBuild();
     static string strGetComputerName();
-
-    CSimulation *m_pSimulation;
-
 
 public:
     ofstream LogStream;
@@ -100,3 +102,4 @@ public:
     // static void AnnounceIsRunning(void);
     // static void AnnounceSimEnd(void);
 };
+#endif // SCREEN_PRESENTER_H

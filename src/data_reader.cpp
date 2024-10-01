@@ -624,7 +624,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						if (strRH.empty())
 							strErr = "line " + to_string(nLine) + ": - Upward salinity condition";
 						else
-							m_pSimulation->dSetUpwardSalinityCondition(strtod(strRH.c_str(), nullptr));
+							m_pSimulation->nSetUpwardSalinityCondition(strtol(strRH.c_str(), nullptr, 10));
 						break;
 				}
 
@@ -633,7 +633,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						if (strRH.empty())
 							strErr = "line " + to_string(nLine) + ": - Downward salinity condition";
 						else
-							m_pSimulation->dSetDownwardSalinityCondition(strtod(strRH.c_str(), nullptr));
+							m_pSimulation->nSetDownwardSalinityCondition(strtol(strRH.c_str(), nullptr, 10));
 						break;
 				}
 
@@ -687,19 +687,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
 				}
 
-				case 33: {
-						// Equation for the sediment transport
-						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": sediment density";
-
-						if (m_pSimulation->bGetDoSedimentTransport())
-						{
-							m_pSimulation->dSetSedimentDensity(strtod(strRH.c_str(), nullptr));
-						}
-						break;
-				}
-
-            	case 34: {
+            	case 33: {
 						// Get the sediment properties file name
 						if (strRH.empty())
 							strErr = "line " + to_string(nLine) + ": sediment properties file name";
@@ -712,7 +700,7 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						break;
             	}
 
-				case 35: {
+				case 34: {
 						// Compute water density?
 						strRH = strToLower(&strRH);
 
@@ -835,12 +823,17 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 
 				if (j == 7)
 				{
-					if  (m_pSimulation->nGetInitialEstuarineCondition() <= 1)
+					if  (m_pSimulation->nGetInitialEstuarineCondition() == 0)
+					{
+						m_pSimulation->m_vCrossSectionQ.push_back(0.0);
+						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
+					}
+					if  (m_pSimulation->nGetInitialEstuarineCondition() == 1)
 					{
 						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
 						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
 					}
-					else
+					else if (m_pSimulation->nGetInitialEstuarineCondition() == 2)
 					{
 						dValue = dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ();
 						if (dValue <= 0) {
@@ -851,10 +844,12 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 						}
 						m_pSimulation->m_vCrossSectionQ.push_back(0.0);
 						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
-
 					}
 				}
-
+				if (j == 8)
+				{
+					m_pSimulation->m_vCrossSectionSalinity.push_back(dValue);
+				}
 				// Increment counter
 				j++;
 
@@ -1104,6 +1099,84 @@ bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 	return false;
 }
 
+
+//======================================================================================================================
+//!	Read Along Channel Sediment properties file
+//======================================================================================================================
+bool CDataReader::bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) const {
+	// Create an object
+	ifstream InStream;
+
+	// Try to open run details file for input
+	InStream.open(m_strSedimentPropertiesFilename.c_str(), ios::in);
+
+	// Did it open OK?
+	if (!InStream.is_open())
+	{
+		// Error: cannot open run details file for input
+		cerr << ERR << "cannot open " << m_strSedimentPropertiesFilename << " for input" << endl;
+		return true;
+	}
+
+	int nCrossSectionNumber = 0;
+	// int i = 0;
+	// size_t nPos;
+	string strRec, strErr;
+
+	while (getline(InStream, strRec)) {
+
+		// Trim off leading and trailing whitespace
+		strRec = strTrim(&strRec);
+
+		// If it is a blank line or a comment then ignore it
+		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+
+			// Obtain the new line
+			stringstream strLine(strRec);
+
+			string token;
+			int j = 0;
+
+			// Using get line for splitting the string by commas
+			while (getline(strLine, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+
+				if (j == 1) {
+					m_pSimulation->m_vCrossSectionDaveraged.push_back(dValue);
+				}
+
+				if (j == 2) {
+					m_pSimulation->m_vCrossSectionD90.push_back(dValue);
+				}
+
+				if (j == 3) {
+					m_pSimulation->m_vCrossSectionD50.push_back(dValue);
+				}
+
+				if (j == 4) {
+					m_pSimulation->m_vCrossSectionSedimentSigma.push_back(dValue);
+				}
+
+				if (j == 5) {
+					m_pSimulation->m_vCrossSectionRhos.push_back(dValue);
+				}
+
+				if (j == 6) {
+					m_pSimulation->m_vCrossSectionThickness.push_back(dValue);
+				}
+
+				// Increment counter
+				j++;
+
+			}
+
+			// Increment counter
+			nCrossSectionNumber++;
+		}
+
+	}
+	return false;
+}
 
 //======================================================================================================================
 //! Read Hydro input file

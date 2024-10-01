@@ -36,6 +36,7 @@ using std::ofstream;
 #include "cross_section.h"
 #include "data_writer.h"
 #include "data_reader.h"
+#include "screen_presenter.h"
 
 class CSimulation
 {
@@ -50,6 +51,9 @@ class CSimulation
 
     // friend class CDataReader;
     friend class CDataReader;
+
+    // friend class CScreenPresenter;
+    friend class CScreenPresenter;
 
 
     public:
@@ -116,10 +120,10 @@ class CSimulation
     string m_strInitialSalinityConditionFilename;
 
     //! Upward salinity condition
-    double m_dUpwardSalinityCondition;
+    int m_nUpwardSalinityCondition;
 
     //! Downward salinity condition
-    double m_dDownwardSalinityCondition;
+    int m_nDownwardSalinityCondition;
 
     //! The beta salinity constant [if compute water salinity]
     double m_dBetaSalinityConstant{};
@@ -213,6 +217,9 @@ class CSimulation
 
     //! Cross-section Bed slope
     vector<double> m_vCrossSectionBedSlope;
+
+    //! Cross-section Bed slope Direction +/- ve, 1/-1
+    vector<int> m_vCrossSectionBedSlopeDirection;
 
     //! Cross-section Bed slope
     vector<double> m_vCrossSectionFrictionSlope;
@@ -321,12 +328,23 @@ class CSimulation
     //! DiamX
     vector<double> m_vCrossSectionDiamX;
 
-    //! DiamX
+    //! Daveraged
+    vector<double> m_vCrossSectionDaveraged;
+
+    //! Sediment sigma
     vector<double> m_vCrossSectionSedimentSigma;
+
+    //! Parameter of relative density
+    vector<double> m_vCrossSectionRhos;
+
+    //! Thickness of sediment layer
+    vector<double> m_vCrossSectionThickness;
 
     //! A vector with cross-sections objects along the estuary
     vector<CCrossSection> estuary;
 
+    CScreenPresenter presenter;
+    CDataReader reader;
     CDataWriter writer;
 
     void AddCrossSection();
@@ -373,14 +391,14 @@ class CSimulation
     void bSetDoWaterSalinity(bool doWaterSalinity);
 
     //! Method for getting the compute water salinity
-    [[nodiscard]] double dGetUpwardSalinityCondition() const;
+    [[nodiscard]] int nGetUpwardSalinityCondition() const;
     //! Method for setting the compute water salinity
-    void dSetUpwardSalinityCondition(double dUpwardCondition);
+    void nSetUpwardSalinityCondition(int nUpwardCondition);
 
     //! Method for getting the compute water salinity
-    [[nodiscard]] double dGetDownwardSalinityCondition() const;
+    [[nodiscard]] int nGetDownwardSalinityCondition() const;
     //! Method for setting the compute water salinity
-    void dSetDownwardSalinityCondition(double dDownwardCondition);
+    void nSetDownwardSalinityCondition(int nDownwardCondition);
 
     //! Method for getting the beta salinity constant
     [[nodiscard]] double dGetBetaSalinityConstant() const;
@@ -503,6 +521,7 @@ class CSimulation
     void calculateCorrector();
     void updatePredictorBoundaries();
     void updateCorrectorBoundaries();
+    void updateBoundaries();
     void mergePredictorCorrector();
     void smoothSolution();
     void calculate_salinity_gradient();
