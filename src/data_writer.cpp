@@ -53,19 +53,19 @@ using std::put_time;
 CDataWriter::CDataWriter() {
 
     // Creating the attributes of the main variables
-    m_mVariableDefinitions["A"]["description"] = "Cross-sectional flooding area";
+    m_mVariableDefinitions["A"]["description"] = "Cross-sectional area";
     m_mVariableDefinitions["A"]["longname"] = "Area";
     m_mVariableDefinitions["A"]["units"] = "m2";
 
-    m_mVariableDefinitions["Q"]["description"] = "Cross-sectional averaged water flux";
-    m_mVariableDefinitions["Q"]["longname"] = "water flux";
+    m_mVariableDefinitions["Q"]["description"] = "Cross-sectional averaged water flow";
+    m_mVariableDefinitions["Q"]["longname"] = "water flow";
     m_mVariableDefinitions["Q"]["units"] = "m3/s";
 
     m_mVariableDefinitions["q"]["description"] = "Fluvial contributions along the estuary";
     m_mVariableDefinitions["q"]["longname"] = "water flux contributions";
     m_mVariableDefinitions["q"]["units"] = "m3/s";
 
-    m_mVariableDefinitions["Rh"]["description"] = "Hydraulic radius of the flooding area";
+    m_mVariableDefinitions["Rh"]["description"] = "Hydraulic radius";
     m_mVariableDefinitions["Rh"]["longname"] = "hydraulic radius";
     m_mVariableDefinitions["Rh"]["units"] = "m";
 

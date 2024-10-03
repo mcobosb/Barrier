@@ -76,7 +76,7 @@ string const DISCLAIMER6 = "Cambridge. MA 02139. USA.";
 string const START_NOTICE = "    - Started on ";
 string const INITIALIZING_NOTICE = "    - Initializing";
 string const SIMULATING = "\r  - Simulating ";
-string const RUN_END_NOTICE = "    - Run ended at ";
+string const RUN_END_NOTICE = "\r    - Run ended at ";
 
 // Not likely that user will need to change these
 static constexpr int BUF_SIZE = 2048;                                     // Max length (inc. terminating NULL) of any C-type string

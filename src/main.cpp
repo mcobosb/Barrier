@@ -51,7 +51,7 @@ int main(int argc, char const* argv[])
 
     // Run the simulation and then check how it ends
     bool nRtn = pSimulation.bDoSimulation(argc, argv);
-    // pSimulation->DoSimulationEnd(nRtn);
+    pSimulation.bDoSimulationEnd();
 
     //! Announce End -------------------------------------------------------------------------------------------------
     // pScreenPresenter->EndingRun();

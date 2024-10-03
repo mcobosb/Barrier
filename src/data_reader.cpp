@@ -861,6 +861,7 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 
 	}
 	m_pSimulation->m_nCrossSectionsNumber = nCrossSectionNumber;
+
 	return false;
 }
 
@@ -1272,8 +1273,32 @@ bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 			// Increment counter
 			i++;
 		}
-	}
+		int hydrographs_no = m_pSimulation->nGetHydrographsNumber();
 
+		//! Find the nearest cross-section of every hydrograph
+		double distance_to_node = 1e10;
+		double update_distance = 1e10;
+		int cs_node = 0;
+		double xh = 0.0;
+		double yh = 0.0;
+		double xc = 0.0;
+		double yc = 0.0;
+		for (int j = 0; j < hydrographs_no; j++) {
+			 xh = m_pSimulation->hydrographs[j].dGetHydrographXLocation();
+			yh = m_pSimulation->hydrographs[j].dGetHydrographYLocation();
+			for (int k = 0; k < m_pSimulation->m_nCrossSectionsNumber; k++) {
+				xc = m_pSimulation->estuary[k].dGetX_UTM();
+				yc = m_pSimulation->estuary[k].dGetY_UTM();
+				distance_to_node =	(xh - xc)*(xh - xc) + (yh - yc)*(yh - yc);
+				if (distance_to_node < update_distance) {
+					update_distance = distance_to_node;
+					cs_node = k;
+				}
+			}
+			m_pSimulation->hydrographs[j].m_nNearestCrossSectionNo = cs_node;
+
+		}
+	}
 	return false;
 }
 

@@ -31,8 +31,6 @@ private:
     //! Y coordinate of input hydro
     double m_dHydrographYLocation;
 
-    //! Nearest cross-section estuary to flow
-    int m_nNearestCrossSectionNo;
 
     //! Time from starting simulation in hours and water discharge
     vector<double> m_vHydroTime;
@@ -44,12 +42,19 @@ public:
     CHydrograph();
     ~CHydrograph();
 
+    //! Nearest cross-section estuary to flow
+    int m_nNearestCrossSectionNo;
+
     [[nodiscard]] double dGetHydrographXLocation() const;
     [[nodiscard]] double dGetHydrographYLocation() const;
 
     void dSetHydrographXLocation(double dHydroXLocation);
     void dSetHydrographYLocation(double dHydroYLocation);
     void dAppend2Vector(const string& strItem, double dValue);
+
+    //! Vector getter
+    vector<double> vGetTime();
+    vector<double> vGetQ() ;
 
 };
 

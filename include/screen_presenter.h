@@ -67,16 +67,16 @@ private:
     static string strGetComputerName();
 
 public:
-    ofstream LogStream;
+//    ofstream LogStream;
 
     CScreenPresenter();
     ~CScreenPresenter();
 
     //! Carries out init-of-simulation tidying (error messages etc.)
-    void StartingRun(int, char const* [], CSimulation* m_pSimulation);
-    void EndingRun();
+    void StartingRun(int, char const* [], CSimulation *m_pSimulation);
+    void EndingRun(CSimulation* m_pSimulation);
 
-    void AnnounceStart();
+    void AnnounceStart(CSimulation* m_pSimulation);
     static void AnnounceLicence(const CSimulation *m_pSimulation) ;
     // void AnnounceReadBasementDEM() const;
     // static void AnnounceAddLayers();

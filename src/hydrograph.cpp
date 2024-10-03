@@ -73,3 +73,12 @@ void CHydrograph::dSetHydrographYLocation(const double dHydroYLocation) {
 double CHydrograph::dGetHydrographYLocation() const {
     return m_dHydrographYLocation;
 }
+
+//! Getter for vector variables
+vector<double> CHydrograph::vGetTime() {
+    return m_vHydroTime;
+}
+
+vector<double> CHydrograph::vGetQ() {
+    return m_vHydroWaterFlow;
+}

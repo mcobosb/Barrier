@@ -76,14 +76,14 @@ CScreenPresenter::~CScreenPresenter() = default;
 //===============================================================================================================================
 //! The nDoSimulation member function of CSimulation sets up and runs the simulation
 //===============================================================================================================================
-void CScreenPresenter::StartingRun(int nArg, char const* pcArgv[], CSimulation* pSimulation)
+void CScreenPresenter::StartingRun(int nArg, char const* pcArgv[], CSimulation* m_pSimulation)
 {
    // ================================================== initialization section ================================================
    // Hello, World!
-   AnnounceStart();
+   AnnounceStart(m_pSimulation);
 
    // Start the clock ticking
-   StartClock(pSimulation);
+   StartClock(m_pSimulation);
 
    // Find out the folder in which the SV executable sits, in order to open the .ini file (they are assumed to be in the same folder)
    // if (! bFindExeDir(pcArgv[0]))
@@ -95,7 +95,7 @@ void CScreenPresenter::StartingRun(int nArg, char const* pcArgv[], CSimulation* 
    //    return (nRet);
 
    // OK, we are off, tell the user about the licence and the start time
-   AnnounceLicence(pSimulation);
+   AnnounceLicence(m_pSimulation);
 }
 
 
@@ -103,14 +103,19 @@ void CScreenPresenter::StartingRun(int nArg, char const* pcArgv[], CSimulation* 
 //===============================================================================================================================
 //! Notifies the user that the simulation has ended, asks for keypress if necessary, and if compiled under GNU can send an email
 //===============================================================================================================================
-void CScreenPresenter::EndingRun()
+void CScreenPresenter::EndingRun(CSimulation* pSimulation)
 {
    // If we don't know the time that the run ended (e.g. because it did not finish correctly), then get it now
+   static double sdElapsed = 0;
    m_tSysEndTime = time(nullptr);
+
+   // Calculate time elapsed and remaining
+   sdElapsed = difftime(m_tSysEndTime, pSimulation->m_tSysStartTime);
 
    // if (nRtn  == RTN_OK)
    //    // normal ending
    // {
+   cout << "\r    - Elapsed Time: " << std::fixed << setprecision(3) << setw(6) << sdElapsed  << endl;
    cout << RUN_END_NOTICE << put_time(localtime(&m_tSysEndTime), "%H:%M on %A %d %B %Y") << endl;
    // }
    //
@@ -155,9 +160,12 @@ string CScreenPresenter::strGetBuild()
 //===============================================================================================================================
 //! Tells the user that we have started the simulation
 //===============================================================================================================================
-void CScreenPresenter::AnnounceStart()
+void CScreenPresenter::AnnounceStart(CSimulation* m_pSimulation)
 {
    cout << endl
+        << PROGRAM_NAME << " for " << PLATFORM << " " << strGetBuild() << endl;
+
+   m_pSimulation->LogStream << endl
         << PROGRAM_NAME << " for " << PLATFORM << " " << strGetBuild() << endl;
 }
 
@@ -170,7 +178,7 @@ void CScreenPresenter::StartClock(CSimulation* m_pSimulation)
    if (static_cast<clock_t>(-1) == clock())
    {
       // There's a problem with the clock, but continue anyway
-      LogStream << NOTE << "CPU time not available" << endl;
+      m_pSimulation->LogStream << NOTE << "CPU time not available" << endl;
       m_dCPUClock = -1;
    }
    else

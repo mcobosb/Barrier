@@ -244,10 +244,10 @@ class CSimulation
     //! Cross-section hydraulic radius
     vector<double> m_vCrossSectionHydraulicRadius;
 
-    //! Cross-section hydraulic dX
+    //! Cross-section dX
     vector<double> m_vCrossSectionDX;
 
-    //! Cross-section hydraulic widths
+    //! Cross-section widths
     vector<double> m_vCrossSectionWidth;
 
     //! Cross-section water depth
@@ -342,6 +342,9 @@ class CSimulation
 
     //! Thickness of sediment layer
     vector<double> m_vCrossSectionThickness;
+
+    //! Lateral sources from hydro at current time
+    vector<double> m_vLateralSourcesAtT;
 
     //! A vector with cross-sections objects along the estuary
     vector<CCrossSection> estuary;
@@ -530,9 +533,9 @@ class CSimulation
     void calculate_salinity_gradient();
     void calculate_salinity();
 
-    void AnnounceProgress() const;
+    void AnnounceProgress();
 
     //! Carries out end-of-simulation tidying (error messages etc.)
-    static void DoSimulationEnd(int);
+    void bDoSimulationEnd();
 };
 #endif // SIMULATION_H
