@@ -39,7 +39,6 @@ CCrossSection::CCrossSection(){
 
     m_dX =
     m_dElevation =
-    m_dWaterFlow =
     m_dZ =
     m_dManningNumber =
     m_dLeftRBAngle =
@@ -86,40 +85,37 @@ void CCrossSection::dAppend2Vector(const string& strItem, double dValue){
 //===============================================================================================================================
 //! The CCrossSection Setters
 //===============================================================================================================================
-void CCrossSection::nSetSectionNumber(int nSectionNumber){
-    m_nSectionNumber = nSectionNumber;
+void CCrossSection::nSetSectionNumber(const int nValue){
+    m_nSectionNumber = nValue;
 }
 
-void CCrossSection::dSetX(double dValue){
+void CCrossSection::dSetX(const double dValue){
     m_dX = dValue;
 }
-void CCrossSection::dSetZ(double dValue){
+void CCrossSection::dSetZ(const double dValue){
     m_dZ = dValue;
 }
 
-void CCrossSection::dSetManningNumber(double dValue) {
+void CCrossSection::dSetManningNumber(const double dValue) {
     m_dManningNumber = dValue;
 }
-void CCrossSection::dSetX_UTM(double dValue) {
+void CCrossSection::dSetX_UTM(const double dValue) {
     m_dX_UTM = dValue;
 }
-void CCrossSection::dSetY_UTM(double dValue) {
+void CCrossSection::dSetY_UTM(const double dValue) {
     m_dY_UTM = dValue;
 }
-void CCrossSection::dSetRightRBAngle(double dValue) {
+void CCrossSection::dSetRightRBAngle(const double dValue) {
     m_dRightRBAngle = dValue;
 }
-void CCrossSection::dSetLeftRBAngle(double dValue) {
+void CCrossSection::dSetLeftRBAngle(const double dValue) {
     m_dLeftRBAngle = dValue;
 }
-void CCrossSection::dSetWaterDepth(double dValue) {
+void CCrossSection::dSetWaterDepth(const double dValue) {
     m_dElevation = dValue;
 }
-void CCrossSection::dSetWaterFlow(double dValue) {
-    m_dWaterFlow = dValue;
-}
 
-void CCrossSection::nSetElevationSectionsNumber(int nValue) {
+void CCrossSection::nSetElevationSectionsNumber(const int nValue) {
     m_nElevationSectionNumber = nValue;
 }
 
@@ -154,38 +150,38 @@ double CCrossSection::dGetLeftRBAngle() const{
 int CCrossSection::nGetElevationSectionsNumber() const{
     return m_nElevationSectionNumber;
 }
-double CCrossSection::dGetWaterDepth(int nZ) const {
-  return m_vWaterDepth[nZ];
+double CCrossSection::dGetWaterDepth(const int nValue) const {
+  return m_vWaterDepth[nValue];
 }
-double CCrossSection::dGetWidth(int nZ) const {
-  return m_vWidth[nZ];
+double CCrossSection::dGetWidth(const int nValue) const {
+  return m_vWidth[nValue];
 }
-double CCrossSection::dGetArea(int nZ) const {
-  return m_vArea[nZ];
+double CCrossSection::dGetArea(const int nValue) const {
+  return m_vArea[nValue];
 }
-double CCrossSection::dGetPerimeter(int nZ) const {
-  return m_vPerimeter[nZ];
+double CCrossSection::dGetPerimeter(const int nValue) const {
+  return m_vPerimeter[nValue];
 }
-double CCrossSection::dGetHydraulicRadius(int nZ) const {
-  return m_vHydraulicRadius[nZ];
+double CCrossSection::dGetHydraulicRadius(const int nValue) const {
+  return m_vHydraulicRadius[nValue];
 }
-double CCrossSection::dGetSigma(int nZ) const {
-  return m_vSigma[nZ];
+double CCrossSection::dGetSigma(const int nValue) const {
+  return m_vSigma[nValue];
 }
-double CCrossSection::dGetLeftY(int nZ) const {
-  return m_vLeftRBLocation[nZ];
+double CCrossSection::dGetLeftY(const int nValue) const {
+  return m_vLeftRBLocation[nValue];
 }
-double CCrossSection::dGetRightY(int nZ) const {
-  return m_vRightRBLocation[nZ];
+double CCrossSection::dGetRightY(const int nValue) const {
+  return m_vRightRBLocation[nValue];
 }
-double CCrossSection::dGetBeta(int nZ) const {
-  return m_vBeta[nZ];
+double CCrossSection::dGetBeta(const int nValue) const {
+  return m_vBeta[nValue];
 }
-double CCrossSection::dGetI1(int nZ) const {
-    return m_vI1[nZ];
+double CCrossSection::dGetI1(const int nValue) const {
+    return m_vI1[nValue];
 }
-double CCrossSection::dGetI2(int nZ) const {
-    return m_vI2[nZ];
+double CCrossSection::dGetI2(const int nValue) const {
+    return m_vI2[nValue];
 }
 
 //! Getter for vector variables

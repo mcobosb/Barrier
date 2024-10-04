@@ -7,7 +7,7 @@
  * \date 2024
  * \copyright GNU General Public License
  *
- * \file data_reader.h
+ * \file error_handling.h
  * \brief Contains ErrorHandling definitions
  *
  */
@@ -23,12 +23,13 @@ static constexpr int RTN_OK = 0;
 static constexpr int RTN_ERR_INI = 1;
 static constexpr int RTN_ERR_SV_DIR = 2;
 static constexpr int RTN_ERR_BADLY_FORMAT_COLON = 3;
+static constexpr int RTN_CLOSE_NETCDF = 4;
+static constexpr int RTN_EXTRA_LINES = 5;
 static constexpr int RTN_ERR_LOGFILE = 10;
 static constexpr int RTN_ERR_OUTFILE = 11;
 static constexpr int RTN_ERR_TIMEUNITS = 36;
 
-string const ERROR_NOTICE = " with error code ";
-string const ERR = "*** ERROR ";
+static constexpr int ERR = 0;
 
 string strGetErrorText(int);
 

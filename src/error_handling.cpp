@@ -16,20 +16,23 @@ string strGetErrorText(int const nErr)
 
     switch (nErr)
     {
-        // case RTN_USER_ABORT:
-        //    strErr = "aborted by user";
-        //    break;
-        // case RTN_ERR_BADPARAM:
-        //    strErr = "error in command-line parameter";
-        //    break;
+        case RTN_OK:
+            strErr = "Run successfully end";
+            break;
         case RTN_ERR_INI:
-            strErr = "error reading initialization file";
+            strErr = "Error reading configuration file";
             break;
         case RTN_ERR_SV_DIR:
-            strErr = "error in directory name";
+            strErr = "Error in directory name";
             break;
         case RTN_ERR_BADLY_FORMAT_COLON:
-            strErr = "badly formatted string colon found";
+            strErr = "Badly formatted string colon found";
+            break;
+        case RTN_CLOSE_NETCDF:
+            strErr = "Error closing the NetCDF file";
+            break;
+        case RTN_EXTRA_LINES:
+            strErr = "Remove extra lines in configuration file";
             break;
         case RTN_ERR_TIMEUNITS:
             strErr = "error in time units";

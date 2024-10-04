@@ -346,6 +346,15 @@ class CSimulation
     //! Lateral sources from hydro at current time
     vector<double> m_vLateralSourcesAtT;
 
+    //! Code for error handling
+    int m_nStringError;
+
+    //! Boolean for error
+    bool m_bReturnError;
+
+    //! Text attachment for error handling
+    string m_strErrorAttachment;
+
     //! A vector with cross-sections objects along the estuary
     vector<CCrossSection> estuary;
 
@@ -503,7 +512,7 @@ class CSimulation
 
 
     //! Runs the simulation
-    bool bDoSimulation(int, char const* []);
+    void bDoSimulation(int, char const* []);
     void initializeVectors();
     void calculateBedSlope();
     void calculateAlongEstuaryInitialConditions();

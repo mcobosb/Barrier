@@ -243,9 +243,9 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
 //======================================================================================================================
 //! Close the NetCDF file
 //======================================================================================================================
-void CDataWriter::nCloseNetCDFFile(CSimulation *m_pSimulation) {
-    int status = nc_close(m_ncId);
-    if (status != NC_NOERR) {
-        std::cerr << "Error closing the NetCDF file: " << nc_strerror(status) << std::endl;
+void CDataWriter::nCloseNetCDFFile(CSimulation *m_pSimulation) const
+{
+    if (const int status = nc_close(m_ncId); status != NC_NOERR) {
+        m_pSimulation->m_nStringError = 4;
     }
 }

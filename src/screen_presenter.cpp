@@ -85,14 +85,8 @@ void CScreenPresenter::StartingRun(int nArg, char const* pcArgv[], CSimulation* 
    // Start the clock ticking
    StartClock(m_pSimulation);
 
-   // Find out the folder in which the SV executable sits, in order to open the .ini file (they are assumed to be in the same folder)
-   // if (! bFindExeDir(pcArgv[0]))
    //    return (RTN_ERR_SVDIR);
    bFindExeDir(pcArgv[0]);
-   // Deal with command-line parameters
-   // int nRet = nHandleCommandLineParams (nArg, pcArgv);
-   // if (nRet != RTN_OK)
-   //    return (nRet);
 
    // OK, we are off, tell the user about the licence and the start time
    AnnounceLicence(m_pSimulation);
@@ -249,4 +243,11 @@ void CScreenPresenter::AnnounceLicence(const CSimulation* m_pSimulation) {
 
    cout << START_NOTICE << strGetComputerName() << " at " << put_time(localtime(&m_pSimulation->m_tSysStartTime), "%H:%M on %A %d %B %Y") << endl;
    cout << INITIALIZING_NOTICE << endl;
+}
+
+
+void CScreenPresenter::AnnounceEnding(const string& strText)
+{
+   cout << endl
+        << strText << endl;
 }

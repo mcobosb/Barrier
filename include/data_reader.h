@@ -120,26 +120,26 @@ public:
     string const LOG_EXT = ".log";
 
     //! Read configuration file with global data
-    bool bReadConfigurationFile(CSimulation* m_pSimulation);
+    void bReadConfigurationFile(CSimulation* m_pSimulation);
 
     //! Read along channel data and the initial estuarine condition
-    bool bReadAlongChannelDataFile(CSimulation* m_pSimulation) const;
+    void bReadAlongChannelDataFile(CSimulation* m_pSimulation) const;
 
     //! Read every cross-section geometry
-    bool bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const;
+    void bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const;
 
     //! Read time-series with upward and downward boundary conditions
-    static bool bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation);
-    static bool bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation);
+    static void bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation);
+    static void bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation);
 
     //! Read along channel sediments file
-    bool bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) const;
+    void bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) const;
 
     //! Read input hydrographs
-    bool bReadHydrographsFile(CSimulation* m_pSimulation) const;
+    void bReadHydrographsFile(CSimulation* m_pSimulation) const;
 
     //! Open log file for writing
-    static bool bOpenLogFile(CSimulation* m_pSimulation);
+    static void bOpenLogFile(CSimulation* m_pSimulation);
 
 };
 #endif // DATA_READER_H

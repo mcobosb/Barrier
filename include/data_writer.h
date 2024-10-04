@@ -69,7 +69,7 @@ public:
     void nSetOutputData(CSimulation* m_pSimulation) const;
 
     //! Close the NetCDF file
-    void nCloseNetCDFFile(CSimulation* m_pSimulation);
+    void nCloseNetCDFFile(CSimulation* m_pSimulation) const;
 };
 
 #endif // DATA_WRITER_H

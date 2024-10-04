@@ -73,7 +73,7 @@ CDataReader::~CDataReader() = default;
 //===============================================================================================================================
 //! Opens the log file
 //===============================================================================================================================
-bool CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
+void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 {
 	if (m_pSimulation->m_nLogFileDetail == 0)
 	{
@@ -82,14 +82,12 @@ bool CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 	}
 	else
 		m_pSimulation->LogStream.open(m_pSimulation->m_strLogFile.c_str(), ios::out | ios::trunc);
-
-	return true;
 }
 
 //======================================================================================================================
 //! Read configuration.ini file
 //======================================================================================================================
-bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
+void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 {
     // Create a read object
     ifstream InStream;
@@ -97,15 +95,13 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
     // Try to open run details file for input
     InStream.open(SV_INI.c_str(), ios::in);
 
-	// Create the raster grid object
-	// m_pSimulation = new CSimulation;
-
     // Did it open OK?
     if (!InStream.is_open())
     {
         // Error: cannot open run details file for input
-        cerr << ERR << "cannot open " << SV_INI << " for input" << endl;
-        return true;
+    	m_pSimulation->m_nStringError = 1;
+    	m_pSimulation->m_bReturnError = true;
+        return;
     }
 
     int nLine = 0;
@@ -132,9 +128,8 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             if (nPos == string::npos)
             {
                 // Error: badly formatted (no colon)
-                cerr << ERR << "on line " << to_string(nLine) << "badly formatted (no ':') in " << SV_INI << endl
-                << strRec << endl;
-            	return true;
+            	m_pSimulation->m_nStringError = 3;
+            	return;
             }
 
             // Strip off leading portion (the bit up to and including the colon)
@@ -182,7 +177,12 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
                 case 1:
 	                // Text output file names, don't change case
 	                if (strRH.empty())
-	                    strErr = "line " + to_string(nLine) + ": output file names";
+	                {
+	                	// Error: badly formatted line
+	                	m_pSimulation->m_nStringError = 3;
+	                	m_pSimulation->m_strErrorAttachment = "line " + to_string(nLine) + ": output file names";
+	                	return;
+	                }
 	                else
 	                {
 	                    m_strRunName = strRH;
@@ -716,10 +716,9 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 
             	default: {
 						// More lines in the configuration file
-						cerr << endl
-							 << ERR << " remove extra lines" << endl;
+						m_pSimulation->m_nStringError = 5;
 						InStream.close();
-						return true;
+						return;
 					}
 
 			}
@@ -727,12 +726,10 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
         	if (! strErr.empty())
         	{
         		// Error in input to run details file
-        		cerr << endl
-					 << ERR << strErr << ".\nPlease edit " << SV_INI << " and change the following text:" << endl
-					 << "    - '" << strRec << "'" << endl
-					 << endl;
+        		// m_pSimulation->m_strErrorAttachment = ".\nPlease edit " << SV_INI << " and change the following text:" << "    - '" << strRec << "'" << endl
+					 // << endl;
         		InStream.close();
-        		return true;
+        		return;
         	}
     	}
 	}
@@ -741,14 +738,13 @@ bool CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 
     // Finally, need to check that we have at least one raster file, so that we know the grid size and units (and preferably also the projection)
     // bool bNoRasterFiles = true;
-	return nRet;
 }
 
 
 //======================================================================================================================
 //!	Read Along Channel geometry file
 //======================================================================================================================
-bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
+void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 	// Create an object
 	ifstream InStream;
 
@@ -760,7 +756,7 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 	{
 		// Error: cannot open run details file for input
 		cerr << ERR << "cannot open " << m_strAlongChannelDataFilename << " for input" << endl;
-		return true;
+		return;
 	}
 
 	int nCrossSectionNumber = 0;
@@ -862,13 +858,12 @@ bool CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 	}
 	m_pSimulation->m_nCrossSectionsNumber = nCrossSectionNumber;
 
-	return false;
 }
 
 //======================================================================================================================
 //!	Read Cross-Section geometry file
 //======================================================================================================================
-bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const {
+void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const {
 	// Create an object
 	ifstream InStream;
 
@@ -880,7 +875,7 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 	{
 		// Error: cannot open run details file for input
 		cerr << ERR << "cannot open " << m_strCrossSectionsFilename << " for input" << endl;
-		return true;
+		return;
 	}
 
 	int nLine = 0;
@@ -974,14 +969,13 @@ bool CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 	// Number of elevation sections for the last Cross-Section
 	m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine + 1);
 
-	return false;
 }
 
 
 //======================================================================================================================
 //!	Read Upward Boundary Condition file
 //======================================================================================================================
-bool CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
+void CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
 	// Create an object
 	ifstream InStream;
@@ -994,7 +988,7 @@ bool CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 	{
 		// Error: cannot open run details file for input
 		cerr << ERR << "cannot open " << m_pSimulation->m_strUpwardBoundaryConditionFilename << " for input" << endl;
-		return true;
+		return;
 	}
 
 	int nLine = 0;
@@ -1034,14 +1028,13 @@ bool CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 			i++;
 		}
 	}
-	return false;
 }
 
 
 //======================================================================================================================
 //!	Read Downward Boundary Condition file
 //======================================================================================================================
-bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation) {
+void CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
 	if (m_pSimulation->nGetDownwardEstuarineCondition() != 0)
 	{
@@ -1056,7 +1049,7 @@ bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 		{
 			// Error: cannot open run details file for input
 			cerr << ERR << "cannot open " << m_pSimulation->m_strDownwardBoundaryConditionFilename << " for input" << endl;
-			return true;
+			return;
 		}
 
 		int nLine = 0;
@@ -1097,14 +1090,13 @@ bool CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 			}
 		}
 	}
-	return false;
 }
 
 
 //======================================================================================================================
 //!	Read Along Channel Sediment properties file
 //======================================================================================================================
-bool CDataReader::bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) const {
+void CDataReader::bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) const {
 	// Create an object
 	ifstream InStream;
 
@@ -1116,7 +1108,7 @@ bool CDataReader::bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) con
 	{
 		// Error: cannot open run details file for input
 		cerr << ERR << "cannot open " << m_strSedimentPropertiesFilename << " for input" << endl;
-		return true;
+		return;
 	}
 
 	int nCrossSectionNumber = 0;
@@ -1176,13 +1168,12 @@ bool CDataReader::bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) con
 		}
 
 	}
-	return false;
 }
 
 //======================================================================================================================
 //! Read Hydro input file
 //======================================================================================================================
-bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
+void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 	if (m_pSimulation->m_bHydroFile) {
 		// Create an object
 		ifstream InStream;
@@ -1195,7 +1186,7 @@ bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 		{
 			// Error: cannot open run details file for input
 			cerr << ERR << "cannot open " << m_strHydroFilename << " for input" << endl;
-			return true;
+			return;
 		}
 
 		int nLine = 0;
@@ -1276,13 +1267,10 @@ bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 		int hydrographs_no = m_pSimulation->nGetHydrographsNumber();
 
 		//! Find the nearest cross-section of every hydrograph
-		double distance_to_node = 1e10;
-		double update_distance = 1e10;
-		int cs_node = 0;
-		double xh = 0.0;
-		double yh = 0.0;
-		double xc = 0.0;
-		double yc = 0.0;
+		double distance_to_node, update_distance;
+		int cs_node;
+		double xh, yh, xc, yc;
+
 		for (int j = 0; j < hydrographs_no; j++) {
 			 xh = m_pSimulation->hydrographs[j].dGetHydrographXLocation();
 			yh = m_pSimulation->hydrographs[j].dGetHydrographYLocation();
@@ -1299,7 +1287,6 @@ bool CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 
 		}
 	}
-	return false;
 }
 
 

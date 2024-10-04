@@ -101,5 +101,6 @@ public:
     // static void AnnounceAllocateMemory(void);
     // static void AnnounceIsRunning(void);
     // static void AnnounceSimEnd(void);
+    static void AnnounceEnding(const string& strText);
 };
 #endif // SCREEN_PRESENTER_H
