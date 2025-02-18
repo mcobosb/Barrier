@@ -20,6 +20,8 @@ using std::sqrt;
 using std::fabs;
 using std::pow;
 
+// #include <omp.h>
+
 // #include "main.h"
 #include "simulation.h"
 #include "screen_presenter.h"
@@ -35,7 +37,12 @@ CSimulation::CSimulation ()
     m_dSimTimestep =
     m_dTimeFactor =
     m_dTimestep =
-    m_dLambda = 0.0;
+    m_dLambda =
+    m_dCurrentTime = 0.0;
+
+    m_nPredictor = -1;
+    m_nTimeLogId = 0;
+    m_nStringError = 0;
 
     m_nInitialEstuarineCondition =
     m_nLogFileDetail =
@@ -48,7 +55,8 @@ CSimulation::CSimulation ()
 
     m_bSaveTime =
     m_bDoSedimentTransport =
-    m_bHydroFile = false;
+    m_bHydroFile =
+    m_bReturnError = false;
 
 
 
@@ -338,6 +346,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     //! Show starting run message
     presenter.StartingRun(nArg, pcArgv, this);
 
+    //! Read the configuration file
     reader.bReadConfigurationFile(this);
     if (m_bReturnError)
     {
@@ -367,7 +376,6 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     initializeVectors();
     calculateBedSlope();
     calculateAlongEstuaryInitialConditions();
-    calculateIs();
 
     //! Create the NetCDF file with dimensions, coordinates and variables
     writer.nDefineNetCDFFile(this);
@@ -385,11 +393,21 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     int m_nStep = 1;
     cout << "    - Running" << endl;
-    //! TODO 013: Hydrographs along the estuary have to be reduced by dX of the input location
-    while (m_dCurrentTime <= m_dSimDuration)
-    {
-        AnnounceProgress();
 
+    // if (not true) {
+    //     cout << "    - Running" << endl;
+    // }
+    // else {
+    //     omp_set_num_threads(4);  // Establecer 4 hilos
+    //     #pragma omp parallel for
+    // }
+    // And now get the actual time the simulation starts
+    m_tSysStartLoopTime = time(nullptr);
+
+
+    while (m_dCurrentTime <= m_dSimDuration)
+    // for (int i = 0; i < static_cast<int>(m_dSimDuration); i++)
+    {
         calculateBoundaryConditions();
 
         m_nPredictor = 1;
@@ -497,6 +515,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             calculate_salinity();
         }
 
+        AnnounceProgress();
+
         if (m_bSaveTime || (m_nLogFileDetail == 2)) {
             writer.nSetOutputData(this);
         }
@@ -516,12 +536,10 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
 
 //======================================================================================================================
-//! Initialize vectorial variables
+//! Initialize vector variables
 //======================================================================================================================
 void CSimulation::initializeVectors()
 {
-    m_nPredictor = -1;
-    m_nTimeLogId = 0;
 
     const double nCrossSectionsNumber = m_nCrossSectionsNumber;
     const vector<double> vZeros(static_cast<size_t>(nCrossSectionsNumber), 0.0);
@@ -532,8 +550,7 @@ void CSimulation::initializeVectors()
     m_vPredictedCrossSectionQ =
     m_vCorrectedCrossSectionQ =
     m_vCrossSectionHydraulicRadius =
-    m_vCrossSectionI1 =
-    m_vCrossSectionI2 =
+    m_vCrossSectionDhDx =
     m_vCrossSectionWidth =
     m_vCrossSectionBeta =
     m_vCrossSectionU =
@@ -559,12 +576,12 @@ void CSimulation::initializeVectors()
     m_vCrossSectionDiamX =
     m_vCrossSectionSalinityASt = vZeros;
 
-    const vector<double> vOnes(static_cast<size_t>(nCrossSectionsNumber), 1.0);
-    m_vCrossSectionRho = vOnes;
+    const vector<double> vRhos(static_cast<size_t>(nCrossSectionsNumber), FRESH_WATER_DENSITY);
+    m_vCrossSectionRho = vRhos;
 
-    const vector<double> vOnesPlus(static_cast<size_t>(nCrossSectionsNumber+1), 1.0);
+    const vector<double> vOnes(static_cast<size_t>(nCrossSectionsNumber+1), 1.0);
     m_vCrossSectionD1Factor =
-    m_vCrossSectionD2Factor = vOnesPlus;
+    m_vCrossSectionD2Factor = vOnes;
 
     const int nTimestepsNumber = static_cast<int> (m_dSimDuration/m_dSimTimestep) + 1;
     m_vOutputTimesIds = vector<int>(nTimestepsNumber, 0);
@@ -576,34 +593,33 @@ void CSimulation::initializeVectors()
     for (int i = 0; i < nTimestepsNumber ; i++) {
         m_vOutputTimes.push_back(static_cast<double>(i)*m_dSimTimestep);
     }
-
-    m_dCurrentTime = 0.0;
 }
 
 //======================================================================================================================
 //! Calculate the initial bed slope
 //======================================================================================================================
 void CSimulation::calculateBedSlope() {
-
+    double dX1;
+    double dX2;
     //Calculate S0
     for (int i = 0; i < m_nCrossSectionsNumber ; i++) {
         if (i == 0) {
             // Compute dx as forward difference
-            double dX1 = estuary[1].dGetX() - estuary[0].dGetX();
+            dX1 = estuary[1].dGetX() - estuary[0].dGetX();
             m_vCrossSectionBedSlope[i] = fabs((estuary[0].dGetZ() - estuary[1].dGetZ())/dX1);
             //! Save dX into a vector
             m_vCrossSectionDX[i] = dX1;
         }
         else if (i == m_nCrossSectionsNumber - 1){
             // Compute dx as backward difference
-            double dX2 = estuary[i].dGetX() - estuary[i-1].dGetX();
+            dX2 = estuary[i].dGetX() - estuary[i-1].dGetX();
             m_vCrossSectionBedSlope[i] = fabs((estuary[i-1].dGetZ() - estuary[i].dGetZ())/dX2);
             //! Save dX into a vector (last node backward)
             m_vCrossSectionDX[i] = dX2;
         }
         else {
-            double dX1 = estuary[i+1].dGetX() - estuary[i].dGetX();
-            double dX2 = estuary[i].dGetX() - estuary[i-1].dGetX();
+            dX1 = estuary[i+1].dGetX() - estuary[i].dGetX();
+            dX2 = estuary[i].dGetX() - estuary[i-1].dGetX();
             m_vCrossSectionBedSlope[i] = fabs((estuary[i-1].dGetZ() - estuary[i+1].dGetZ())/(dX1 + dX2));
 
             //! Save dX into a vector
@@ -731,8 +747,7 @@ void CSimulation::calculateHydraulicParameters() {
     // vector<int> vElevationSection;
     if (m_nPredictor == 1) {
         for (int i = 0; i < nCrossSections; i++) {
-            //! TODO 008: Create getter and setter for cross-section area, hydraulic radius, elevation and slope
-            double dArea = m_vCrossSectionArea[i];
+            const double dArea = m_vCrossSectionArea[i];
             const int nElevationSectionsNumber = estuary[i].nGetElevationSectionsNumber();
 
             if (estuary[i].dGetArea(0) > dArea) {
@@ -761,8 +776,7 @@ void CSimulation::calculateHydraulicParameters() {
     }
     else {
         for (int i = 0; i < nCrossSections; i++) {
-            //! TODO 008: Create getter and setter for cross-section area, hydraulic radius, elevation and slope
-            double dArea = m_vPredictedCrossSectionArea[i];
+            const double dArea = m_vPredictedCrossSectionArea[i];
             const int nElevationSectionsNumber = estuary[i].nGetElevationSectionsNumber();
 
             if (estuary[i].dGetArea(0) > dArea) {
@@ -796,13 +810,11 @@ void CSimulation::calculateHydraulicParameters() {
 //! Interpolate the Hydraulic parameters between the elevation node given.
 //======================================================================================================================
 void CSimulation::interpolateHydraulicParameters(double dArea, int nCrossSection, int nElevationNode) {
-    double dInterpolationFactor = (dArea - estuary[nCrossSection].dGetArea(nElevationNode)) / (estuary[nCrossSection].dGetArea(nElevationNode+1) - estuary[nCrossSection].dGetArea(nElevationNode));
+    const double dInterpolationFactor = (dArea - estuary[nCrossSection].dGetArea(nElevationNode)) / (estuary[nCrossSection].dGetArea(nElevationNode+1) - estuary[nCrossSection].dGetArea(nElevationNode));
     m_vCrossSectionHydraulicRadius[nCrossSection] = dInterpolationFactor*(estuary[nCrossSection].dGetHydraulicRadius(nElevationNode+1) - estuary[nCrossSection].dGetHydraulicRadius(nElevationNode)) + estuary[nCrossSection].dGetHydraulicRadius(nElevationNode);
     m_vCrossSectionWidth[nCrossSection] =  dInterpolationFactor*(estuary[nCrossSection].dGetWidth(nElevationNode+1) - estuary[nCrossSection].dGetWidth(nElevationNode)) + estuary[nCrossSection].dGetWidth(nElevationNode);
     m_vCrossSectionWaterDepth[nCrossSection] = dInterpolationFactor*(estuary[nCrossSection].dGetWaterDepth(nElevationNode+1) - estuary[nCrossSection].dGetWaterDepth(nElevationNode)) + estuary[nCrossSection].dGetWaterDepth(nElevationNode);
     m_vCrossSectionBeta[nCrossSection] = dInterpolationFactor*(estuary[nCrossSection].dGetBeta(nElevationNode+1) - estuary[nCrossSection].dGetBeta(nElevationNode)) + estuary[nCrossSection].dGetBeta(nElevationNode);
-    m_vCrossSectionI1[nCrossSection] = dInterpolationFactor*(estuary[nCrossSection].dGetI1(nElevationNode+1) - estuary[nCrossSection].dGetI1(nElevationNode)) + estuary[nCrossSection].dGetI1(nElevationNode);
-    m_vCrossSectionI2[nCrossSection] = dInterpolationFactor*(estuary[nCrossSection].dGetI2(nElevationNode+1) - estuary[nCrossSection].dGetI2(nElevationNode)) + estuary[nCrossSection].dGetI2(nElevationNode);
     m_vCrossSectionLeftRBLocation[nCrossSection] = dInterpolationFactor*(estuary[nCrossSection].dGetLeftY(nElevationNode+1) - estuary[nCrossSection].dGetLeftY(nElevationNode)) + estuary[nCrossSection].dGetLeftY(nElevationNode);
     m_vCrossSectionRightRBLocation[nCrossSection] = dInterpolationFactor*(estuary[nCrossSection].dGetRightY(nElevationNode+1) - estuary[nCrossSection].dGetRightY(nElevationNode)) + estuary[nCrossSection].dGetRightY(nElevationNode);
 }
@@ -815,8 +827,6 @@ void CSimulation::getFirstHydraulicParameters(const int nCrossSection) {
     m_vCrossSectionWidth[nCrossSection] =  estuary[nCrossSection].dGetWidth(0);
     m_vCrossSectionWaterDepth[nCrossSection] = estuary[nCrossSection].dGetWaterDepth(0);
     m_vCrossSectionBeta[nCrossSection] = estuary[nCrossSection].dGetBeta(0);
-    m_vCrossSectionI1[nCrossSection] = estuary[nCrossSection].dGetI1(0);
-    m_vCrossSectionI2[nCrossSection] = estuary[nCrossSection].dGetI2(0);
     m_vCrossSectionLeftRBLocation[nCrossSection] = estuary[nCrossSection].dGetLeftY(0);
     m_vCrossSectionRightRBLocation[nCrossSection] = estuary[nCrossSection].dGetRightY(0);
 }
@@ -831,8 +841,6 @@ void CSimulation::getLastHydraulicParameters(const int nCrossSection) {
      m_vCrossSectionWidth[nCrossSection] =  estuary[nCrossSection].dGetWidth(nLastNode);
      m_vCrossSectionWaterDepth[nCrossSection] = estuary[nCrossSection].dGetWaterDepth(nLastNode);
      m_vCrossSectionBeta[nCrossSection] = estuary[nCrossSection].dGetBeta(nLastNode);
-     m_vCrossSectionI1[nCrossSection] = estuary[nCrossSection].dGetI1(nLastNode);
-     m_vCrossSectionI2[nCrossSection] = estuary[nCrossSection].dGetI2(nLastNode);
      m_vCrossSectionLeftRBLocation[nCrossSection] = estuary[nCrossSection].dGetLeftY(nLastNode);
      m_vCrossSectionRightRBLocation[nCrossSection] = estuary[nCrossSection].dGetRightY(nLastNode);
 }
@@ -902,100 +910,6 @@ void CSimulation::calculateTimestep() {
             m_bSaveTime = false;
     }
     m_dLambda = m_dTimestep / dMinVectorValue(m_vCrossSectionDX);
-}
-
-//===============================================================================================================================
-//! Compute the source terms I1 (difference between pressure thrusts applied over the frontiers x1 and x2) and
-//! I2(pressure forces due the channel width variation)
-//===============================================================================================================================
-void CSimulation::calculateIs()
-{
-
-    //Calculate I1
-    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-        double dValue = 0.0;
-        const int nElevationSections = estuary[i].nGetElevationSectionsNumber();
-
-        estuary[i].dAppend2Vector("I1", dValue);
-        for (int j = 0; j < nElevationSections; j++) {
-            // dValue = (estuary[i].dGetSigma(j) + estuary[i].dGetSigma(j-1)) / 2.0*estuary[i].dGetElevation(j)*(estuary[i].dGetElevation(j) - estuary[i].dGetElevation(j-1));
-            dValue = estuary[i].dGetSigma(j)*(estuary[i].dGetWaterDepth(nElevationSections-1) - estuary[i].dGetWaterDepth(j));
-
-            estuary[i].dAppend2Vector("I1", dValue);
-        }
-    }
-
-    double dX1 = 0.0;
-    double dX2 = 0.0;
-
-    //Calculate I2
-    //TODO: I2 no es preciso calcularlo con la fórmula simplificada, ni I1
-    for (int i = 0; i < m_nCrossSectionsNumber ; i++) {
-        const int nElevationSections = estuary[i].nGetElevationSectionsNumber();
-        if (i == 0) {
-            // Compute dx as forward difference
-            dX1 = estuary[i+1].dGetX() - estuary[i].dGetX();
-        }
-        else if (i == m_nCrossSectionsNumber - 1){
-            // Compute dx as backward difference
-            dX2 = estuary[i].dGetX() - estuary[i-1].dGetX();
-        }
-        else {
-            dX1 = estuary[i+1].dGetX() - estuary[i].dGetX();
-            dX2 = estuary[i].dGetX() - estuary[i-1].dGetX();
-        }
-
-        for (int j = 0; j < nElevationSections; j++) {
-            double dh_dx;
-            double dI1dx;
-            double dValue;
-
-            if (i == 0) {
-                // Upward finite-difference
-                dh_dx = (estuary[i+1].dGetWaterDepth(j) - estuary[i].dGetWaterDepth(j))/dX1;
-                dI1dx = (estuary[i+1].dGetI1(j) - estuary[i].dGetI1(j))/dX1;
-                if (j == 0)
-                {
-                    dValue = (estuary[i].dGetWaterDepth(nElevationSections-1)-estuary[i].dGetWaterDepth(j))*(estuary[i+1].dGetWidth(j) - estuary[i].dGetWidth(j))/dX1;
-                }
-                else
-                {
-                    dValue = (estuary[i].dGetWaterDepth(nElevationSections-1)-estuary[i].dGetWaterDepth(j))*(estuary[i+1].dGetWidth(j) - estuary[i].dGetWidth(j))/dX1 + estuary[i].dGetI2(j-1);;
-                }
-            }
-            else if (i == m_nCrossSectionsNumber - 1) {
-                // Downward finite-difference
-                dh_dx = (estuary[i].dGetWaterDepth(j) - estuary[i-1].dGetWaterDepth(j))/dX2;
-                dI1dx = (estuary[i].dGetI1(j) - estuary[i-1].dGetI1(j))/dX2;
-                if (j == 0)
-                {
-                    dValue = (estuary[i].dGetWaterDepth(nElevationSections-1)-estuary[i].dGetWaterDepth(j))*(estuary[i].dGetWidth(j) - estuary[i-1].dGetWidth(j))/dX1;
-                }
-                else
-                {
-                    dValue = (estuary[i].dGetWaterDepth(nElevationSections-1)-estuary[i].dGetWaterDepth(j))*(estuary[i].dGetWidth(j) - estuary[i-1].dGetWidth(j))/dX1 + estuary[i].dGetI2(j-1);
-                }
-
-            }
-            else {
-                // Central finite-difference
-                dh_dx = (estuary[i+1].dGetWaterDepth(j) - estuary[i-1].dGetWaterDepth(j))/(dX1 +dX2);
-                dI1dx = (estuary[i+1].dGetI1(j) - estuary[i-1].dGetI1(j))/(dX1 + dX2);
-                if (j == 0)
-                {
-                    dValue = (estuary[i].dGetWaterDepth(nElevationSections-1)-estuary[i].dGetWaterDepth(j))*(estuary[i+1].dGetWidth(j) - estuary[i-1].dGetWidth(j))/(dX1 + dX2);
-                }
-                else
-                {
-                    dValue = (estuary[i].dGetWaterDepth(nElevationSections-1)-estuary[i].dGetWaterDepth(j))*(estuary[i+1].dGetWidth(j) - estuary[i-1].dGetWidth(j))/(dX1 + dX2) + estuary[i].dGetI2(j-1);
-                }
-
-
-            }
-            // const double dValue = dI1dx - estuary[i].dGetArea(j)*dh_dx;
-            estuary[i].dAppend2Vector("I2", dValue);
-        }
-    }
 }
 
 
@@ -1122,19 +1036,12 @@ void CSimulation::doMurilloCondition()
             if (dValue < estuary[i].dGetManningNumber()) {
                 m_vCrossSectionMurilloFactor[i] = dValue/m_vCrossSectionManningNumber[i];
                 m_vCrossSectionManningNumber[i] = dValue;
-                m_vCrossSectionI1[i] = m_vCrossSectionI1[i]*m_vCrossSectionMurilloFactor[i] ;
             }
             else {
                 m_vCrossSectionMurilloFactor[i] = 1.0;
             }
         }
     }
-    else {
-        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            m_vCrossSectionI1[i] = m_vCrossSectionI1[i]*m_vCrossSectionMurilloFactor[i];
-        }
-    }
-
 }
 
 //======================================================================================================================
@@ -1210,13 +1117,13 @@ void CSimulation::calculateFlowTerms() {
     if (m_nPredictor == 1) {
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             m_vCrossSectionF0[i] = m_vCrossSectionQ[i];
-            m_vCrossSectionF1[i] = (m_vCrossSectionQ[i]*fabs(m_vCrossSectionQ[i])/m_vCrossSectionArea[i] + G*m_vCrossSectionI1[i])*m_vCrossSectionBeta[i];
+            m_vCrossSectionF1[i] = (m_vCrossSectionQ[i]*fabs(m_vCrossSectionQ[i])/m_vCrossSectionArea[i])*m_vCrossSectionBeta[i];
         }
     }
     else {
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             m_vCrossSectionF0[i] = m_vPredictedCrossSectionQ[i];
-            m_vCrossSectionF1[i] = (m_vPredictedCrossSectionQ[i]*fabs(m_vPredictedCrossSectionQ[i])/m_vPredictedCrossSectionArea[i] + G*m_vCrossSectionI1[i])*m_vCrossSectionBeta[i];
+            m_vCrossSectionF1[i] = (m_vPredictedCrossSectionQ[i]*fabs(m_vPredictedCrossSectionQ[i])/m_vPredictedCrossSectionArea[i])*m_vCrossSectionBeta[i];
         }
 
     }
@@ -1229,27 +1136,23 @@ void CSimulation::calculateSourceTerms() {
     if (m_nPredictor == 1) {
         for (int i = 0; i < m_nCrossSectionsNumber-1; i++)
         {
-            m_vCrossSectionI2[i] = (m_vCrossSectionWaterElevation[i+1]-m_vCrossSectionWaterElevation[i])/m_vCrossSectionDX[i];
+            m_vCrossSectionDhDx[i] = (m_vCrossSectionWaterElevation[i+1]-m_vCrossSectionWaterElevation[i])/m_vCrossSectionDX[i];
         }
-        m_vCrossSectionI2[m_nCrossSectionsNumber-1] = m_vCrossSectionI2[m_nCrossSectionsNumber-2];
+        m_vCrossSectionDhDx[m_nCrossSectionsNumber-1] = m_vCrossSectionDhDx[m_nCrossSectionsNumber-2];
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             m_vCrossSectionGv0[i] = 0.0;
-            //TODO: I2 es dhdx revisar y acomodar
-            // m_vCrossSectionGv1[i] = G*m_vCrossSectionI2[i] + m_vCrossSection_gAS0[i] - m_vCrossSection_gASf[i];
-            m_vCrossSectionGv1[i] = -G*m_vCrossSectionArea[i]*m_vCrossSectionI2[i] + m_vCrossSection_gAS0[i] - m_vCrossSection_gASf[i];
+            m_vCrossSectionGv1[i] = -G*m_vCrossSectionArea[i]*m_vCrossSectionDhDx[i] + m_vCrossSection_gAS0[i] - m_vCrossSection_gASf[i];
         }
     }
     else {
         for (int i = 0; i < m_nCrossSectionsNumber-1; i++)
         {
-            m_vCrossSectionI2[i] = (m_vCrossSectionWaterElevation[i+1]-m_vCrossSectionWaterElevation[i])/m_vCrossSectionDX[i];
+            m_vCrossSectionDhDx[i] = (m_vCrossSectionWaterElevation[i+1]-m_vCrossSectionWaterElevation[i])/m_vCrossSectionDX[i];
         }
-        m_vCrossSectionI2[m_nCrossSectionsNumber-1] = m_vCrossSectionI2[m_nCrossSectionsNumber-2];
+        m_vCrossSectionDhDx[m_nCrossSectionsNumber-1] = m_vCrossSectionDhDx[m_nCrossSectionsNumber-2];
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             m_vCrossSectionGv0[i] = m_vLateralSourcesAtT[i];
-            //TODO: I2 es dhdx revisar y acomodar
-            // m_vCrossSectionGv1[i] = G*m_vCrossSectionI2[i] + m_vCrossSection_gAS0[i] - m_vCrossSection_gASf[i];
-            m_vCrossSectionGv1[i] = -G*m_vPredictedCrossSectionArea[i]*m_vCrossSectionI2[i] + m_vCrossSection_gAS0[i] - m_vCrossSection_gASf[i];
+            m_vCrossSectionGv1[i] = -G*m_vPredictedCrossSectionArea[i]*m_vCrossSectionDhDx[i] + m_vCrossSection_gAS0[i] - m_vCrossSection_gASf[i];
         }
     }
 }
@@ -1717,11 +1620,8 @@ vector<double> CSimulation::vGetVariable(const string& strVariableName) const {
     else if (strVariableName == "beta") {
         return m_vCrossSectionBeta;
     }
-    else if (strVariableName == "I1") {
-        return m_vCrossSectionI1;
-    }
-    else if (strVariableName == "I2") {
-        return m_vCrossSectionI2;
+    else if (strVariableName == "DhDx") {
+        return m_vCrossSectionDhDx;
     }
     else if (strVariableName == "rho") {
         return m_vCrossSectionRho;
@@ -1769,15 +1669,8 @@ void CSimulation::AnnounceProgress() {
     const time_t tNow = time(nullptr);
 
     // Calculate time elapsed and remaining
-    sdElapsed = difftime(tNow, m_tSysStartTime);
+    sdElapsed = difftime(tNow, m_tSysStartLoopTime);
     sdToGo = (sdElapsed * m_dSimDuration / m_dCurrentTime) - sdElapsed;
-
-    // COORD coord;
-    // coord.X = 0;
-    // coord.Y = 0;
-    // SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
-
-    // Tell the user about progress (note need to make several separate calls to cout here, or MS VC++ compiler appears to get confused)
 
     if (m_nLogFileDetail == 2) {
         cout << "\r    - Remaining Time: " << std::fixed << setprecision(3) << setw(6) << sdToGo << " s - Progress: " << std::fixed << setprecision(3) << setw(6) << 100 * m_dCurrentTime / m_dSimDuration  << '%' << std::flush;
@@ -1828,7 +1721,7 @@ void CSimulation::calculate_salinity()
 
 //===============================================================================================================================
 //! Compute the salinity gradient using the backward, centered and upward finite differences
-//! Diez-Minguito et al (2013).
+//! Diez-Minguito et al. (2013).
 //===============================================================================================================================
 void CSimulation::calculate_salinity_gradient()
 {
@@ -2006,6 +1899,6 @@ void CSimulation::calculate_density()
 void CSimulation::bDoSimulationEnd(){
     presenter.EndingRun(this);
 
-    const string strText = strGetErrorText(m_bReturnError);
+    const string strText = strGetErrorText(m_nStringError);
     CScreenPresenter::AnnounceEnding(strText);
 };

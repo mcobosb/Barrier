@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 import netCDF4 as nc
 import numpy as np
 
+plt.rc("text", usetex=True)
+plt.rc("font", family="serif", size=10)
+params = {"text.latex.preamble": [r"\usepackage{amsmath}"]}
+
 data0 = nc.Dataset("../cmake-build-debug/test_003.nc")
 data1 = nc.Dataset("../cmake-build-debug/test_004.nc")
 
@@ -33,29 +37,32 @@ dif_sal = sal1[:, :] - sal0[:, :]
 
 x, t = np.meshgrid(x, t)
 plt.figure()
-plt.contourf(t, x, eta_dif, 100, cmap=cm.RdYlBu)
-plt.colorbar(label="eta (m)")
-plt.contour(t, x, eta_dif, [-1e-2, 1e-2])
-
-plt.xlabel("time (s)")
-plt.ylabel("x (m)")
-
-plt.figure()
-plt.contourf(t, x, dif_water_flow, 100, cmap=cm.RdYlBu)
-plt.colorbar(label="Q (m3/s)")
-plt.contour(t, x, dif_water_flow, [-10, 10])
-plt.xlabel("time (s)")
-plt.ylabel("x (m)")
+plt.contourf(t / 3600, x / 1000, eta_dif, 100, cmap=cm.RdYlBu)
+plt.colorbar(label=r"$\mathbf{\eta (m)}$")
+plt.contour(t / 3600, x / 1000, eta_dif, [-1e-2, 1e-2])
+plt.xlabel(r"\textbf{time (h)}")
+plt.ylabel(r"\textbf{x (km)")
+plt.grid(True)
 
 plt.figure()
-plt.contourf(t, x, area1[:, :] - area0[:, :], 100, cmap=cm.RdYlBu)
-plt.xlabel("time (s)")
-plt.ylabel("x (m)")
-plt.colorbar(label="A (m2)")
+plt.contourf(t / 3600, x / 1000, dif_water_flow, 100, cmap=cm.RdYlBu)
+plt.colorbar(label=r"\textbf{Q ($m^3/s$)}")
+plt.contour(t / 3600, x / 1000, dif_water_flow, [-10, 10])
+plt.xlabel(r"\textbf{time (h)}")
+plt.ylabel(r"\textbf{x (km)}")
+plt.grid(True)
 
 plt.figure()
-plt.contourf(t, x, sal1[:, :] - sal0[:, :], 100, cmap=cm.RdYlBu)
-plt.xlabel("time (s)")
-plt.ylabel("x (m)")
-plt.colorbar(label="s (psu)")
+plt.contourf(t / 3600, x / 1000, area1[:, :] - area0[:, :], 100, cmap=cm.RdYlBu)
+plt.xlabel(r"\textbf{time (h)}")
+plt.ylabel(r"\textbf{x (km)}")
+plt.grid(True)
+plt.colorbar(label=r"\textbf{A (m2)}")
+
+plt.figure()
+plt.contourf(t / 3600, x / 1000, sal1[:, :] - sal0[:, :], 100, cmap=cm.RdYlBu)
+plt.xlabel(r"\textbf{time (h)}")
+plt.ylabel(r"\textbf{x (km)}")
+plt.colorbar(label=r"\textbf{s (psu)}")
+plt.grid(True)
 plt.show()

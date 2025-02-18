@@ -60,6 +60,9 @@ class CSimulation
     //! System start-simulation time
     time_t m_tSysStartTime{};
 
+    //! Sytem loop-start-simulation time
+    time_t m_tSysStartLoopTime{};
+
     ofstream LogStream;
 
     //! Detail of the log file
@@ -259,11 +262,8 @@ class CSimulation
     //! Cross-section betas
     vector<double> m_vCrossSectionBeta;
 
-    //! Cross-section I1s
-    vector<double> m_vCrossSectionI1;
-
-    //! Cross-section I2s
-    vector<double> m_vCrossSectionI2;
+    //! Cross-section DhDx
+    vector<double> m_vCrossSectionDhDx;
 
     //! Cross-section water densities
     vector<double> m_vCrossSectionRho;
