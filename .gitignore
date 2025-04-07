@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+
+# vs configuration
+.vs/
+out/
+CMakeSettings.json
+
+# Documentation
+Doxygen
+Doxyfile
