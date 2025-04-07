@@ -1,8 +1,5 @@
-#include <error_handling.h>
 #include <iostream>
-#include <main.h>
-#include <utils.h>
-#include <windows.h>
+
 using std::cerr;
 using std::cout;
 using std::endl;
@@ -20,13 +17,15 @@ using std::sqrt;
 using std::fabs;
 using std::pow;
 
-// #include <omp.h>
+#include <omp.h>
 
-// #include "main.h"
 #include "simulation.h"
 #include "screen_presenter.h"
 #include "hydrograph.h"
 #include "cross_section.h"
+#include "main.h"
+#include "utils.h"
+#include "error_handling.h"
 
 //===============================================================================================================================
 //! The CSimulation constructor
@@ -585,12 +584,11 @@ void CSimulation::initializeVectors()
 
     const int nTimestepsNumber = static_cast<int> (m_dSimDuration/m_dSimTimestep) + 1;
     m_vOutputTimesIds = vector<int>(nTimestepsNumber, 0);
+
+    #pragma omp parallel for
     for (int i = 0; i < nTimestepsNumber; i++)
     {
         m_vOutputTimesIds[i] = i;
-    }
-
-    for (int i = 0; i < nTimestepsNumber ; i++) {
         m_vOutputTimes.push_back(static_cast<double>(i)*m_dSimTimestep);
     }
 }
@@ -602,6 +600,7 @@ void CSimulation::calculateBedSlope() {
     double dX1;
     double dX2;
     //Calculate S0
+    #pragma omp parallel for
     for (int i = 0; i < m_nCrossSectionsNumber ; i++) {
         if (i == 0) {
             // Compute dx as forward difference
@@ -649,6 +648,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
 
     if (m_nInitialEstuarineCondition == 1) {
         //! Along estuary water flow given
+        #pragma omp parallel for
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             double dManningFactor = 0.0;
             //! As initial condition, it is assumed the independency of A with +/- value of S0
@@ -666,6 +666,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
             vector<double> dSecondTerm;
 
             //! Second term to obtain the area from slope equation in open channels
+            #pragma omp parallel for
             for (size_t j = 0; j < vCrossSectionAreaTmp.size(); j++) {
                 dSecondTerm.push_back(vCrossSectionAreaTmp[j]*pow(vCrossSectionHydraulicRadiusTmp[j], 2.0/3.0));
             }
@@ -676,6 +677,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
         }
     else if (m_nInitialEstuarineCondition == 2) {
         //! Along estuary elevation given
+        #pragma omp parallel for
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             // m_vCrossSectionArea.push_back(m_vCrossSectionElevation[i]);
             vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
@@ -692,6 +694,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
     }
     else {
         //! Water level in calm
+        #pragma omp parallel for
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
             vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
@@ -707,6 +710,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
         }
     }
 
+    #pragma omp parallel for
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
         //! Insert the Manning number onto the simulation object
         m_vCrossSectionManningNumber[i] = estuary[i].dGetManningNumber();
@@ -714,7 +718,9 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
 
     if (m_bDoWaterDensity)
     {
+		
         //! Compute along channel sediment parameter
+        #pragma omp parallel for
         for (int i = 0; i < m_nCrossSectionsNumber; i++)
         {
             m_vCrossSectionDiamX[i] = m_vCrossSectionD50[i] * pow((m_vCrossSectionRhos[i] - 1.0) * G / (NU*NU), 1.0/3.0);

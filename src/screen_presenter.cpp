@@ -25,14 +25,19 @@ using std::difftime;
 using std::localtime;
 using std::time;
 
+#include <cstdlib>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <sys/utsname.h>
+#endif
+
 #include <iostream>
 using std::cerr;
 using std::cout;
 using std::endl;
 using std::ios;
-
-// #include <psapi.h>
-#include <io.h>            // For isatty()
 
 #include <iomanip>
 using std::put_time;
@@ -50,8 +55,6 @@ using std::stringstream;
 #include <algorithm>
 using std::all_of;
 using std::transform;
-
-#include <windows.h>       // Needed for GetModuleFileName()
 
 #include "screen_presenter.h"
 #include "utils.h"
@@ -188,18 +191,16 @@ void CScreenPresenter::StartClock(CSimulation* m_pSimulation)
 
 
 //===============================================================================================================================
-//! Finds the folder (directory) in which the CoastalME executable is located
+//! Finds the folder (directory) in which the Barrier executable is located
 //===============================================================================================================================
 bool CScreenPresenter::bFindExeDir(char const* pcArg)
 {
    string strTmp;
    char szBuf[BUF_SIZE] = "";
 
-   if (0 != GetModuleFileName(nullptr, szBuf, BUF_SIZE))
-      strTmp = szBuf;
-   else
-      // It failed, so try another approach
-      strTmp = pcArg;
+
+    // It failed, so try another approach
+    strTmp = pcArg;
 
 
    // Neither approach has worked, so give up
@@ -218,11 +219,24 @@ bool CScreenPresenter::bFindExeDir(char const* pcArg)
 //===============================================================================================================================
 string CScreenPresenter::strGetComputerName()
 {
-   char* strComputerName;
-   // Being compiled to run under Windows, either by MS VC++, Borland C++, or Cygwin
-   strComputerName = getenv("COMPUTERNAME");
+    string strComputerName;
 
-   return strComputerName;
+#ifdef _WIN32
+    char buffer[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD size = sizeof(buffer);
+    if (GetComputerNameA(buffer, &size))
+    {
+        strComputerName = buffer;
+    }
+#else
+    struct utsname uts;
+    if (uname(&uts) == 0)
+    {
+        strComputerName = uts.nodename;
+    }
+#endif
+
+    return strComputerName;
 }
 
 //===============================================================================================================================
