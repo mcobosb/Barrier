@@ -339,7 +339,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
 	            	else {
 	            		if (strRH == "full") {
-	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", "eta", "level", "beta", "I1", "I2", "rho", "U", "c", "S", "Qb", "Qs", "Qt", "xl", "xr"};
+	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", "eta", "level", "beta", "rho", "U", "c", "S", "Qb", "Qs", "Qt", "xl", "xr"};
 	            		}
 	            		else {
 	            			vector<string> vOutputVariables;
@@ -1193,7 +1193,7 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 		int i = 0;
 		string strRec, strErr;
 
-		int nHydrographNo = -1;
+		int nHydrographNo = 0;
 		bool bReadHydrographsNo = false;
 		bool bHydrographLocation = true;
 
@@ -1443,7 +1443,7 @@ bool CDataReader::bParseDate(string const *strDate, int &nDay, int &nMonth, int 
    // For Windows, make sure has backslashes, not Unix-style slashes
    vector<string> vStrTmp = VstrSplit(strDate, SLASH);
 #else
-   vector<string> VstrTmp = VstrSplit(strDate, SLASH);
+   vector<string> vStrTmp = VstrSplit(strDate, SLASH);
 #endif
 
    if (vStrTmp.size() < 3)

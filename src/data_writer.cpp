@@ -228,10 +228,35 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
     const size_t count[2] = {1, static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber)};
 
     //! Write variable data
-    for (const auto & strOutputVariable : m_pSimulation->m_vOutputVariables) {
+    for (const auto& strOutputVariable : m_pSimulation->m_vOutputVariables) {
+        if (m_mVariableIds.find(strOutputVariable) == m_mVariableIds.end()) {
+            std::cerr << "Variable ID for '" << strOutputVariable << "' not found!" << std::endl;
+            continue;
+        }
+
         vector<double> data = m_pSimulation->vGetVariable(strOutputVariable);
-        status = nc_put_vara_double(m_ncId, m_mVariableIds.at(strOutputVariable),  start, count, data.data());
+
+        if (data.empty()) {
+            std::cerr << "No data available for variable '" << strOutputVariable << "'." << std::endl;
+            continue;
+        }
+
+        status = nc_put_vara_double(
+            m_ncId,
+            m_mVariableIds.at(strOutputVariable),
+            start,
+            count,
+            data.data()
+        );
+
+        if (status != NC_NOERR) {
+            std::cerr << "Error writing variable '" << strOutputVariable
+                << "': " << nc_strerror(status) << std::endl;
+            break;
+        }
     }
+
+
 
     if (status != 0) {
         cerr << "Error while creating output variables" << endl;

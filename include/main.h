@@ -35,6 +35,7 @@ using std::string;
 using std::ostream;
 using std::ostringstream;
 
+#include <climits> // Incluir este encabezado para LONG_MIN y LONG_MAX
 
 
 // Global constant

@@ -522,7 +522,6 @@ class CSimulation
     void getFirstHydraulicParameters(int nCrossSection);
     void getLastHydraulicParameters(int nCrossSection);
     void calculateTimestep();
-    void calculateIs();
     void calculateBoundaryConditions();
     void dryArea();
     void dryTerms();
