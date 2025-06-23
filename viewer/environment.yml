@@ -1,0 +1,13 @@
+name: barrier-env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.13
+  - geopandas
+  - dash
+  - dash-bootstrap-components
+  - dash-leaflet
+  - pandas
+  - numpy
+  - plotly
