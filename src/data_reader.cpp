@@ -89,23 +89,37 @@ void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 //======================================================================================================================
 void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 {
+    // Primero leer los paths de configuración
+    if (!bReadConfigurationPaths()) {
+        m_pSimulation->m_nStringError = 1;
+        m_pSimulation->m_bReturnError = true;
+        return;
+    }
+
+    // Construir la ruta completa al archivo SV_INI
+    string strConfigPath = m_strInputPath;
+    if (!strConfigPath.empty() && strConfigPath.back() != '/') {
+        strConfigPath += "/";
+    }
+    strConfigPath += SV_INI;
+
     // Create a read object
     ifstream InStream;
 
     // Try to open run details file for input
-    InStream.open(SV_INI.c_str(), ios::in);
+    InStream.open(strConfigPath.c_str(), ios::in);
 
     // Did it open OK?
     if (!InStream.is_open())
     {
         // Error: cannot open run details file for input
-    	m_pSimulation->m_nStringError = 1;
-    	m_pSimulation->m_bReturnError = true;
+        m_pSimulation->m_nStringError = 1;
+        m_pSimulation->m_bReturnError = true;
         return;
     }
 
     int nLine = 0;
-	int nRet = 0;
+    int nRet = 0;
     int i = 0;
     size_t nPos;
     string strRec, strErr;
@@ -128,8 +142,8 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             if (nPos == string::npos)
             {
                 // Error: badly formatted (no colon)
-            	m_pSimulation->m_nStringError = 3;
-            	return;
+                m_pSimulation->m_nStringError = 3;
+                return;
             }
 
             // Strip off leading portion (the bit up to and including the colon)
@@ -187,13 +201,11 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	                {
 	                    m_strRunName = strRH;
 
-	                    m_pSimulation->m_strOutFile = m_strOutPath;
-	                    m_pSimulation->m_strOutFile.append(strRH);
-	                    m_pSimulation->m_strOutFile.append(OUT_EXT);
+	                    // Crear directorio de salida usando el path base
+	                    m_strOutPath = m_strOutputBasePath + "/";
 
-	                    m_pSimulation->m_strLogFile = m_strOutPath;
-	                    m_pSimulation->m_strLogFile.append(strRH);
-	                    m_pSimulation->m_strLogFile.append(LOG_EXT);
+	                    m_pSimulation->m_strOutFile = m_strOutPath + strRH + OUT_EXT;
+	                    m_pSimulation->m_strLogFile = m_strOutPath + strRH + LOG_EXT;
 	                }
 	                break;
 
@@ -324,7 +336,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		double dTimeStep = strtod(strRH.c_str(), nullptr) * dMultiplier*m_pSimulation->m_dTimeFactor; // in hours
 
             		if (dTimeStep <= 0)
-            			strErr = "line " + to_string(nLine) + ": timestep of simulation must be > 0";
+            		 strErr = "line " + to_string(nLine) + ": timestep of simulation must be > 0";
 
             		if (dTimeStep >= m_pSimulation->dGetSimulationDuration())
             			strErr = "line " + to_string(nLine) + ": timestep of simulation must be < the duration of the simulation";
@@ -353,6 +365,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            			}
 	            		}
 	            	}
+					break;
 	            }
 
          		case 7: {
@@ -361,8 +374,11 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
          				strErr = "line " + to_string(nLine) + ": along channel geometry file name";
          			else
          			{
-         				m_strAlongChannelDataFilename = strRH;
-         				m_strAlongChannelDataFilename.append(".csv");
+         				m_strAlongChannelDataFilename = m_strInputPath;
+         				if (!m_strAlongChannelDataFilename.empty() && m_strAlongChannelDataFilename.back() != '/') {
+         					m_strAlongChannelDataFilename += "/";
+         				}
+         				m_strAlongChannelDataFilename += strRH + ".csv";
          			}
          			break;
          		}
@@ -370,11 +386,14 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 				case 8: {
 		            // Get the cross-sections channel geometry file name
             		if (strRH.empty())
-            			strErr = "line " + to_string(nLine) + ": cross sections file name";
+            		 strErr = "line " + to_string(nLine) + ": cross sections file name";
             		else
             		{
-            			m_strCrossSectionsFilename = strRH;
-            			m_strCrossSectionsFilename.append(".csv");
+            			m_strCrossSectionsFilename = m_strInputPath;
+            			if (!m_strCrossSectionsFilename.empty() && m_strCrossSectionsFilename.back() != '/') {
+            				m_strCrossSectionsFilename += "/";
+            			}
+            			m_strCrossSectionsFilename += strRH + ".csv";
             		}
             		break;
 	            }
@@ -407,8 +426,12 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	// Get the upward estuarine boundary condition filename
 	            	if (m_pSimulation->nGetUpwardEstuarineCondition() == 1 || m_pSimulation->nGetUpwardEstuarineCondition() == 2)
 	            	{
-	            		m_pSimulation->m_strUpwardBoundaryConditionFilename = strRH;
-	            		m_pSimulation->m_strUpwardBoundaryConditionFilename.append(".csv");
+	            		m_pSimulation->m_strUpwardBoundaryConditionFilename = m_strInputPath;
+	            		if (!m_pSimulation->m_strUpwardBoundaryConditionFilename.empty() && 
+	            			m_pSimulation->m_strUpwardBoundaryConditionFilename.back() != '/') {
+	            			m_pSimulation->m_strUpwardBoundaryConditionFilename += "/";
+	            		}
+	            		m_pSimulation->m_strUpwardBoundaryConditionFilename += strRH + ".csv";
 	            	}
 	            	else {
 	            		m_pSimulation->m_strUpwardBoundaryConditionFilename = "";
@@ -438,8 +461,12 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             	case 13: {
 		            // Get the tidal or water flow filename [if downward boundary condition = 1 or 2]
 		            if (m_pSimulation->nGetDownwardEstuarineCondition() == 1 || m_pSimulation->nGetDownwardEstuarineCondition() == 2) {
-	            		m_pSimulation->m_strDownwardBoundaryConditionFilename = strRH;
-	            		m_pSimulation->m_strDownwardBoundaryConditionFilename.append(".csv");
+	            		m_pSimulation->m_strDownwardBoundaryConditionFilename = m_strInputPath;
+	            		if (!m_pSimulation->m_strDownwardBoundaryConditionFilename.empty() && 
+	            			m_pSimulation->m_strDownwardBoundaryConditionFilename.back() != '/') {
+	            			m_pSimulation->m_strDownwardBoundaryConditionFilename += "/";
+	            		}
+	            		m_pSimulation->m_strDownwardBoundaryConditionFilename += strRH + ".csv";
 		            }
 	            	else {
 	            		m_pSimulation->m_strDownwardBoundaryConditionFilename = "";
@@ -448,7 +475,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	            	break;
             	}
 
-				case 14:
+				case 14:{
             		// Get the hydro file name
 					if (strRH.empty())
                			strErr = "line " + to_string(nLine) + ": hydro file name";
@@ -459,14 +486,19 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 					else
             		{
             			m_pSimulation->m_bHydroFile = true;
-               			m_strHydroFilename = strRH;
-						m_strHydroFilename.append(".csv");
+               			m_strHydroFilename = m_strInputPath;
+               			if (!m_strHydroFilename.empty() && m_strHydroFilename.back() != '/') {
+               				m_strHydroFilename += "/";
+               			}
+               			m_strHydroFilename += strRH + ".csv";
 					}
+					break;
+				}
 
             	case 15: {
             		// Get the courant number
             		if (strRH.empty())
-            			strErr = "line " + to_string(nLine) + ": courant number";
+            		 strErr = "line " + to_string(nLine) + ": courant number";
             		else
             			m_pSimulation->dSetCourantNumber(strtod(strRH.c_str(), nullptr));
             		break;
@@ -527,7 +559,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						strRH = strToLower(&strRH);
 
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": surface gradient method";
+						 strErr = "line " + to_string(nLine) + ": surface gradient method";
 
 						if  (strRH.find('y') != string::npos)
 							m_pSimulation->bSetDoSurfaceGradientMethod(true);
@@ -541,7 +573,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						strRH = strToLower(&strRH);
 
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": source Term balance";
+						 strErr = "line " + to_string(nLine) + ": source Term balance";
 
 						if  (strRH.find('y') != string::npos)
 							m_pSimulation->bSetDoSurfaceTermBalance(true);
@@ -555,7 +587,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						strRH = strToLower(&strRH);
 
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": beta coefficient";
+						 strErr = "line " + to_string(nLine) + ": beta coefficient";
 
 						if  (strRH.find('y') != string::npos)
 							m_pSimulation->bSetDoBetaCoefficient(true);
@@ -566,16 +598,16 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 
             	case 23: {
 						// Use Dry bed?
-						strRH = strToLower(&strRH);
+					 strRH = strToLower(&strRH);
 
-						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": dry bed";
+					 if (strRH.empty())
+						 strErr = "line " + to_string(nLine) + ": dry bed";
 
-						if  (strRH.find('y') != string::npos)
-							m_pSimulation->bSetDoDryBed(true);
-						else
-							m_pSimulation->bSetDoDryBed(false);
-						break;
+					 if  (strRH.find('y') != string::npos)
+						 m_pSimulation->bSetDoDryBed(true);
+					 else
+						 m_pSimulation->bSetDoDryBed(false);
+					 break;
             	}
 
             	case 24: {
@@ -583,13 +615,13 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						strRH = strToLower(&strRH);
 
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": Murillo condition";
+						 strErr = "line " + to_string(nLine) + ": Murillo condition";
 
-						if  (strRH.find('y') != string::npos)
-							m_pSimulation->bSetDoMurilloCondition(true);
-						else
-							m_pSimulation->bSetDoMurilloCondition(false);
-						break;
+					 if  (strRH.find('y') != string::npos)
+						 m_pSimulation->bSetDoMurilloCondition(true);
+					 else
+						 m_pSimulation->bSetDoMurilloCondition(false);
+					 break;
             	}
 
             	case 25: {
@@ -597,20 +629,24 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						strRH = strToLower(&strRH);
 
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": Compute water salinity?";
+						 strErr = "line " + to_string(nLine) + ": Compute water salinity?";
 
-						if  (strRH.find('y') != string::npos)
-							m_pSimulation->bSetDoWaterSalinity(true);
-						else
-							m_pSimulation->bSetDoWaterSalinity(false);
-						break;
+					 if  (strRH.find('y') != string::npos)
+						 m_pSimulation->bSetDoWaterSalinity(true);
+					 else
+						 m_pSimulation->bSetDoWaterSalinity(false);
+					 break;
             	}
 
 				case 26: {
 						// Get the salinity filename [if it is computed the salinity]
 						if (m_pSimulation->bGetDoWaterSalinity()) {
-							m_pSimulation->m_strInitialSalinityConditionFilename = strRH;
-							m_pSimulation->m_strInitialSalinityConditionFilename.append(".csv");
+							m_pSimulation->m_strInitialSalinityConditionFilename = m_strInputPath;
+							if (!m_pSimulation->m_strInitialSalinityConditionFilename.empty() && 
+	            				m_pSimulation->m_strInitialSalinityConditionFilename.back() != '/') {
+	            				m_pSimulation->m_strInitialSalinityConditionFilename += "/";
+	            			}
+	            			m_pSimulation->m_strInitialSalinityConditionFilename += strRH + ".csv";
 						}
 						else {
 							m_pSimulation->m_strInitialSalinityConditionFilename = "";
@@ -622,7 +658,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 				case 27: {
 						// Get the Upward salinity condition
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": - Upward salinity condition";
+						 strErr = "line " + to_string(nLine) + ": - Upward salinity condition";
 						else
 							m_pSimulation->nSetUpwardSalinityCondition(strtol(strRH.c_str(), nullptr, 10));
 						break;
@@ -631,7 +667,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 				case 28: {
 						// Get the Downward salinity condition
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": - Downward salinity condition";
+						 strErr = "line " + to_string(nLine) + ": - Downward salinity condition";
 						else
 							m_pSimulation->nSetDownwardSalinityCondition(strtol(strRH.c_str(), nullptr, 10));
 						break;
@@ -640,7 +676,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             	case 29: {
 						// Get the beta constant for salinity if compute water density
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": beta constant for salinity";
+						 strErr = "line " + to_string(nLine) + ": beta constant for salinity";
 
 						if (m_pSimulation->bGetDoWaterSalinity())
 						{
@@ -652,7 +688,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             	case 30: {
 						// Get the longitudinal dispersion constant, KH if compute water density
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": longitudinal dispersion constant, KH";
+						 strErr = "line " + to_string(nLine) + ": longitudinal dispersion constant, KH";
 
 						if (m_pSimulation->bGetDoWaterSalinity())
 						{
@@ -666,19 +702,19 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						strRH = strToLower(&strRH);
 
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": Compute sediment transport?";
+						 strErr = "line " + to_string(nLine) + ": Compute sediment transport?";
 
-						if  (strRH.find('y') != string::npos)
-							m_pSimulation->bSetDoSedimentTransport(true);
-						else
-							m_pSimulation->bSetDoSedimentTransport(false);
-						break;
+					 if  (strRH.find('y') != string::npos)
+						 m_pSimulation->bSetDoSedimentTransport(true);
+					 else
+						 m_pSimulation->bSetDoSedimentTransport(false);
+					 break;
 	            }
 
 	            case 32: {
 						// Equation for the sediment transport
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": equation for the sediment transport";
+						 strErr = "line " + to_string(nLine) + ": equation for the sediment transport";
 
 						if (m_pSimulation->bGetDoSedimentTransport())
 						{
@@ -690,12 +726,15 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             	case 33: {
 						// Get the sediment properties file name
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": sediment properties file name";
+						 strErr = "line " + to_string(nLine) + ": sediment properties file name";
 
 						if (m_pSimulation->bGetDoSedimentTransport())
 						{
-							m_strSedimentPropertiesFilename = strRH;
-							m_strSedimentPropertiesFilename.append(".csv");
+							m_strSedimentPropertiesFilename = m_strInputPath;
+							if (!m_strSedimentPropertiesFilename.empty() && m_strSedimentPropertiesFilename.back() != '/') {
+								m_strSedimentPropertiesFilename += "/";
+							}
+							m_strSedimentPropertiesFilename += strRH + ".csv";
 						}
 						break;
             	}
@@ -705,13 +744,13 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 						strRH = strToLower(&strRH);
 
 						if (strRH.empty())
-							strErr = "line " + to_string(nLine) + ": Compute water density?";
+						 strErr = "line " + to_string(nLine) + ": Compute water density?";
 
-						if  (strRH.find('y') != string::npos)
-							m_pSimulation->bSetDoWaterDensity(true);
-						else
-							m_pSimulation->bSetDoWaterDensity(false);
-						break;
+					 if  (strRH.find('y') != string::npos)
+						 m_pSimulation->bSetDoWaterDensity(true);
+					 else
+						 m_pSimulation->bSetDoWaterDensity(false);
+					 break;
 				}
 
             	default: {
@@ -1559,4 +1598,76 @@ bool CDataReader::bParseTime(string const *strTime, int &nHour, int &nMin, int &
    }
 
    return true;
+}
+
+//======================================================================================================================
+//! Read configuration.ini file to get input and output paths
+//======================================================================================================================
+bool CDataReader::bReadConfigurationPaths() {
+    std::ifstream configFile("configuration.ini");
+    
+    if (!configFile.is_open()) {
+        std::cerr << "Error: Cannot open configuration.ini file" << std::endl;
+        return false;
+    }
+    
+    std::string line;
+    bool inputPathFound = false;
+    bool outputPathFound = false;
+    
+    while (std::getline(configFile, line)) {
+        // Remove whitespace
+        line = strTrim(&line);
+        
+        // Skip empty lines and comments
+        if (line.empty() || line[0] == '#' || line[0] == ';') {
+            continue;
+        }
+        
+        // Find the '=' character
+        size_t equalPos = line.find('=');
+        if (equalPos == std::string::npos) {
+            continue;
+        }
+        
+        std::string key = line.substr(0, equalPos);
+        std::string value = line.substr(equalPos + 1);
+        
+        // Trim key and value
+        key = strTrim(&key);
+        value = strTrim(&value);
+        
+        // Remove quotes if present
+        if (value.front() == '"' && value.back() == '"') {
+            value = value.substr(1, value.length() - 2);
+        }
+        
+        // Check for input path
+        if (key == "input_path" || key == "INPUT_PATH") {
+            m_strInputPath = value;
+            inputPathFound = true;
+        }
+        // Check for output path
+        else if (key == "output_path" || key == "OUTPUT_PATH") {
+            m_strOutputBasePath = value;
+            outputPathFound = true;
+        }
+    }
+    
+    configFile.close();
+    
+    if (!inputPathFound) {
+        std::cerr << "Error: input_path not found in configuration.ini" << std::endl;
+        return false;
+    }
+    
+    if (!outputPathFound) {
+        std::cerr << "Error: output_path not found in configuration.ini" << std::endl;
+        return false;
+    }
+    
+    std::cout << "      - Input path: " << m_strInputPath << std::endl;
+    std::cout << "      - Output path: " << m_strOutputBasePath << std::endl;
+    
+    return true;
 }

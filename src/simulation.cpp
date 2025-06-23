@@ -530,7 +530,12 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     // Avoid overwriting the last line
     cout << endl;
-    writer.nCloseNetCDFFile(this);
+    writer.nCloseNetCDFFile();
+
+    // Cerrar log file si está abierto
+    if (LogStream.is_open()) {
+        LogStream.close();
+    }
 }
 
 
@@ -583,13 +588,16 @@ void CSimulation::initializeVectors()
     m_vCrossSectionD2Factor = vOnes;
 
     const int nTimestepsNumber = static_cast<int> (m_dSimDuration/m_dSimTimestep) + 1;
-    m_vOutputTimesIds = vector<int>(nTimestepsNumber, 0);
+    
+    // Reservar espacio antes del bucle paralelo
+    m_vOutputTimesIds.resize(nTimestepsNumber);
+    m_vOutputTimes.resize(nTimestepsNumber);
 
     #pragma omp parallel for
     for (int i = 0; i < nTimestepsNumber; i++)
     {
         m_vOutputTimesIds[i] = i;
-        m_vOutputTimes.push_back(static_cast<double>(i)*m_dSimTimestep);
+        m_vOutputTimes[i] = static_cast<double>(i) * m_dSimTimestep;  // Usar [] en lugar de push_back
     }
 }
 
@@ -599,8 +607,12 @@ void CSimulation::initializeVectors()
 void CSimulation::calculateBedSlope() {
     double dX1;
     double dX2;
+    
+    // Reservar espacio antes del bucle paralelo
+    m_vCrossSectionBedSlopeDirection.resize(m_nCrossSectionsNumber);
+    
     //Calculate S0
-    #pragma omp parallel for
+    #pragma omp parallel for private(dX1, dX2)
     for (int i = 0; i < m_nCrossSectionsNumber ; i++) {
         if (i == 0) {
             // Compute dx as forward difference
@@ -624,18 +636,20 @@ void CSimulation::calculateBedSlope() {
             //! Save dX into a vector
             m_vCrossSectionDX[i] = dX1;
         }
+        
+        // Usar acceso por índice en lugar de push_back
         if (m_vCrossSectionBedSlope[i] < 0)
         {
-            m_vCrossSectionBedSlopeDirection.push_back(-1);
+            m_vCrossSectionBedSlopeDirection[i] = -1;
         }
         else
         {
-            m_vCrossSectionBedSlopeDirection.push_back(1);
+            m_vCrossSectionBedSlopeDirection[i] = 1;
         }
+        
         // // Adapt the lower values (next to 1 mm)
         // if ((m_vCrossSectionBedSlope[i] < 1e-3) && (m_vCrossSectionBedSlope[i] >= 0)) m_vCrossSectionBedSlope[i] = 1e-3;
         // if ((m_vCrossSectionBedSlope[i] > -1e-3) && (m_vCrossSectionBedSlope[i] < 0)) m_vCrossSectionBedSlope[i] = -1e-3;
-
     }
 }
 
@@ -645,6 +659,10 @@ void CSimulation::calculateBedSlope() {
 //! Calculate the initial conditions along the estuary
 //======================================================================================================================
 void CSimulation::calculateAlongEstuaryInitialConditions() {
+
+    // Reservar espacio para todos los vectores antes de los bucles paralelos
+    m_vCrossSectionWaterDepth.resize(m_nCrossSectionsNumber);
+    m_vCrossSectionWaterElevation.resize(m_nCrossSectionsNumber);
 
     if (m_nInitialEstuarineCondition == 1) {
         //! Along estuary water flow given
@@ -663,23 +681,25 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
             vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
             vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
             vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
+            
+            // Reservar espacio para dSecondTerm antes del bucle interno
             vector<double> dSecondTerm;
+            dSecondTerm.resize(vCrossSectionAreaTmp.size());
 
             //! Second term to obtain the area from slope equation in open channels
-            #pragma omp parallel for
             for (size_t j = 0; j < vCrossSectionAreaTmp.size(); j++) {
-                dSecondTerm.push_back(vCrossSectionAreaTmp[j]*pow(vCrossSectionHydraulicRadiusTmp[j], 2.0/3.0));
+                dSecondTerm[j] = vCrossSectionAreaTmp[j]*pow(vCrossSectionHydraulicRadiusTmp[j], 2.0/3.0);
             }
+            
             m_vCrossSectionArea[i] = linearInterpolation1d(dManningFactor, dSecondTerm, vCrossSectionAreaTmp);
-            m_vCrossSectionWaterDepth.push_back(linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionElevationTmp));
-            m_vCrossSectionWaterElevation.push_back(m_vCrossSectionWaterDepth[i] + estuary[i].dGetZ());
-            }
+            m_vCrossSectionWaterDepth[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionElevationTmp);
+            m_vCrossSectionWaterElevation[i] = m_vCrossSectionWaterDepth[i] + estuary[i].dGetZ();
         }
+    }
     else if (m_nInitialEstuarineCondition == 2) {
         //! Along estuary elevation given
         #pragma omp parallel for
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            // m_vCrossSectionArea.push_back(m_vCrossSectionElevation[i]);
             vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
             vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
             vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
@@ -700,8 +720,8 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
             vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
             vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
 
-            m_vCrossSectionWaterDepth.push_back(-estuary[i].dGetZ());
-            m_vCrossSectionWaterElevation.push_back(0.0);
+            m_vCrossSectionWaterDepth[i] = -estuary[i].dGetZ();
+            m_vCrossSectionWaterElevation[i] = 0.0;
             m_vCrossSectionArea[i] = linearInterpolation1d(m_vCrossSectionWaterDepth[i],vCrossSectionElevationTmp, vCrossSectionAreaTmp);
             m_vCrossSectionHydraulicRadius[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
 
@@ -718,7 +738,6 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
 
     if (m_bDoWaterDensity)
     {
-		
         //! Compute along channel sediment parameter
         #pragma omp parallel for
         for (int i = 0; i < m_nCrossSectionsNumber; i++)
@@ -1334,7 +1353,7 @@ void CSimulation::updateBoundaries() {
     else if (nGetUpwardEstuarineCondition() == 1) {
         //! Reflected boundary condition
         m_vCrossSectionQ[0] = m_dUpwardBoundaryValue;
-        //! Corrector does not calculate i = 0, it is imposed
+        //! Corrector does not calculate i = 0, it es imposed
         m_vCrossSectionArea[0] = m_vCrossSectionArea[1];
     }
     else {
@@ -1342,7 +1361,7 @@ void CSimulation::updateBoundaries() {
         // TODO: transform area to elevation
         m_vCrossSectionArea[0] = m_dUpwardBoundaryValue;
         // m_vCorrectedCrossSectionArea[1] = m_vPredictedCrossSectionArea[1];
-        //! Corrector does not calculate i = 0, it is imposed
+        //! Corrector does not calculate i = 0, it es imposed
         m_vCrossSectionQ[0] = m_vCrossSectionQ[1];
     }
 
@@ -1490,7 +1509,7 @@ void CSimulation::mergePredictorCorrector() {
             else {
                 if (a2_med[i] < 0)
                 {
-                    if (i != m_nCrossSectionsNumber-2)
+                    if (i != m_nCrossSectionsNumber-1)
                     {
                         r2_med[i] = alfa2_med[i+1]/alfa2_med[i];
                     }
@@ -1523,13 +1542,14 @@ void CSimulation::mergePredictorCorrector() {
                 fi1_med[i] = dMaxVectorValue({0.0, dMinVectorValue({1., r1_med[i]})});
                 fi2_med[i] = dMaxVectorValue({0.0, dMinVectorValue({1., r2_med[i]})});
             }
-            else if (nGetEquationLimiterFlux() == 2)
+ else if (nGetEquationLimiterFlux() == 2)
             {
                 //! Roe's Superbee
                 fi1_med[i] = dMaxVectorValue({0.0, dMinVectorValue({2*r1_med[i], 1.}), dMinVectorValue({r1_med[i], 2.})});
                 fi2_med[i] = dMaxVectorValue({0.0, dMinVectorValue({2*r2_med[i], 1.}), dMinVectorValue({r2_med[i], 2.})});
             }
             else if (nGetEquationLimiterFlux() == 3)
+
             {
                 //! Van Leer
                 fi1_med[i] = (fabs(r1_med[i]) + r1_med[i])/(1+fabs(r1_med[i]));
@@ -1548,7 +1568,7 @@ void CSimulation::mergePredictorCorrector() {
             vFactor2[i] = alfa2_med[i]*psi2_med[i]*(1-m_dLambda*fabs(a2_med[i]))*(1-fi2_med[i]);
 
             m_vCrossSectionD1Factor[i+1] = 0.5*(vFactor1[i] + vFactor2[i]);
-            m_vCrossSectionD2Factor[i+1] = 0.5*(vFactor1[i]*a1_med[i] + vFactor2[i]*a2_med[i-1]);
+            m_vCrossSectionD2Factor[i+1] = 0.5*(vFactor1[i]*a1_med[i] + vFactor2[i]*a2_med[i]);
         }
         m_vCrossSectionD1Factor[0] = m_vCrossSectionD1Factor[1];
         m_vCrossSectionD2Factor[0] = m_vCrossSectionD2Factor[1];

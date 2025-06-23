@@ -79,7 +79,7 @@ CScreenPresenter::~CScreenPresenter() = default;
 //===============================================================================================================================
 //! The nDoSimulation member function of CSimulation sets up and runs the simulation
 //===============================================================================================================================
-void CScreenPresenter::StartingRun(int nArg, char const* pcArgv[], CSimulation* m_pSimulation)
+void CScreenPresenter::StartingRun([[maybe_unused]] int nArg, char const* pcArgv[], CSimulation* m_pSimulation)
 {
    // ================================================== initialization section ================================================
    // Hello, World!
@@ -196,7 +196,7 @@ void CScreenPresenter::StartClock(CSimulation* m_pSimulation)
 bool CScreenPresenter::bFindExeDir(char const* pcArg)
 {
    string strTmp;
-   char szBuf[BUF_SIZE] = "";
+   // char szBuf[BUF_SIZE] = "";
 
 
     // It failed, so try another approach

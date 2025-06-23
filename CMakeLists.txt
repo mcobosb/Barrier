@@ -1,39 +1,85 @@
 # Requerir la versión mínima de CMake.
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
 # Definir el nombre del proyecto.
-project(SV)
+project(barrier VERSION 1.0.0 LANGUAGES CXX)
 
 # Establecer el estándar de C++.
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Establecer el modo de depuración y asegurar que no se optimiza el código en depuración
-# que no permita inspeccionar todos los métodos y variables (Release or Debug)
-set(CMAKE_BUILD_TYPE Debug)
+# Establecer el tipo de build por defecto
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
+endif()
 
-# Incluir el directorio de cabeceras para el proyecto.
-include_directories(include)
+# Opciones de compilación modernas
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic ")
+else()
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+endif()
 
-# Agregar ejecutable y especificar los archivos fuente.
-add_executable(SV src/main.cpp src/simulation.cpp src/screen_presenter.cpp src/data_reader.cpp
-        src/utils.cpp src/error_handling.cpp src/cross_section.cpp src/hydrograph.cpp src/data_writer.cpp
-        src/data_writer.cpp)
+# Usar target-based approach en lugar de include_directories globales
+add_executable(barrier 
+    src/main.cpp 
+    src/simulation.cpp 
+    src/screen_presenter.cpp 
+    src/data_reader.cpp
+    src/utils.cpp 
+    src/error_handling.cpp 
+    src/cross_section.cpp 
+    src/hydrograph.cpp 
+    src/data_writer.cpp
+)
 
-# Busca la ruta de las cabeceras de NetCDF
-find_path(NETCDF_INCLUDE_DIR netcdf.h
-        HINTS "C:/msys64/mingw64/include"
-        REQUIRED)
+# Propiedades del target
+target_include_directories(barrier PRIVATE include)
 
-# Busca la biblioteca de NetCDF
-find_library(NETCDF_LIBRARY NAMES netcdf
-        HINTS "C:/msys64/mingw64/lib"
-        REQUIRED)
+# Buscar dependencias usando métodos modernos
+find_package(PkgConfig REQUIRED)
 
-set(STATUS ${NETCDF_INCLUDE_DIR})
-set(STATUS ${NETCDF_LIBRARY})
+# NetCDF (librería científica)
+pkg_check_modules(NETCDF REQUIRED netcdf)
+if(NETCDF_FOUND)
+    target_include_directories(barrier PRIVATE ${NETCDF_INCLUDE_DIRS})
+    target_link_libraries(barrier PRIVATE ${NETCDF_LIBRARIES})
+    target_compile_definitions(barrier PRIVATE ${NETCDF_CFLAGS_OTHER})
+endif()
 
-# Añadir directorios de cabeceras
-target_include_directories(SV PRIVATE ${NETCDF_INCLUDE_DIR})
+# OpenMP para paralelización
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(barrier PUBLIC OpenMP::OpenMP_CXX)
+endif()
 
-# Enlazar la biblioteca de NetCDF
-target_link_libraries(SV PRIVATE ${NETCDF_LIBRARY})
+# Threads para programación concurrente
+find_package(Threads REQUIRED)
+target_link_libraries(barrier PUBLIC Threads::Threads)
+
+# Librerías matemáticas
+target_link_libraries(barrier PUBLIC m)
+
+# Opciones adicionales para mejor debugging
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(barrier PRIVATE DEBUG_MODE)
+    target_compile_options(barrier PRIVATE 
+        -ggdb3 
+        -fno-omit-frame-pointer
+        -fsanitize-address-use-after-scope
+        -fno-optimize-sibling-calls
+    )
+endif()
+
+# Configuración específica para compiladores
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(barrier PUBLIC -fconcepts-diagnostics-depth=3)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(barrier PUBLIC -fcolor-diagnostics)
+endif()
+
+# Información de build
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")

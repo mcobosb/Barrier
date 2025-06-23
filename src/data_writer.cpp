@@ -17,6 +17,7 @@
 
 #include <sstream>
 using std::stringstream;
+#include <cstring>  // Para strlen
 
 #include <iostream>
 using std::cerr;
@@ -122,8 +123,10 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["Qb"]["units"] = "m";
 }
 
-CDataWriter::~CDataWriter() = default;
-
+//======================================================================================================================
+//! Class destructor
+//======================================================================================================================
+CDataWriter::~CDataWriter() {}
 
 
 //======================================================================================================================
@@ -132,16 +135,21 @@ CDataWriter::~CDataWriter() = default;
 void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     //! Create a new NetCDF file
     int status = nc_create(m_pSimulation->m_strOutFile.c_str(), NC_NETCDF4 | NC_CLOBBER, &m_ncId);
+    if (status != NC_NOERR) {
+        std::cerr << "Error creating NetCDF file: " << nc_strerror(status) << std::endl;
+        return;
+    }
 
     //! Define the dimensions: x and t
     //==================================================================================================================
     nc_def_dim(m_ncId, "x", static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber), &n_XId);
     nc_def_var(m_ncId, "x", NC_DOUBLE, 1, &n_XId, &n_VariableId);
 
-    // Long name
-    nc_put_att_text(m_ncId, n_VariableId, "long_name", 30, "along estuary coordinate");
-    // Units
-    nc_put_att_text(m_ncId, n_VariableId, "units", 15, "m");
+    // Usar strlen() para obtener la longitud real de las cadenas
+    const char* x_long_name = "along estuary coordinate";
+    const char* x_units = "m";
+    nc_put_att_text(m_ncId, n_VariableId, "long_name", strlen(x_long_name), x_long_name);
+    nc_put_att_text(m_ncId, n_VariableId, "units", strlen(x_units), x_units);
 
     if (m_pSimulation->m_nLogFileDetail == 2) {
         size_t time_len = NC_UNLIMITED;  // Unlimited time
@@ -149,59 +157,86 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     }
     else {
         nc_def_dim(m_ncId, "time", static_cast<size_t>(m_pSimulation->m_vOutputTimes.size()), &n_TId);
-        nc_def_var(m_ncId, "time", NC_DOUBLE, 1,&n_TId, &n_VariableId);
+        nc_def_var(m_ncId, "time", NC_DOUBLE, 1, &n_TId, &n_VariableId);
+        
+        // Usar strlen() para la variable tiempo también
+        const char* time_long_name = "time";
+        const char* time_units = "s";
+        nc_put_att_text(m_ncId, n_VariableId, "long_name", strlen(time_long_name), time_long_name);
+        nc_put_att_text(m_ncId, n_VariableId, "units", strlen(time_units), time_units);
     }
-    // Long name
-    nc_put_att_text(m_ncId, n_VariableId, "long_name", 30, "time");
-    // Units
-    nc_put_att_text(m_ncId, n_VariableId, "units", 15, "s");
 
     // Define the variable with two dimensions (time, x)
     //==================================================================================================================
     n_DimensionsIds[0] = n_TId;
     n_DimensionsIds[1] = n_XId;
 
+    // Limpiar el mapa de IDs de variables antes de llenarlo
+    m_mVariableIds.clear();
+
     for (const auto & m_vOutputVariable : m_pSimulation->m_vOutputVariables) {
         const char *outputVariableName = m_vOutputVariable.c_str();
-        nc_def_var(m_ncId, outputVariableName, NC_DOUBLE, 2, n_DimensionsIds, &n_VariableId);
+        int varId;  // Variable local para cada variable
+        
+        status = nc_def_var(m_ncId, outputVariableName, NC_DOUBLE, 2, n_DimensionsIds, &varId);
+        if (status != NC_NOERR) {
+            std::cerr << "Error defining variable '" << outputVariableName 
+                      << "': " << nc_strerror(status) << std::endl;
+            continue;
+        }
 
-        // Long name
-        nc_put_att_text(m_ncId, n_VariableId, "long_name", 30, strGetVariableMetadata(outputVariableName, "longname").c_str());
+        // Obtener metadatos y usar su longitud real
+        std::string longname = strGetVariableMetadata(outputVariableName, "longname");
+        std::string units = strGetVariableMetadata(outputVariableName, "units");
+        std::string description = strGetVariableMetadata(outputVariableName, "description");
 
-        // Units
-        nc_put_att_text(m_ncId, n_VariableId, "units", 15, strGetVariableMetadata(outputVariableName, "units").c_str());
+        // Usar la longitud real de cada cadena
+        if (!longname.empty()) {
+            nc_put_att_text(m_ncId, varId, "long_name", longname.length(), longname.c_str());
+        }
+        
+        if (!units.empty()) {
+            nc_put_att_text(m_ncId, varId, "units", units.length(), units.c_str());
+        }
+        
+        if (!description.empty()) {
+            nc_put_att_text(m_ncId, varId, "description", description.length(), description.c_str());
+        }
 
-        // Description
-        nc_put_att_text(m_ncId, n_VariableId, "description", 50, strGetVariableMetadata(outputVariableName, "description").c_str());
-
-        //! Include the variable Id to the dictionary
-        m_mVariableIds[outputVariableName] = n_VariableId;
+        //! Guardar el ID específico de cada variable
+        m_mVariableIds[outputVariableName] = varId;
     }
 
-    //! Include global attributes
-    nc_put_att_text(m_ncId, NC_GLOBAL, "Program", 40, NAME);
-    nc_put_att_text(m_ncId, NC_GLOBAL, "Author", 20, AUTHOR);
-    nc_put_att_text(m_ncId, NC_GLOBAL, "Version", 17, VERSION);
+    //! Include global attributes - usar longitud real
+    const char* program_name = NAME;
+    const char* author_name = AUTHOR;
+    const char* version_name = VERSION;
+    
+    nc_put_att_text(m_ncId, NC_GLOBAL, "Program", strlen(program_name), program_name);
+    nc_put_att_text(m_ncId, NC_GLOBAL, "Author", strlen(author_name), author_name);
+    nc_put_att_text(m_ncId, NC_GLOBAL, "Version", strlen(version_name), version_name);
 
     //! Include running time
-    const time_t t = time(nullptr);           // Get the current time
+    const time_t t = time(nullptr);
     const tm* m_tSysTime = localtime(&t);
 
-    // Capture the output of time
     ostringstream oss;
-    oss << put_time(m_tSysTime, "%Y-%m-%d %H:%M:%S"); // Formatear la fecha y hora
+    oss << put_time(m_tSysTime, "%Y-%m-%d %H:%M:%S");
 
-    // Give format to time
     const string formatted_time = oss.str();
-    nc_put_att_text(m_ncId, NC_GLOBAL, "Running on", 40, formatted_time.c_str());
+    nc_put_att_text(m_ncId, NC_GLOBAL, "Running on", formatted_time.length(), formatted_time.c_str());
 
     // End the definition of NetCDF file
-    nc_enddef(m_ncId);
+    status = nc_enddef(m_ncId);
+    if (status != NC_NOERR) {
+        std::cerr << "Error ending NetCDF definition: " << nc_strerror(status) << std::endl;
+        return;
+    }
 
-    //! Write coordenates and times. NetCDF only allow to write data outside the definition mode
-    nc_put_var_double(m_ncId,  n_XId, m_pSimulation->m_vCrossSectionX.data());
+    //! Write coordinates and times
+    nc_put_var_double(m_ncId, n_XId, m_pSimulation->m_vCrossSectionX.data());
     if (m_pSimulation->m_nLogFileDetail != 2) {
-        nc_put_var_double(m_ncId,  n_TId, m_pSimulation->m_vOutputTimes.data());
+        nc_put_var_double(m_ncId, n_TId, m_pSimulation->m_vOutputTimes.data());
     }
 }
 
@@ -268,9 +303,18 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
 //======================================================================================================================
 //! Close the NetCDF file
 //======================================================================================================================
-void CDataWriter::nCloseNetCDFFile(CSimulation *m_pSimulation) const
+void CDataWriter::nCloseNetCDFFile()
 {
-    if (const int status = nc_close(m_ncId); status != NC_NOERR) {
-        m_pSimulation->m_nStringError = 4;
+    // Verificar que el archivo esté abierto antes de cerrarlo
+    if (m_ncId < 0) {
+        std::cout << "NetCDF file already closed or never opened" << std::endl;
+        return;
     }
+        
+    int status = nc_close(m_ncId);
+    if (status != NC_NOERR) {
+        std::cerr << "Error closing NetCDF file: " << nc_strerror(status) << std::endl;
+    }
+    // Marcar como cerrado independientemente del resultado
+    m_ncId = -1;
 }

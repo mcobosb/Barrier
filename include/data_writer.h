@@ -26,14 +26,21 @@ using std::map;
 class CSimulation;
 
 class CDataWriter {
-
-    //! The CSimulation class is a friend of the CDataWriter class
-    friend class CSimulation;
-
+public:
+    CDataWriter();
+    ~CDataWriter();
+    
+    // Prevenir copia para evitar problemas con el ID del NetCDF
+    CDataWriter(const CDataWriter&) = delete;
+    CDataWriter& operator=(const CDataWriter&) = delete;
+    CDataWriter(CDataWriter&&) = delete;
+    CDataWriter& operator=(CDataWriter&&) = delete;
+    
 private:
+    mutable int m_ncId = -1;  // Hacer m_ncId mutable para poder modificarlo en métodos const
 
     //! Ids for x and t and NetCDF file
-    int n_XId, n_TId, m_ncId;
+    int n_XId, n_TId;
 
     //! Ids for every variable
     int n_VariableId;
@@ -56,9 +63,6 @@ private:
 
 public:
 
-    CDataWriter();
-    ~CDataWriter();
-
     //! Create the file with coordinates, time and variable which is definitions
     void nDefineNetCDFFile(const CSimulation* m_pSimulation);
 
@@ -69,7 +73,7 @@ public:
     void nSetOutputData(CSimulation* m_pSimulation) const;
 
     //! Close the NetCDF file
-    void nCloseNetCDFFile(CSimulation* m_pSimulation) const;
+    void nCloseNetCDFFile();
 };
 
 #endif // DATA_WRITER_H

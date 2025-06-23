@@ -41,7 +41,6 @@ CCrossSection::CCrossSection(){
     m_dElevation =
     m_dZ =
     m_dManningNumber =
-    m_dLeftRBAngle =
     m_dX_UTM =
     m_dY_UTM =
     m_dRightRBAngle =

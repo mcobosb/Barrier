@@ -103,6 +103,13 @@ private:
     static int nDoTimeUnits(string const*);
 
 
+    //! Path where input files are located
+    string m_strInputPath;
+
+    //! Path where output folder will be created
+    string m_strOutputBasePath;
+
+
 public:
 
      CDataReader();
@@ -140,6 +147,15 @@ public:
 
     //! Open log file for writing
     static void bOpenLogFile(CSimulation* m_pSimulation);
+
+    //! Read configuration.ini file to get input and output paths
+    bool bReadConfigurationPaths();
+
+    //! Get input path
+    string getInputPath() const { return m_strInputPath; }
+
+    //! Get output base path
+    string getOutputBasePath() const { return m_strOutputBasePath; }
 
 };
 #endif // DATA_READER_H
