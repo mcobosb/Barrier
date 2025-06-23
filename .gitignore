@@ -30,16 +30,28 @@
 *.exe
 *.out
 *.app
+barrier
 
+# Build directories
+build/
+cmake-build-*/
+
+# Testing
+tests/
+test/
+
+# Documentation
+docs/
+Doxygen/
+Doxyfile*
+
+# VS Code
+.vscode/
 
 # vs configuration
 .vs/
 out/
 CMakeSettings.json
-
-# Documentation
-Doxygen
-Doxyfile
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
