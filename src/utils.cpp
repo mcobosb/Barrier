@@ -100,7 +100,7 @@ double dMinVectorValue(const vector<double>& vec) {
 
     double minValue = vec[0]; // Starting value
 
-    for (int i = 1; i < vec.size(); ++i) {
+    for (size_t i = 1; i < vec.size(); ++i) {
         if (vec[i] < minValue) {
             minValue = vec[i]; // Update the min value
         }
@@ -120,7 +120,7 @@ double dMaxVectorValue(const vector<double>& vec) {
 
     double maxValue = vec[0]; // Starting value
 
-    for (int i = 1; i < vec.size(); ++i) {
+    for (size_t i = 1; i < vec.size(); ++i) {
         if (vec[i] > maxValue) {
             maxValue = vec[i]; // Update the max value
         }
