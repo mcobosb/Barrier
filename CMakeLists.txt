@@ -11,14 +11,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Establecer el tipo de build por defecto
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug)
+    set(CMAKE_BUILD_TYPE Debug)  # Cambiar de Debug a Release
 endif()
 
 # Opciones de compilación modernas
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic ")
+    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -fopenmp")  # Añadir -fopenmp
 else()
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+    # Para cualquier otro build type (como "Build")
+    set(CMAKE_CXX_FLAGS "-O2 -g -Wall -Wextra -fopenmp")
 endif()
 
 # Usar target-based approach en lugar de include_directories globales
@@ -48,10 +51,14 @@ if(NETCDF_FOUND)
     target_compile_definitions(barrier PRIVATE ${NETCDF_CFLAGS_OTHER})
 endif()
 
-# OpenMP para paralelización
-find_package(OpenMP)
+# OpenMP para paralelización - Mejorado
+find_package(OpenMP REQUIRED)  # Hacer requerido
 if(OpenMP_CXX_FOUND)
     target_link_libraries(barrier PUBLIC OpenMP::OpenMP_CXX)
+    target_compile_definitions(barrier PRIVATE _OPENMP)
+    message(STATUS "OpenMP found: ${OpenMP_CXX_VERSION}")
+else()
+    message(FATAL_ERROR "OpenMP not found but is required")
 endif()
 
 # Threads para programación concurrente
@@ -61,13 +68,14 @@ target_link_libraries(barrier PUBLIC Threads::Threads)
 # Librerías matemáticas
 target_link_libraries(barrier PUBLIC m)
 
-# Opciones adicionales para mejor debugging
+# Opciones adicionales para mejor debugging - Solo para Debug
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(barrier PRIVATE DEBUG_MODE)
     target_compile_options(barrier PRIVATE 
         -ggdb3 
         -fno-omit-frame-pointer
-        -fsanitize-address-use-after-scope
+        # Remover sanitizers temporalmente para evitar conflicts con OpenMP
+        # -fsanitize-address-use-after-scope
         -fno-optimize-sibling-calls
     )
 endif()
@@ -75,8 +83,14 @@ endif()
 # Configuración específica para compiladores
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(barrier PUBLIC -fconcepts-diagnostics-depth=3)
+    # Asegurar que OpenMP funcione con GCC
+    target_compile_options(barrier PUBLIC -fopenmp)
+    target_link_options(barrier PUBLIC -fopenmp)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(barrier PUBLIC -fcolor-diagnostics)
+    # Configuración específica para Clang con OpenMP
+    target_compile_options(barrier PUBLIC -fopenmp)
+    target_link_options(barrier PUBLIC -fopenmp)
 endif()
 
 # Información de build
