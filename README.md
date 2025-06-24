@@ -202,15 +202,15 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ## 🙏 Acknowledgments
 
-- **BARRIER Project**: Building Analysis capacity to improve the Resilience of the Guadalquivir river estuary
-- **Research Team**: University contributors and collaborators
-- **Funding**: EU research grants and institutional support
+- **BARRIER Project**: Building Analysis capacity to improve the Resilience of the Guadalquivir river estuary (https://barrier.dinamicambiental.es)
+- **Research Team**: Asunción Baquerizo Azofra, Manuel Díez Minguito, Agustín Millares Valenzuela
+- **Funding**: This work has been carried out within the framework of the project BARRIER. Ref.: PID2023-148298OA-I00. Call 2023 of <<Proyectos de Generación de Conocimiento>>. Ministerior de Ciencia, Innovación y Universidades
 
 ## 📧 Contact
 
 **Project Maintainer**: Manuel Cobos Budia  
-**Email**: [your.email@university.edu]  
-**Institution**: [Your University/Research Center]
+**Email**: mcobosb@ugr.es 
+**Institution**: Environmental Fluid Dynamics Group (https://dinamicambiental.es, University of Granada)
 
 ---
 
