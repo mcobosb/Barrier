@@ -1232,7 +1232,7 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 		int i = 0;
 		string strRec, strErr;
 
-		int nHydrographNo = 0;
+		int nHydrographNo = -1;
 		bool bReadHydrographsNo = false;
 		bool bHydrographLocation = true;
 
