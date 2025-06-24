@@ -334,112 +334,13 @@ app.layout = dbc.Container(
                 )
             ]
         ),
-        # Main content
+        # Main content - reorganized layout
         dbc.Row(
             [
-                # Control panel
+                # Left column - River map with integrated control panel
                 dbc.Col(
                     [
-                        dbc.Card(
-                            [
-                                dbc.CardHeader(
-                                    [
-                                        html.H5(
-                                            [
-                                                html.I(className="fas fa-cogs me-2"),
-                                                "Control Panel",
-                                            ],
-                                            className="mb-0",
-                                            style={"color": "#495057"},
-                                        )
-                                    ]
-                                ),
-                                dbc.CardBody(
-                                    [
-                                        html.Div(
-                                            [
-                                                dbc.Label(
-                                                    [
-                                                        html.I(
-                                                            className="fas fa-chart-line me-2"
-                                                        ),
-                                                        "Parameter:",
-                                                    ],
-                                                    style={
-                                                        "fontWeight": "bold",
-                                                        "color": "#495057",
-                                                    },
-                                                ),
-                                                dcc.Dropdown(
-                                                    id="parameter-dropdown",
-                                                    options=[
-                                                        {
-                                                            "label": "🌊 Current Velocity (m/s)",
-                                                            "value": "velocity",
-                                                        },
-                                                        {
-                                                            "label": "🌡️ Temperature (°C)",
-                                                            "value": "temperature",
-                                                        },
-                                                        {
-                                                            "label": "🧂 Salinity (PSU)",
-                                                            "value": "salinity",
-                                                        },
-                                                    ],
-                                                    value="velocity",
-                                                    style={"marginBottom": "20px"},
-                                                ),
-                                            ]
-                                        ),
-                                        html.Div(
-                                            [
-                                                dbc.Label(
-                                                    [
-                                                        html.I(
-                                                            className="fas fa-map-marker-alt me-2"
-                                                        ),
-                                                        "Monitoring Point:",
-                                                    ],
-                                                    style={
-                                                        "fontWeight": "bold",
-                                                        "color": "#495057",
-                                                    },
-                                                ),
-                                                dcc.Dropdown(
-                                                    id="monitoring-point-dropdown",
-                                                    options=[
-                                                        {"label": name, "value": name}
-                                                        for name in MONITORING_POINTS.keys()
-                                                    ],
-                                                    value="Seville",
-                                                    style={"marginBottom": "20px"},
-                                                ),
-                                            ]
-                                        ),
-                                        dbc.Button(
-                                            [
-                                                html.I(
-                                                    className="fas fa-sync-alt me-2"
-                                                ),
-                                                "Refresh Data",
-                                            ],
-                                            id="update-btn",
-                                            color="info",
-                                            className="w-100",
-                                            size="lg",
-                                        ),
-                                    ]
-                                ),
-                            ],
-                            className="shadow-sm",
-                            style={"border": "none"},
-                        )
-                    ],
-                    width=3,
-                ),
-                # Map section
-                dbc.Col(
-                    [
+                        # River Map with embedded control panel
                         dbc.Card(
                             [
                                 dbc.CardHeader(
@@ -456,21 +357,157 @@ app.layout = dbc.Container(
                                 ),
                                 dbc.CardBody(
                                     [
-                                        dl.Map(
-                                            id="river-map",
-                                            style={
-                                                "width": "100%",
-                                                "height": "450px",
-                                                "borderRadius": "8px",
-                                            },
-                                            center=[37.15, -6.1],  # Adjusted center
-                                            zoom=9,  # Adjusted zoom to show full extent
-                                            children=[
-                                                dl.TileLayer(
-                                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                        html.Div(
+                                            [
+                                                # Control panel floating over the map
+                                                html.Div(
+                                                    dbc.Card(
+                                                        [
+                                                            dbc.CardHeader(
+                                                                [
+                                                                    html.H6(
+                                                                        [
+                                                                            html.I(className="fas fa-cogs me-2"),
+                                                                            "Control Panel",
+                                                                        ],
+                                                                        className="mb-0",
+                                                                        style={
+                                                                            "color": "#495057",
+                                                                            "fontSize": "14px"
+                                                                        },
+                                                                    )
+                                                                ],
+                                                                className="py-2",
+                                                            ),
+                                                            dbc.CardBody(
+                                                                [
+                                                                    html.Div(
+                                                                        [
+                                                                            dbc.Label(
+                                                                                [
+                                                                                    html.I(
+                                                                                        className="fas fa-chart-line me-1"
+                                                                                    ),
+                                                                                    "Parameter:",
+                                                                                ],
+                                                                                style={
+                                                                                    "fontWeight": "bold",
+                                                                                    "color": "#495057",
+                                                                                    "fontSize": "12px",
+                                                                                },
+                                                                            ),
+                                                                            dcc.Dropdown(
+                                                                                id="parameter-dropdown",
+                                                                                options=[
+                                                                                    {
+                                                                                        "label": "🌊 Velocity",
+                                                                                        "value": "velocity",
+                                                                                    },
+                                                                                    {
+                                                                                        "label": "🌡️ Temperature",
+                                                                                        "value": "temperature",
+                                                                                    },
+                                                                                    {
+                                                                                        "label": "🧂 Salinity",
+                                                                                        "value": "salinity",
+                                                                                    },
+                                                                                ],
+                                                                                value="velocity",
+                                                                                style={
+                                                                                    "marginBottom": "10px",
+                                                                                    "fontSize": "12px",
+                                                                                },
+                                                                            ),
+                                                                        ]
+                                                                    ),
+                                                                    html.Div(
+                                                                        [
+                                                                            dbc.Label(
+                                                                                [
+                                                                                    html.I(
+                                                                                        className="fas fa-map-marker-alt me-1"
+                                                                                    ),
+                                                                                    "Point:",
+                                                                                ],
+                                                                                style={
+                                                                                    "fontWeight": "bold",
+                                                                                    "color": "#495057",
+                                                                                    "fontSize": "12px",
+                                                                                },
+                                                                            ),
+                                                                            dcc.Dropdown(
+                                                                                id="monitoring-point-dropdown",
+                                                                                options=[
+                                                                                    {"label": name, "value": name}
+                                                                                    for name in MONITORING_POINTS.keys()
+                                                                                ],
+                                                                                value="Seville",
+                                                                                style={
+                                                                                    "marginBottom": "10px",
+                                                                                    "fontSize": "12px",
+                                                                                },
+                                                                            ),
+                                                                        ]
+                                                                    ),
+                                                                    dbc.Button(
+                                                                        [
+                                                                            html.I(
+                                                                                className="fas fa-sync-alt me-1"
+                                                                            ),
+                                                                            "Refresh",
+                                                                        ],
+                                                                        id="update-btn",
+                                                                        color="info",
+                                                                        className="w-100",
+                                                                        size="sm",
+                                                                        style={"fontSize": "12px"},
+                                                                    ),
+                                                                ],
+                                                                className="py-2",
+                                                            ),
+                                                        ],
+                                                        className="shadow",
+                                                        style={
+                                                            "border": "none",
+                                                            "backgroundColor": "rgba(255, 255, 255, 0.95)",
+                                                            "backdropFilter": "blur(5px)",
+                                                            "width": "280px",
+                                                        },
+                                                    ),
+                                                    style={
+                                                        "position": "absolute",
+                                                        "top": "20px",
+                                                        "left": "20px",
+                                                        "zIndex": 1000,
+                                                        "pointerEvents": "auto",
+                                                    },
                                                 ),
-                                                dl.LayerGroup(id="data-layer"),
+                                                # Map component
+                                                dl.Map(
+                                                    id="river-map",
+                                                    style={
+                                                        "width": "100%",
+                                                        "height": "650px",
+                                                        "borderRadius": "8px",
+                                                    },
+                                                    center=[37.15, -6.1],
+                                                    zoom=9,
+                                                    zoomControl=False,  # Deshabilita el control de zoom por defecto
+                                                    children=[
+                                                        dl.TileLayer(
+                                                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                                        ),
+                                                        dl.LayerGroup(id="data-layer"),
+                                                        # Agregar control de zoom personalizado
+                                                        dl.ZoomControl(position="bottomright"),  # O la posición que prefieras
+                                                    ],
+                                                ),
                                             ],
+                                            style={
+                                                "position": "relative",
+                                                "width": "100%",
+                                                "height": "650px",
+                                            },
                                         )
                                     ],
                                     className="p-2",
@@ -480,56 +517,17 @@ app.layout = dbc.Container(
                             style={"border": "none"},
                         )
                     ],
-                    width=5,
+                    width=8,
                 ),
-                # Temporal evolution chart
+                # Right column - Distribution and Multi-Point Comparison (sin cambios)
                 dbc.Col(
                     [
+                        # Distribution chart
                         dbc.Card(
                             [
                                 dbc.CardHeader(
                                     [
                                         html.H5(
-                                            [
-                                                html.I(
-                                                    className="fas fa-chart-area me-2"
-                                                ),
-                                                "Temporal Evolution",
-                                            ],
-                                            className="mb-0",
-                                            style={"color": "#495057"},
-                                        )
-                                    ]
-                                ),
-                                dbc.CardBody(
-                                    [
-                                        dcc.Graph(
-                                            id="temporal-evolution",
-                                            style={"height": "450px"},
-                                        )
-                                    ],
-                                    className="p-2",
-                                ),
-                            ],
-                            className="shadow-sm",
-                            style={"border": "none"},
-                        )
-                    ],
-                    width=4,
-                ),
-            ],
-            className="mb-4",
-        ),
-        # Additional charts
-        dbc.Row(
-            [
-                dbc.Col(
-                    [
-                        dbc.Card(
-                            [
-                                dbc.CardHeader(
-                                    [
-                                        html.H6(
                                             [
                                                 html.I(
                                                     className="fas fa-chart-bar me-2"
@@ -551,53 +549,15 @@ app.layout = dbc.Container(
                                     className="p-2",
                                 ),
                             ],
-                            className="shadow-sm",
+                            className="shadow-sm mb-4",
                             style={"border": "none"},
-                        )
-                    ],
-                    width=4,
-                ),
-                dbc.Col(
-                    [
+                        ),
+                        # Multi-Point Comparison chart
                         dbc.Card(
                             [
                                 dbc.CardHeader(
                                     [
-                                        html.H6(
-                                            [
-                                                html.I(
-                                                    className="fas fa-scatter-chart me-2"
-                                                ),
-                                                "Spatial Distribution",
-                                            ],
-                                            className="mb-0",
-                                            style={"color": "#495057"},
-                                        )
-                                    ]
-                                ),
-                                dbc.CardBody(
-                                    [
-                                        dcc.Graph(
-                                            id="parameter-scatter",
-                                            style={"height": "300px"},
-                                        )
-                                    ],
-                                    className="p-2",
-                                ),
-                            ],
-                            className="shadow-sm",
-                            style={"border": "none"},
-                        )
-                    ],
-                    width=4,
-                ),
-                dbc.Col(
-                    [
-                        dbc.Card(
-                            [
-                                dbc.CardHeader(
-                                    [
-                                        html.H6(
+                                        html.H5(
                                             [
                                                 html.I(
                                                     className="fas fa-layer-group me-2"
@@ -613,7 +573,7 @@ app.layout = dbc.Container(
                                     [
                                         dcc.Graph(
                                             id="multipoint-comparison",
-                                            style={"height": "300px"},
+                                            style={"height": "350px"},
                                         )
                                     ],
                                     className="p-2",
@@ -637,8 +597,6 @@ app.layout = dbc.Container(
     [
         Output("data-layer", "children"),
         Output("parameter-histogram", "figure"),
-        Output("parameter-scatter", "figure"),
-        Output("temporal-evolution", "figure"),
         Output("multipoint-comparison", "figure"),
     ],
     [
@@ -745,52 +703,9 @@ def update_visualizations(n_clicks, selected_param, selected_point):
         yaxis_title="Frequency",
         height=280,
         showlegend=False,
+        margin=dict(l=40, r=40, t=40, b=40),
     )
     hist_fig.update_traces(marker_color="#17a2b8", opacity=0.7)
-
-    # Scatter plot
-    scatter_fig = px.scatter(
-        df_latest,
-        x="lon",
-        y="lat",
-        color=selected_param,
-        size="velocity",
-        color_continuous_scale="Viridis",
-        template=chart_template,
-    )
-    scatter_fig.update_layout(
-        title=f"{param_display} Spatial Distribution",
-        xaxis_title="Longitude (°)",
-        yaxis_title="Latitude (°)",
-        height=280,
-    )
-
-    # Update color bar title with units
-    scatter_fig.update_coloraxes(colorbar_title=param_display)
-
-    # Temporal evolution
-    point_id = MONITORING_POINTS[selected_point]["point_id"]
-    df_point = df_full[df_full["point_id"] == point_id].sort_values("timestamp")
-
-    temporal_fig = go.Figure()
-    temporal_fig.add_trace(
-        go.Scatter(
-            x=df_point["timestamp"],
-            y=df_point[selected_param],
-            mode="lines+markers",
-            name=f"{param_display} at {selected_point}",
-            line=dict(color="#17a2b8", width=3),
-            marker=dict(size=6, color="#17a2b8"),
-        )
-    )
-    temporal_fig.update_layout(
-        title=f"{param_display} Evolution at {selected_point}",
-        xaxis_title="Time",
-        yaxis_title=param_display,
-        height=430,
-        template=chart_template,
-        showlegend=False,
-    )
 
     # Multi-point comparison
     multipoint_fig = go.Figure()
@@ -823,11 +738,12 @@ def update_visualizations(n_clicks, selected_param, selected_point):
         title=f"{param_display} Comparison",
         xaxis_title="Time",
         yaxis_title=param_display,
-        height=280,
+        height=330,
         template=chart_template,
+        margin=dict(l=40, r=40, t=40, b=40),
     )
 
-    return markers, hist_fig, scatter_fig, temporal_fig, multipoint_fig
+    return markers, hist_fig, multipoint_fig
 
 
 if __name__ == "__main__":
