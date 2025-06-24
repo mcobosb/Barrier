@@ -24,7 +24,7 @@ using std::cerr;
 using std::cout;
 using std::endl;
 
-#include <hydrograph.h>
+#include "hydrograph.h"
 
 //===============================================================================================================================
 //! The CHydrograph constructor
