@@ -36,6 +36,10 @@ barrier
 build/
 cmake-build-*/
 
+
+# others
+others/
+
 # Testing
 tests/
 test/
