@@ -52,10 +52,24 @@ public:
     void dSetHydrographYLocation(double dHydroYLocation);
     void dAppend2Vector(const string& strItem, double dValue);
 
-    //! Vector getter
-    vector<double> vGetTime();
-    vector<double> vGetQ() ;
+    //! Vector getter - devolver referencias constantes para evitar copias
+    [[nodiscard]] const vector<double>& vGetTime() const;
+    [[nodiscard]] const vector<double>& vGetQ() const;
 
+    //! Get the size of the time series
+    [[nodiscard]] size_t size() const;
+
+    //! Check if the vectors are synchronized (same size)
+    [[nodiscard]] bool isValid() const;
+
+    //! Clear all data
+    void clear();
+
+    //! Add a time-flow pair
+    void addTimeFlowPair(double time, double flow);
+
+    //! Get interpolated flow at given time
+    [[nodiscard]] double getFlowAtTime(double time) const;
 };
 
 #endif // HYDROGRAPH_H
