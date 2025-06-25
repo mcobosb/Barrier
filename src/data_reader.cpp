@@ -87,8 +87,7 @@ void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 //======================================================================================================================
 //! Read .ini file
 //======================================================================================================================
-void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
-{
+void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation) {
     // Primero leer los paths de configuración
     if (!bReadConfigurationPaths()) {
         m_pSimulation->m_nStringError = 1;
@@ -228,24 +227,21 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		vStrTmp = VstrSplit(&strRH, SPACE);
 
             		// Both date and time here?
-            		if (vStrTmp.size() < 2)
-            		{
-               			strErr = "line " + to_string(nLine) + ": must have both date and time for simulation start in '" + m_strConfig + "'";
-               			break;
+            		if (vStrTmp.size() < 2) {
+            			strErr = "line " + to_string(nLine) + ": must have both date and time for simulation start in '" + m_strConfig + "'";
+            			break;
             		}
 
             		// OK, first sort out the time
-            		if (! bParseTime(&vStrTmp[0], nHour, nMin, nSec))
-            		{
-               			strErr = "line " + to_string(nLine) + ": could not understand simulation start time in '" + m_strConfig + "'";
-               			break;
+            		if (! bParseTime(&vStrTmp[0], nHour, nMin, nSec)) {
+            			strErr = "line " + to_string(nLine) + ": could not understand simulation start time in '" + m_strConfig + "'";
+            			break;
             		}
 
             		// Next sort out the date
-            		if (! bParseDate(&vStrTmp[1], nDay, nMonth, nYear))
-            		{
-               			strErr = "line " + to_string(nLine) + ": could not understand simulation start date in '" + m_strConfig + "'";
-               			break;
+            		if (! bParseDate(&vStrTmp[1], nDay, nMonth, nYear)) {
+            			strErr = "line " + to_string(nLine) + ": could not understand simulation start date in '" + m_strConfig + "'";
+            			break;
             		}
 
             		// Store simulation start time and date
@@ -255,6 +251,9 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		m_nSimStartDay = nDay;
             		m_nSimStartMonth = nMonth;
             		m_nSimStartYear = nYear;
+
+            		// ✅ TRANSFERIR: Datos a CSimulation
+            		m_pSimulation->setSimulationStartDateTime(nYear, nMonth, nDay, nHour, nMin, nSec);
             		break;
 
 	            case 4: {
@@ -300,9 +299,9 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 				case 5: {
 					double dMultiplier;
 					// Timestep of simulation (in hours or days)
-            		strRH = strToLower(&strRH);
+            	 strRH = strToLower(&strRH);
 
-            		dMultiplier = dGetTimeMultiplier(&strRH);
+            	 dMultiplier = dGetTimeMultiplier(&strRH);
 	            	//! TODO 007: Options for another time unit
 	            	m_pSimulation->m_dTimeFactor = 1.0;
 
@@ -341,8 +340,8 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		if (dTimeStep >= m_pSimulation->dGetSimulationDuration())
             			strErr = "line " + to_string(nLine) + ": timestep of simulation must be < the duration of the simulation";
 
-            		m_pSimulation->dSetSimulationTimestep(dTimeStep);
-            		break;
+            	 m_pSimulation->dSetSimulationTimestep(dTimeStep);
+            	 break;
 	            }
 
             	case 6: {
@@ -1369,7 +1368,6 @@ int CDataReader::nSimulationTimeMultiplier(string const *strIn)
     // Next set up the correct multiplier, since m_dTimeStep is in hours
     switch (nDoTimeUnits(strIn))
     {
-    	//! TODO 023: multiplier for seconds
 	    case TIME_SECONDS:
     		m_dDurationUnitsMultiplier = 1; // Multiplier for seconds
     		m_strDurationUnits = "seconds";

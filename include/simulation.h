@@ -23,6 +23,10 @@ using std::localtime;
 using std::time;
 using std::time_t;
 
+#include <iomanip>  // Para setfill, setw
+using std::setfill;
+using std::setw;
+
 #include <string>
 using std::string;
 
@@ -545,5 +549,53 @@ class CSimulation
 
     //! Carries out end-of-simulation tidying (error messages etc.)
     void bDoSimulationEnd();
+
+    private:
+    // ✅ AÑADIR: Propiedades de fecha (que vendrán de CDataReader)
+    int m_nSimStartSec;
+    int m_nSimStartMin;
+    int m_nSimStartHour;
+    int m_nSimStartDay;
+    int m_nSimStartMonth;
+    int m_nSimStartYear;
+
+    public:
+    // ✅ AÑADIR: Getters para fecha de inicio
+    int nGetSimStartSec() const { return m_nSimStartSec; }
+    int nGetSimStartMin() const { return m_nSimStartMin; }
+    int nGetSimStartHour() const { return m_nSimStartHour; }
+    int nGetSimStartDay() const { return m_nSimStartDay; }
+    int nGetSimStartMonth() const { return m_nSimStartMonth; }
+    int nGetSimStartYear() const { return m_nSimStartYear; }
+
+    // ✅ AÑADIR: Setters para fecha de inicio
+    void nSetSimStartSec(int sec) { m_nSimStartSec = sec; }
+    void nSetSimStartMin(int min) { m_nSimStartMin = min; }
+    void nSetSimStartHour(int hour) { m_nSimStartHour = hour; }
+    void nSetSimStartDay(int day) { m_nSimStartDay = day; }
+    void nSetSimStartMonth(int month) { m_nSimStartMonth = month; }
+    void nSetSimStartYear(int year) { m_nSimStartYear = year; }
+
+    // ✅ AÑADIR: Método para establecer toda la fecha de una vez
+    void setSimulationStartDateTime(int year, int month, int day, int hour, int min, int sec) {
+        m_nSimStartYear = year;
+        m_nSimStartMonth = month;
+        m_nSimStartDay = day;
+        m_nSimStartHour = hour;
+        m_nSimStartMin = min;
+        m_nSimStartSec = sec;
+    }
+
+    // ✅ AÑADIR: Método para obtener fecha como string
+    std::string getSimulationStartDateTimeString() const {
+        std::ostringstream oss;
+        oss << std::setfill('0') << std::setw(4) << m_nSimStartYear << "-"
+            << std::setw(2) << m_nSimStartMonth << "-"
+            << std::setw(2) << m_nSimStartDay << " "
+            << std::setw(2) << m_nSimStartHour << ":"
+            << std::setw(2) << m_nSimStartMin << ":"
+            << std::setw(2) << m_nSimStartSec;
+        return oss.str();
+    }
 };
 #endif // SIMULATION_H

@@ -42,6 +42,8 @@ using std::localtime;
 
 #include <iomanip>
 using std::put_time;
+using std::setfill;
+using std::setw;
 
 #include "simulation.h"
 #include "data_writer.h"
@@ -225,6 +227,26 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
 
     const string formatted_time = oss.str();
     nc_put_att_text(m_ncId, NC_GLOBAL, "Running on", formatted_time.length(), formatted_time.c_str());
+
+    // Obtener fecha de inicio de CDataReader (debe pasarse a CSimulation)
+    ostringstream time_offset_oss;
+    time_offset_oss << setfill('0') << setw(4) << m_pSimulation->nGetSimStartYear() << "-"
+                    << setw(2) << m_pSimulation->nGetSimStartMonth() << "-"
+                    << setw(2) << m_pSimulation->nGetSimStartDay() << " "
+                    << setw(2) << m_pSimulation->nGetSimStartHour() << ":"
+                    << setw(2) << m_pSimulation->nGetSimStartMin() << ":"
+                    << setw(2) << m_pSimulation->nGetSimStartSec();
+
+    const string time_offset = time_offset_oss.str();
+    nc_put_att_text(m_ncId, NC_GLOBAL, "time_offset", time_offset.length(), time_offset.c_str());
+
+    //! ✅ AÑADIR: Descripción del time_offset
+    const char* time_offset_description = "Simulation start time used as time offset for all time variables";
+    nc_put_att_text(m_ncId, NC_GLOBAL, "time_offset_description", strlen(time_offset_description), time_offset_description);
+
+    //! ✅ AÑADIR: Unidades de tiempo relativo
+    const char* time_units = "seconds since simulation start";
+    nc_put_att_text(m_ncId, NC_GLOBAL, "time_units", strlen(time_units), time_units);
 
     // End the definition of NetCDF file
     status = nc_enddef(m_ncId);
