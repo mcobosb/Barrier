@@ -30,8 +30,7 @@ using std::pow;
 //===============================================================================================================================
 //! The CSimulation constructor
 //===============================================================================================================================
-CSimulation::CSimulation ()
-{
+CSimulation::CSimulation() {
     m_dSimDuration =
     m_dSimTimestep =
     m_dTimeFactor =
@@ -63,6 +62,14 @@ CSimulation::CSimulation ()
 
     vector<CCrossSection> estuary;
     vector<CHydrograph> hydrographs;
+
+    // ✅ INICIALIZAR: Fecha de inicio por defecto
+    m_nSimStartSec = 0;
+    m_nSimStartMin = 0;
+    m_nSimStartHour = 0;
+    m_nSimStartDay = 1;
+    m_nSimStartMonth = 1;
+    m_nSimStartYear = 2024;
 }
 
 //===============================================================================================================================
@@ -728,7 +735,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
             m_vCrossSectionArea[i] = linearInterpolation1d(m_vCrossSectionWaterDepth[i],vCrossSectionElevationTmp, vCrossSectionAreaTmp);
             m_vCrossSectionHydraulicRadius[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
 
-            //! Compute Q given the area, no need the directión of slope
+            //! Compute Q given the area
             m_vCrossSectionQ[i] = m_vCrossSectionArea[i]*m_vCrossSectionBedSlopeDirection[i]*sqrt(fabs(m_vCrossSectionBedSlope[i]))*pow(m_vCrossSectionHydraulicRadius[i], 2.0/3.0)/estuary[i].dGetManningNumber();
         }
     }

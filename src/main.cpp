@@ -36,7 +36,7 @@ int main(int argc, char const* argv[])
         pSimulation.bDoSimulation(argc, argv);
         pSimulation.bDoSimulationEnd();
         
-        std::cout << "Simulation completed successfully." << std::endl;
+        // std::cout << "Simulation completed successfully." << std::endl;
     }
     catch (const std::exception& e) {
         std::cerr << "Error during simulation: " << e.what() << std::endl;

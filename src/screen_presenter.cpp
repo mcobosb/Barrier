@@ -112,6 +112,7 @@ void CScreenPresenter::EndingRun(CSimulation* pSimulation)
    // if (nRtn  == RTN_OK)
    //    // normal ending
    // {
+   cout << "\r    - Remaining Time: " << std::fixed << setprecision(3) << setw(6) << 0.000 << " s -  Progress: " << std::fixed << setprecision(3) << setw(6) << 100 << '%' << std::flush;
    cout << "\r    - Elapsed Time: " << std::fixed << setprecision(3) << setw(6) << sdElapsed  << endl;
    cout << RUN_END_NOTICE << put_time(localtime(&m_tSysEndTime), "%H:%M on %A %d %B %Y") << endl;
    // }
