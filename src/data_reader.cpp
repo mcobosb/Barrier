@@ -1311,7 +1311,7 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 		double xh, yh, xc, yc;
 
 		for (int j = 0; j < hydrographs_no; j++) {
-			 xh = m_pSimulation->hydrographs[j].dGetHydrographXLocation();
+			xh = m_pSimulation->hydrographs[j].dGetHydrographXLocation();
 			yh = m_pSimulation->hydrographs[j].dGetHydrographYLocation();
 			for (int k = 0; k < m_pSimulation->m_nCrossSectionsNumber; k++) {
 				xc = m_pSimulation->estuary[k].dGetX_UTM();
@@ -1321,9 +1321,12 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 					update_distance = distance_to_node;
 					cs_node = k;
 				}
+				else if (distance_to_node == update_distance) {
+					cs_node = k;
+					break; // If the distance is the same, then we can break
+				}
 			}
 			m_pSimulation->hydrographs[j].m_nNearestCrossSectionNo = cs_node;
-
 		}
 	}
 }
