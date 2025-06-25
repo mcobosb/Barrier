@@ -14,7 +14,6 @@
 
 //======================================================================================================================
 // TODO 001: A more detail description of main function.
-// TODO 002: Improve error handling functionalities.
 // TODO 004: Save Predicted and Corrected variables for m_nLogDetail == 1 and 2.
 //======================================================================================================================
 
