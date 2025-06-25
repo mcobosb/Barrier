@@ -57,15 +57,15 @@ string const PLATFORM = "Intel x86/GNU C++";
 
 
 
-inline auto NAME = "Saint-Venant Equations Solver";
+inline auto NAME = "BARRIER Project";
 inline auto AUTHOR =  "Manuel Cobos (GDFA, University of Granada)";
-inline auto VERSION = "v0.3.0 - 20240912";
-string const PROGRAM_NAME = "Saint Venant Equations Solver version 0.3.0 (12 Sep 2024)";
+inline auto VERSION = "v0.4.0 - 20250625";
+string const PROGRAM_NAME = "Hydrodynamic modeling of main channel of estuaries (25 June 2025)";
 string const PROGRAM_NAME_SHORT = "SV";
 
 
 string const NOTE = "      Note ";
-string const COPYRIGHT = "(C) 2024 Manuel Cobos";
+string const COPYRIGHT = "(C) 2025 Manuel Cobos";
 string const LINE = "-------------------------------------------------------------------------------";
 string const DISCLAIMER1 = "This program is distributed in the hope that it will be useful. but WITHOUT ANY";
 string const DISCLAIMER2 = "WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A";
