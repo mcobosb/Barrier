@@ -18,7 +18,7 @@ endif()
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -fopenmp")  # Añadir -fopenmp
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -fopenmp")
 else()
     # Para cualquier otro build type (como "Build")
     set(CMAKE_CXX_FLAGS "-O2 -g -Wall -Wextra -fopenmp")
@@ -52,10 +52,9 @@ if(NETCDF_FOUND)
 endif()
 
 # OpenMP para paralelización - Mejorado
-find_package(OpenMP REQUIRED)  # Hacer requerido
+find_package(OpenMP REQUIRED)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(barrier PUBLIC OpenMP::OpenMP_CXX)
-    target_compile_definitions(barrier PRIVATE _OPENMP)
     message(STATUS "OpenMP found: ${OpenMP_CXX_VERSION}")
 else()
     message(FATAL_ERROR "OpenMP not found but is required")
