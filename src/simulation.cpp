@@ -1394,6 +1394,10 @@ void CSimulation::updateCorrectorBoundaries() {
     //! Downward boundary conditions
     m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-1] = m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-1];
     m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-1] = m_vPredictedCrossSectionQ[m_nCrossSectionsNumber-1];
+
+    for (int i = 0; i < nGetHydrographsNumber(); i++) {
+        m_vCorrectedCrossSectionQ[hydrographs[i].m_nNearestCrossSectionNo] =  m_vCorrectedCrossSectionQ[hydrographs[i].m_nNearestCrossSectionNo] + m_vLateralSourcesAtT[hydrographs[i].m_nNearestCrossSectionNo];
+    }
 }
 
 

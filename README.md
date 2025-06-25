@@ -72,13 +72,13 @@ make -j$(nproc)
 # Run the simulation
 ./barrier
 
-# The program will read configuration from 'configuration.ini'
+# The program will read configuration from '.ini'
 # and generate results in the specified output directory
 ```
 
 ## ⚙️ Configuration
 
-The simulation is configured through the `configuration.ini` file:
+The simulation is configured through the `.ini` file:
 
 ```ini
 # Configuration file for Barrier simulation

@@ -27,9 +27,6 @@ class CDataReader {
 
 private:
 
-    //! Folder for the SV .ini file
-    string m_strSVIni;
-
     //! An email address to which to send end-of-simulation messages
     string m_strMailAddress;
 
@@ -121,10 +118,14 @@ public:
     static constexpr int LOG_FILE_HIGH_DETAIL = 2;
 
 
-    string const SV_INI = "configuration.ini";
-
     string const OUT_EXT = ".nc";
     string const LOG_EXT = ".log";
+
+    //! Folder for the .ini file
+    string const m_strIni = ".ini";
+
+    //! Folder for the .conf file
+    string m_strConfig = ".conf";
 
     //! Read configuration file with global data
     void bReadConfigurationFile(CSimulation* m_pSimulation);
@@ -148,7 +149,7 @@ public:
     //! Open log file for writing
     static void bOpenLogFile(CSimulation* m_pSimulation);
 
-    //! Read configuration.ini file to get input and output paths
+    //! Read .ini file to get input and output paths
     bool bReadConfigurationPaths();
 
     //! Get input path

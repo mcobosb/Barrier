@@ -85,7 +85,7 @@ void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 }
 
 //======================================================================================================================
-//! Read configuration.ini file
+//! Read .ini file
 //======================================================================================================================
 void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 {
@@ -96,12 +96,12 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
         return;
     }
 
-    // Construir la ruta completa al archivo SV_INI
+    // Construir la ruta completa al archivo .ini
     string strConfigPath = m_strInputPath;
     if (!strConfigPath.empty() && strConfigPath.back() != '/') {
         strConfigPath += "/";
     }
-    strConfigPath += SV_INI;
+    strConfigPath += m_strConfig;
 
     // Create a read object
     ifstream InStream;
@@ -213,7 +213,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
 	                // Content of log file, 0 = no log file, 1 = least detail, 3 = most detail
             		if (! bIsStringValidInt(strRH))
             		{
-               			strErr = "line " + to_string(nLine) + ": invalid integer for log file detail level '" + strRH + "' in " + SV_INI;
+               			strErr = "line " + to_string(nLine) + ": invalid integer for log file detail level '" + strRH + "' in " + m_strConfig;
                			break;
             		}
 
@@ -230,21 +230,21 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		// Both date and time here?
             		if (vStrTmp.size() < 2)
             		{
-               			strErr = "line " + to_string(nLine) + ": must have both date and time for simulation start in '" + SV_INI + "'";
+               			strErr = "line " + to_string(nLine) + ": must have both date and time for simulation start in '" + m_strConfig + "'";
                			break;
             		}
 
             		// OK, first sort out the time
             		if (! bParseTime(&vStrTmp[0], nHour, nMin, nSec))
             		{
-               			strErr = "line " + to_string(nLine) + ": could not understand simulation start time in '" + SV_INI + "'";
+               			strErr = "line " + to_string(nLine) + ": could not understand simulation start time in '" + m_strConfig + "'";
                			break;
             		}
 
             		// Next sort out the date
             		if (! bParseDate(&vStrTmp[1], nDay, nMonth, nYear))
             		{
-               			strErr = "line " + to_string(nLine) + ": could not understand simulation start date in '" + SV_INI + "'";
+               			strErr = "line " + to_string(nLine) + ": could not understand simulation start date in '" + m_strConfig + "'";
                			break;
             		}
 
@@ -329,7 +329,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation)
             		// Check that this is a valid double
             		if (! bIsStringValidDouble(strRH))
             		{
-            			strErr = "line " + to_string(nLine) + ": invalid floating point number for timestep '" + strRH + "' in " + SV_INI;
+            			strErr = "line " + to_string(nLine) + ": invalid floating point number for timestep '" + strRH + "' in " + m_strConfig;
             			break;
             		}
 
@@ -1604,13 +1604,13 @@ bool CDataReader::bParseTime(string const *strTime, int &nHour, int &nMin, int &
 }
 
 //======================================================================================================================
-//! Read configuration.ini file to get input and output paths
+//! Read .ini file to get input and output paths
 //======================================================================================================================
 bool CDataReader::bReadConfigurationPaths() {
-    std::ifstream configFile("configuration.ini");
+    std::ifstream configFile(".ini");
     
     if (!configFile.is_open()) {
-        std::cerr << "Error: Cannot open configuration.ini file" << std::endl;
+        std::cerr << "Error: Cannot open .ini file" << std::endl;
         return false;
     }
     
@@ -1660,12 +1660,12 @@ bool CDataReader::bReadConfigurationPaths() {
     configFile.close();
     
     if (!inputPathFound) {
-        std::cerr << "Error: input_path not found in configuration.ini" << std::endl;
+        std::cerr << "Error: input_path not found in .ini" << std::endl;
         return false;
     }
     
     if (!outputPathFound) {
-        std::cerr << "Error: output_path not found in configuration.ini" << std::endl;
+        std::cerr << "Error: output_path not found in .ini" << std::endl;
         return false;
     }
     
