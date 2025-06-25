@@ -15,12 +15,7 @@
 //======================================================================================================================
 // TODO 001: A more detail description of main function.
 // TODO 002: Improve error handling functionalities.
-// TODO 003: Add computing progress function.
 // TODO 004: Save Predicted and Corrected variables for m_nLogDetail == 1 and 2.
-// TODO 005: Include hydrographs input. Add the interpolated value at node i in term Gv[0].
-// TODO 006: Include density, salinity and sediment load
-// TODO 007: Options for another time units
-
 //======================================================================================================================
 
 
