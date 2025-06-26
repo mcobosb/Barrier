@@ -714,6 +714,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
             
             m_vCrossSectionArea[i] = linearInterpolation1d(dManningFactor, dSecondTerm, vCrossSectionAreaTmp);
             m_vCrossSectionWaterDepth[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionElevationTmp);
+            m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
             m_vCrossSectionWaterElevation[i] = m_vCrossSectionWaterDepth[i] + estuary[i].dGetZ();
         }
     }
@@ -729,6 +730,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
 
             //! m_vCrossSectionElevation is the elevation from the water depth m_dZ of every cross-section
             m_vCrossSectionArea[i] = linearInterpolation1d(m_vCrossSectionWaterElevation[i] - estuary[i].dGetZ(),vCrossSectionElevationTmp, vCrossSectionAreaTmp);
+            m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
             m_vCrossSectionHydraulicRadius[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
 
             //! Compute Q given the area, no need the directión of slope
@@ -748,6 +750,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
             m_vCrossSectionWaterDepth[i] = -estuary[i].dGetZ();
             m_vCrossSectionWaterElevation[i] = 0.0;
             m_vCrossSectionArea[i] = linearInterpolation1d(m_vCrossSectionWaterDepth[i],vCrossSectionElevationTmp, vCrossSectionAreaTmp);
+            m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
             m_vCrossSectionHydraulicRadius[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
 
             //! Compute Q given the area
