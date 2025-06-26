@@ -27,6 +27,11 @@ using std::pow;
 #include "utils.h"
 #include "error_handling.h"
 
+#ifdef USE_OPENMP
+    #include <omp.h>
+#endif
+
+
 //===============================================================================================================================
 //! The CSimulation constructor
 //===============================================================================================================================
@@ -600,7 +605,9 @@ void CSimulation::initializeVectors()
     m_vOutputTimesIds.resize(nTimestepsNumber);
     m_vOutputTimes.resize(nTimestepsNumber);
 
+#ifdef USE_OPENMP
     #pragma omp parallel for
+#endif
     for (int i = 0; i < nTimestepsNumber; i++)
     {
         m_vOutputTimesIds[i] = i;
@@ -622,7 +629,9 @@ void CSimulation::calculateBedSlope() {
     // m_vCrossSectionBedSlopeDirection.resize(m_nCrossSectionsNumber);
     
     //Calculate S0
+#ifdef USE_OPENMP
     #pragma omp parallel for private(dX1, dX2)
+#endif
     for (int i = 0; i < m_nCrossSectionsNumber ; i++) {
         if (i == 0) {
             // Compute dx as forward difference
@@ -676,7 +685,9 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
 
     if (m_nInitialEstuarineCondition == 1) {
         //! Along estuary water flow given
-        #pragma omp parallel for
+#ifdef USE_OPENMP
+    #pragma omp parallel for
+#endif
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             double dManningFactor = 0.0;
             //! As initial condition, it is assumed the independency of A with +/- value of S0
@@ -708,7 +719,9 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
     }
     else if (m_nInitialEstuarineCondition == 2) {
         //! Along estuary elevation given
-        #pragma omp parallel for
+#ifdef USE_OPENMP
+    #pragma omp parallel for
+#endif
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
             vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
@@ -724,7 +737,9 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
     }
     else {
         //! Water level in calm
+#ifdef USE_OPENMP
         #pragma omp parallel for
+#endif        
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
             vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
@@ -740,7 +755,9 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
         }
     }
 
+#ifdef USE_OPENMP
     #pragma omp parallel for
+#endif    
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
         //! Insert the Manning number onto the simulation object
         m_vCrossSectionManningNumber[i] = estuary[i].dGetManningNumber();
@@ -749,7 +766,9 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
     if (m_bDoWaterDensity)
     {
         //! Compute along channel sediment parameter
+#ifdef USE_OPENMP
         #pragma omp parallel for
+#endif        
         for (int i = 0; i < m_nCrossSectionsNumber; i++)
         {
             m_vCrossSectionDiamX[i] = m_vCrossSectionD50[i] * pow((m_vCrossSectionRhos[i] - 1.0) * G / (NU*NU), 1.0/3.0);
@@ -790,7 +809,9 @@ void CSimulation::calculateHydraulicParameters() {
     const int nCrossSections = m_nCrossSectionsNumber;
     // vector<int> vElevationSection;
     if (m_nPredictor == 1) {
+#ifdef USE_OPENMP
         #pragma omp parallel for
+#endif        
         for (int i = 0; i < nCrossSections; i++) {
             const double dArea = m_vCrossSectionArea[i];
             const int nElevationSectionsNumber = estuary[i].nGetElevationSectionsNumber();
@@ -898,7 +919,9 @@ void CSimulation::calculateTimestep() {
     double dMinTimestep = 10000000.0;
     double dWaterDensityFactor = 1.0;
 
+#ifdef USE_OPENMP
     #pragma omp parallel for
+#endif    
     for (int i=0; i< m_nCrossSectionsNumber; i++) {
         if (m_vCrossSectionArea[i] != DRY_AREA) {
             double dX = m_vCrossSectionDX[i];
@@ -1006,8 +1029,10 @@ void CSimulation::calculateBoundaryConditions() {
 void CSimulation::dryArea()
 {
     if (m_nPredictor == 1) {
-        #pragma omp parallel for
-        for (int i = 0; i < m_nCrossSectionsNumber; i++)
+#ifdef USE_OPENMP
+    #pragma omp parallel for
+#endif        
+    for (int i = 0; i < m_nCrossSectionsNumber; i++)
         {
             //! Define the dry area as a water elevation of 1 cm
             if (m_vPredictedCrossSectionArea[i] <= DRY_AREA) {
@@ -1045,8 +1070,10 @@ void CSimulation::dryArea()
 void CSimulation::dryTerms()
 {
     if (m_nPredictor == 1) {
-        #pragma omp parallel for
-        for (int i = 0; i < m_nCrossSectionsNumber-1; i++)
+#ifdef USE_OPENMP
+    #pragma omp parallel for
+#endif        
+    for (int i = 0; i < m_nCrossSectionsNumber-1; i++)
         {
             //! Define the dry area as a water elevation of 1 cm
             if (m_vCrossSectionArea[i] <= DRY_AREA) {
@@ -1057,7 +1084,9 @@ void CSimulation::dryTerms()
         }
     }
     else {
+#ifdef USE_OPENMP
         #pragma omp parallel for
+#endif        
         for (int i = 0; i < m_nCrossSectionsNumber-1; i++)
         {
             //! Define the dry area as a water elevation of 1 cm
@@ -1100,7 +1129,9 @@ void CSimulation::calculate_GS_A_terms() {
     
     if (bGetDoSurfaceTermBalance()) {
         // Promediado entre secciones (correcto)
+#ifdef USE_OPENMP
         #pragma omp parallel for
+#endif        
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             double dMeanArea, dMeanQ, dMeanHydraulicRadius;
             
@@ -1178,7 +1209,9 @@ void CSimulation::calculate_GS_A_terms() {
 void CSimulation::calculateFlowTerms() {
     
     if (m_nPredictor == 1) {
+#ifdef USE_OPENMP
         #pragma omp parallel for
+#endif        
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             m_vCrossSectionF0[i] = m_vCrossSectionQ[i];
             
@@ -1221,7 +1254,9 @@ void CSimulation::calculateSourceTerms() {
     m_vCrossSectionDhDx[m_nCrossSectionsNumber-1] = (m_vCrossSectionWaterElevation[m_nCrossSectionsNumber-1] - m_vCrossSectionWaterElevation[m_nCrossSectionsNumber-2]) / m_vCrossSectionDX[m_nCrossSectionsNumber-2];
 
     // ✅ AÑADIR: Término de variación de ancho
+#ifdef USE_OPENMP
     #pragma omp parallel for
+#endif    
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
         m_vCrossSectionGv0[i] = m_vLateralSourcesAtT[i];
         
@@ -1789,8 +1824,9 @@ void CSimulation::AnnounceProgress() {
 //===============================================================================================================================
 void CSimulation::calculate_salinity()
 {
+#ifdef USE_OPENMP
     #pragma omp parallel for
-    // TODO: add salinity variable to dry bed function
+#endif    // TODO: add salinity variable to dry bed function
     for (int i = 0; i < m_nCrossSectionsNumber; i++)
     {
         m_vCrossSectionSalinity[i] = m_vCrossSectionSalinityASt[i]/m_vCrossSectionArea[i] + m_vCrossSectionSalinity[i];
@@ -1982,7 +2018,9 @@ void CSimulation::calculate_sediment_transport()
 //===============================================================================================================================
 void CSimulation::calculate_density()
 {
+#ifdef USE_OPENMP
     #pragma omp parallel for
+#endif    
     for (int i = 0; i < m_nCrossSectionsNumber; i++)
     {
         double rhow = 1000 * (1 + dGetBetaSalinityConstant() * m_vCrossSectionSalinity[i]);

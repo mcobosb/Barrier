@@ -11,17 +11,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Establecer el tipo de build por defecto
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug)  # Cambiar de Debug a Release
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
 
 # Opciones de compilación modernas
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -fopenmp")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
 else()
-    # Para cualquier otro build type (como "Build")
-    set(CMAKE_CXX_FLAGS "-O2 -g -Wall -Wextra -fopenmp")
+    # Para cualquier otro build type (como "RelWithDebInfo")
+    set(CMAKE_CXX_FLAGS "-O2 -g -Wall -Wextra")
 endif()
 
 # Usar target-based approach en lugar de include_directories globales
@@ -51,13 +51,27 @@ if(NETCDF_FOUND)
     target_compile_definitions(barrier PRIVATE ${NETCDF_CFLAGS_OTHER})
 endif()
 
-# OpenMP para paralelización - Mejorado
-find_package(OpenMP REQUIRED)
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(barrier PUBLIC OpenMP::OpenMP_CXX)
-    message(STATUS "OpenMP found: ${OpenMP_CXX_VERSION}")
+# ✅ OpenMP solo para Release y RelWithDebInfo (NO para Debug)
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    find_package(OpenMP REQUIRED)
+    if(OpenMP_CXX_FOUND)
+        target_link_libraries(barrier PUBLIC OpenMP::OpenMP_CXX)
+        target_compile_definitions(barrier PRIVATE USE_OPENMP)
+        
+        # Configuración específica por compilador para OpenMP
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            target_compile_options(barrier PUBLIC -fopenmp)
+            target_link_options(barrier PUBLIC -fopenmp)
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            target_compile_options(barrier PUBLIC -fopenmp)
+            target_link_options(barrier PUBLIC -fopenmp)
+        endif()
+    else()
+        message(FATAL_ERROR "OpenMP not found but is required for Release builds")
+    endif()
 else()
-    message(FATAL_ERROR "OpenMP not found but is required")
+    # Debug mode - sin OpenMP
+    target_compile_definitions(barrier PRIVATE NO_OPENMP)
 endif()
 
 # Threads para programación concurrente
@@ -73,26 +87,24 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(barrier PRIVATE 
         -ggdb3 
         -fno-omit-frame-pointer
-        # Remover sanitizers temporalmente para evitar conflicts con OpenMP
-        # -fsanitize-address-use-after-scope
         -fno-optimize-sibling-calls
+        # Sin sanitizers para evitar conflictos
     )
 endif()
 
-# Configuración específica para compiladores
+# Configuración específica para compiladores (sin OpenMP para Debug)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(barrier PUBLIC -fconcepts-diagnostics-depth=3)
-    # Asegurar que OpenMP funcione con GCC
-    target_compile_options(barrier PUBLIC -fopenmp)
-    target_link_options(barrier PUBLIC -fopenmp)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(barrier PUBLIC -fcolor-diagnostics)
-    # Configuración específica para Clang con OpenMP
-    target_compile_options(barrier PUBLIC -fopenmp)
-    target_link_options(barrier PUBLIC -fopenmp)
 endif()
 
 # Información de build
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(STATUS "OpenMP: DISABLED (Debug mode)")
+else()
+    message(STATUS "OpenMP: ENABLED")
+endif()
