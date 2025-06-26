@@ -74,7 +74,7 @@ public:
 
     //! Carries out init-of-simulation tidying (error messages etc.)
     void StartingRun(int, char const* [], CSimulation *m_pSimulation);
-    void EndingRun(CSimulation* m_pSimulation);
+    void EndingRun();
 
     void AnnounceStart(CSimulation* m_pSimulation);
     static void AnnounceLicence(const CSimulation *m_pSimulation) ;

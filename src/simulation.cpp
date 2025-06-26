@@ -1808,13 +1808,13 @@ void CSimulation::AnnounceProgress() {
     sdToGo = (sdElapsed * m_dSimDuration / m_dCurrentTime) - sdElapsed;
 
     if (m_nLogFileDetail == 2) {
-        cout << "\r    - Remaining Time: " << std::fixed << setprecision(3) << setw(6) << sdToGo << " s - Progress: " << std::fixed << setprecision(3) << setw(6) << 100 * m_dCurrentTime / m_dSimDuration  << '%' << std::flush;
+        cout << "\r    - Elapsed[Remaining] Time: " << std::fixed << setprecision(3) << setw(6) << sdElapsed <<"[" << std::fixed << setprecision(3) << setw(6) << sdToGo << "] s - Progress: " << std::fixed << setprecision(3) << setw(6) << 100 * m_dCurrentTime / m_dSimDuration  << '%' << std::flush;
         LogStream << "TIMESTEP: " << m_nTimeId << " - Current time: " <<  m_dCurrentTime << endl;
 
     }
     else {
         if (m_bSaveTime) {
-            cout << "\r    - Remaining Time: " << std::fixed << setprecision(3) << setw(6) << sdToGo << " s -  Progress: " << std::fixed << setprecision(3) << setw(6) << 100 * m_dCurrentTime / m_dSimDuration  << '%' << std::flush;
+            cout << "\r    - Elapsed[Remaining] Time: " << std::fixed << setprecision(3) << setw(6) << sdElapsed <<"[" << std::fixed << setprecision(3) << setw(6) << sdToGo << "] s - Progress: " << std::fixed << setprecision(3) << setw(6) << 100 * m_dCurrentTime / m_dSimDuration  << '%' << std::flush;
         }
     }
 }
@@ -2037,7 +2037,7 @@ void CSimulation::calculate_density()
 //! Notifies the user that the simulation has ended, asks for keypress if necessary, and if compiled under GNU can send an email
 //===============================================================================================================================
 void CSimulation::bDoSimulationEnd(){
-    presenter.EndingRun(this);
+    presenter.EndingRun();
 
     const string strText = strGetErrorText(m_nStringError);
     CScreenPresenter::AnnounceEnding(strText);
