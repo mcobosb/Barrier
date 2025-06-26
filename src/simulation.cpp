@@ -781,24 +781,23 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
 //! Interpolate function
 //======================================================================================================================
 double CSimulation::linearInterpolation1d(const double dValue, const vector<double> &vX, const vector<double> &vY) {
-    //! Found the interval bettween [x[i], x[i+1]]
-    for (size_t i = 0; i < vX.size() - 1; i++) {
-        if (dValue >= vX[i] && dValue <= vX[i+1]) {
-            // Do the linear interpolation
-            const double slope = (vY[i+1] - vY[i]) / (vX[i+1] - vX[i]);
-            return vY[i] + slope * (dValue - vX[i]);
-        }
-    }
-    // ...código de interpolación...
-    cerr << "LinearInterpolation1d error: value " << dValue << " outside the range" << endl;
+    // Búsqueda binaria
+    auto it = std::lower_bound(vX.begin(), vX.end(), dValue);
     
-    // Extrapolación en los extremos
-    if (dValue < vX[0]) {
+    if (it == vX.begin()) {
+        // Extrapolación hacia abajo
         double slope = (vY[1] - vY[0]) / (vX[1] - vX[0]);
         return vY[0] + slope * (dValue - vX[0]);
+    } else if (it == vX.end()) {
+        // Extrapolación hacia arriba
+        size_t n = vX.size();
+        double slope = (vY[n-1] - vY[n-2]) / (vX[n-1] - vX[n-2]);
+        return vY[n-1] + slope * (dValue - vX[n-1]);
     } else {
-        double slope = (vY[vY.size()-1] - vY[vY.size()-2]) / (vX[vX.size()-1] - vX[vX.size()-2]);
-        return vY[vY.size()-1] + slope * (dValue - vX[vX.size()-1]);
+        // Interpolación normal
+        size_t i = std::distance(vX.begin(), it) - 1;
+        double slope = (vY[i+1] - vY[i]) / (vX[i+1] - vX[i]);
+        return vY[i] + slope * (dValue - vX[i]);
     }
 }
 //======================================================================================================================
