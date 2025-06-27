@@ -857,33 +857,25 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 
 				if (j == 7)
 				{
-					if  (m_pSimulation->nGetInitialEstuarineCondition() == 0)
-					{
-						m_pSimulation->m_vCrossSectionQ.push_back(0.0);
-						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
-					}
 					if  (m_pSimulation->nGetInitialEstuarineCondition() == 1)
 					{
 						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
 						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
+						m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
 					}
 					else if (m_pSimulation->nGetInitialEstuarineCondition() == 2)
 					{
 						dValue = dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ();
-						if (dValue <= 0) {
-							m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
-						}
-						else {
-							m_pSimulation->m_vCrossSectionWaterElevation.push_back(dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ());
-						}
+						// if (dValue <= 0) {
+						// 	m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
+						// }
+						// else {
+						m_pSimulation->m_vCrossSectionWaterElevation.push_back(dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ());
+						// }
 						m_pSimulation->m_vCrossSectionQ.push_back(0.0);
 						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
 					}
-				}
-				if (j == 8)
-				{
-					m_pSimulation->m_vCrossSectionSalinity.push_back(dValue);
-				}
+				}				
 				// Increment counter
 				j++;
 
@@ -895,6 +887,16 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 
 	}
 	m_pSimulation->m_nCrossSectionsNumber = nCrossSectionNumber;
+	if  (m_pSimulation->nGetInitialEstuarineCondition() == 0)
+	{
+		for (int i = 0; i < nCrossSectionNumber; i++)
+		{
+			m_pSimulation->m_vCrossSectionQ.push_back(0.0);
+			m_pSimulation->m_vCrossSectionArea.push_back(0.0);
+			m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
+			m_pSimulation->m_vCrossSectionSalinity.push_back(0.0);
+		}
+	}
 
 }
 

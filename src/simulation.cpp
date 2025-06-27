@@ -560,7 +560,7 @@ void CSimulation::initializeVectors()
     const double nCrossSectionsNumber = m_nCrossSectionsNumber;
     const vector<double> vZeros(static_cast<size_t>(nCrossSectionsNumber), 0.0);
 
-    m_vCrossSectionArea =
+    // m_vCrossSectionArea =
     m_vPredictedCrossSectionArea =
     m_vCorrectedCrossSectionArea =
     m_vPredictedCrossSectionQ =
