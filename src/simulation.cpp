@@ -629,28 +629,25 @@ void CSimulation::calculateBedSlope() {
     // m_vCrossSectionBedSlopeDirection.resize(m_nCrossSectionsNumber);
     
     //Calculate S0
-#ifdef USE_OPENMP
-    #pragma omp parallel for private(dX1, dX2)
-#endif
     for (int i = 0; i < m_nCrossSectionsNumber ; i++) {
         if (i == 0) {
             // Compute dx as forward difference
             dX1 = estuary[1].dGetX() - estuary[0].dGetX();
-            m_vCrossSectionBedSlope[i] = fabs((estuary[0].dGetZ() - estuary[1].dGetZ())/dX1);
+            m_vCrossSectionBedSlope[i] = (estuary[0].dGetZ() - estuary[1].dGetZ())/dX1;
             //! Save dX into a vector
             m_vCrossSectionDX[i] = dX1;
         }
         else if (i == m_nCrossSectionsNumber - 1){
             // Compute dx as backward difference
             dX2 = estuary[i].dGetX() - estuary[i-1].dGetX();
-            m_vCrossSectionBedSlope[i] = fabs((estuary[i-1].dGetZ() - estuary[i].dGetZ())/dX2);
+            m_vCrossSectionBedSlope[i] = (estuary[i-1].dGetZ() - estuary[i].dGetZ())/dX2;
             //! Save dX into a vector (last node backward)
             m_vCrossSectionDX[i] = dX2;
         }
         else {
             dX1 = estuary[i+1].dGetX() - estuary[i].dGetX();
             dX2 = estuary[i].dGetX() - estuary[i-1].dGetX();
-            m_vCrossSectionBedSlope[i] = fabs((estuary[i-1].dGetZ() - estuary[i+1].dGetZ())/(dX1 + dX2));
+            m_vCrossSectionBedSlope[i] = (estuary[i-1].dGetZ() - estuary[i+1].dGetZ())/(dX1 + dX2);
 
             //! Save dX into a vector
             m_vCrossSectionDX[i] = dX1;
@@ -659,11 +656,11 @@ void CSimulation::calculateBedSlope() {
         // Usar acceso por índice en lugar de push_back
         if (m_vCrossSectionBedSlope[i] < 0)
         {
-            m_vCrossSectionBedSlopeDirection[i] = -1;
+            m_vCrossSectionBedSlopeDirection[i] = 1;
         }
         else
         {
-            m_vCrossSectionBedSlopeDirection[i] = 1;
+            m_vCrossSectionBedSlopeDirection[i] = -1;
         }
         
         // // Adapt the lower values (next to 1 mm)
@@ -810,10 +807,7 @@ void CSimulation::calculateHydraulicParameters() {
     //! Number of estuarine cross-sections
     const int nCrossSections = m_nCrossSectionsNumber;
     // vector<int> vElevationSection;
-    if (m_nPredictor == 1) {
-#ifdef USE_OPENMP
-        #pragma omp parallel for
-#endif        
+    if (m_nPredictor == 1) {    
         for (int i = 0; i < nCrossSections; i++) {
             const double dArea = m_vCrossSectionArea[i];
             const int nElevationSectionsNumber = estuary[i].nGetElevationSectionsNumber();
@@ -922,7 +916,7 @@ void CSimulation::calculateTimestep() {
     double dWaterDensityFactor = 1.0;
 
 #ifdef USE_OPENMP
-    #pragma omp parallel for
+    #pragma omp parallel for reduction(min:dMinTimestep)
 #endif    
     for (int i=0; i< m_nCrossSectionsNumber; i++) {
         if (m_vCrossSectionArea[i] != DRY_AREA) {
@@ -1130,10 +1124,7 @@ void CSimulation::doMurilloCondition()
 void CSimulation::calculate_GS_A_terms() {
     
     if (bGetDoSurfaceTermBalance()) {
-        // Promediado entre secciones (correcto)
-#ifdef USE_OPENMP
-        #pragma omp parallel for
-#endif        
+        // Promediado entre secciones (correcto)      
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             double dMeanArea, dMeanQ, dMeanHydraulicRadius;
             
@@ -1432,12 +1423,12 @@ void CSimulation::updatePredictorBoundaries() {
 //======================================================================================================================
 void CSimulation::updateCorrectorBoundaries() {
     //! Upward boundary conditions
-    m_vCorrectedCrossSectionQ[0] = m_vPredictedCrossSectionQ[0];
-    m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[0];
+    m_vCorrectedCrossSectionQ[0] = m_vCorrectedCrossSectionQ[1];
+    m_vCorrectedCrossSectionArea[0] = m_vCorrectedCrossSectionArea[1];
 
     //! Downward boundary conditions
-    m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-1] = m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-1];
-    m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-1] = m_vPredictedCrossSectionQ[m_nCrossSectionsNumber-1];
+    m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-1] = m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-2] ;
+    m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-1] = m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-2] ;
 
     for (int i = 0; i < nGetHydrographsNumber(); i++) {
         m_vCorrectedCrossSectionQ[hydrographs[i].m_nNearestCrossSectionNo] =  m_vCorrectedCrossSectionQ[hydrographs[i].m_nNearestCrossSectionNo] + m_vLateralSourcesAtT[hydrographs[i].m_nNearestCrossSectionNo];
