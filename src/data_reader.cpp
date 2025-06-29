@@ -35,6 +35,10 @@ using std::string;
 #include <vector>
 using std::vector;
 
+#include <limits>        // Para std::numeric_limits
+#include <stdexcept>     // Para std::runtime_error
+#include <cmath>         // Para std::abs
+
 #include <algorithm>
 using std::find;
 
@@ -1307,8 +1311,9 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 		int hydrographs_no = m_pSimulation->nGetHydrographsNumber();
 
 		//! Find the nearest cross-section of every hydrograph
-		double distance_to_node, update_distance;
-		int cs_node;
+		double distance_to_node = 0.0;
+    	double update_distance = 1e9;  // Valor muy grande en lugar de numeric_limits::max()
+    	int cs_node = -1;
 		double xh, yh, xc, yc;
 
 		for (int j = 0; j < hydrographs_no; j++) {
