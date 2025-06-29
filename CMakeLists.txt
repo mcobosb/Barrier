@@ -1,3 +1,7 @@
+#======================================================================================================================
+#! CMAKELIST.TXT CORREGIDO - Orden correcto de declaraciones
+#======================================================================================================================
+
 # Requerir la versión mínima de CMake.
 cmake_minimum_required(VERSION 3.16)
 
@@ -14,20 +18,9 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
 endif()
 
-# Opciones de compilación modernas
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic -fsanitize=address -fsanitize=undefined")
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    # ✅ MÁS CONSERVADOR: Sin -ffast-math ni -march=native por ahora
-    set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG -Wall -Wextra")
-elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    # ✅ COMPROMISO: Optimizado pero con debug info
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG -Wall -Wextra")
-else()
-    set(CMAKE_CXX_FLAGS "-O1 -g -Wall -Wextra")
-endif()
-
-# Crear ejecutable
+#======================================================================================================================
+#! 1️⃣ CREAR EJECUTABLE PRIMERO (antes de configurarlo)
+#======================================================================================================================
 add_executable(barrier 
     src/main.cpp 
     src/simulation.cpp 
@@ -40,8 +33,81 @@ add_executable(barrier
     src/data_writer.cpp
 )
 
-# Propiedades del target
+# Propiedades básicas del target
 target_include_directories(barrier PRIVATE include)
+
+#======================================================================================================================
+#! 2️⃣ CONFIGURAR FLAGS DE COMPILACIÓN (después de crear el target)
+#======================================================================================================================
+
+# Opciones de compilación modernas
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(barrier PRIVATE
+        -g -O0 -Wall -Wextra -Wpedantic
+        -ggdb3 
+        -fno-omit-frame-pointer
+        -fno-optimize-sibling-calls
+        -fsanitize=address           # Detecta buffer overflows
+        -fsanitize=undefined         # Detecta undefined behavior
+    )
+    target_link_options(barrier PRIVATE 
+        -fsanitize=address 
+        -fsanitize=undefined
+    )
+    target_compile_definitions(barrier PRIVATE DEBUG_MODE)
+
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    # ✅ OPTIMIZADO: Pero sin las opciones más problemáticas
+    target_compile_options(barrier PRIVATE
+        -O3 -DNDEBUG -Wall -Wextra 
+        -funroll-loops -fomit-frame-pointer
+        -flto                     # Link Time Optimization
+        -fno-signed-zeros        # Optimizaciones flotantes seguras
+        -fno-trapping-math       # Optimizaciones matemáticas
+        -fassociative-math       # Reordenar operaciones matemáticas
+    )
+    target_link_options(barrier PRIVATE
+        -flto                     # LTO en linking también
+        -Wl,--gc-sections        # Eliminar secciones no usadas
+        -Wl,--strip-all          # Strip símbolos debug
+    )
+    target_compile_definitions(barrier PRIVATE 
+        NDEBUG                    # Desactiva assert()
+        EIGEN_NO_DEBUG           # Si usas Eigen
+        EIGEN_NO_STATIC_ASSERT   # Optimizaciones Eigen
+    )
+
+elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    # ✅ COMPROMISO: Optimizado pero con debug info para profiling
+    target_compile_options(barrier PRIVATE
+        -O3 -g -DNDEBUG -Wall -Wextra
+        -funroll-loops
+        -flto
+    )
+    target_link_options(barrier PRIVATE -flto)
+    target_compile_definitions(barrier PRIVATE 
+        NDEBUG
+        EIGEN_NO_DEBUG
+        EIGEN_NO_STATIC_ASSERT
+    )
+
+elseif(CMAKE_BUILD_TYPE STREQUAL "ReleaseFast")
+    # ✅ MÁXIMO RENDIMIENTO: Solo cuando sepas que funciona
+    target_compile_options(barrier PRIVATE
+        -O3 -DNDEBUG -march=native -ffast-math 
+        -funroll-loops -fomit-frame-pointer
+        -flto
+    )
+    target_link_options(barrier PRIVATE -flto -Wl,--gc-sections -Wl,--strip-all)
+    target_compile_definitions(barrier PRIVATE NDEBUG)
+
+else()
+    target_compile_options(barrier PRIVATE -O2 -g -Wall -Wextra)
+endif()
+
+#======================================================================================================================
+#! 3️⃣ BUSCAR Y CONFIGURAR DEPENDENCIAS
+#======================================================================================================================
 
 # Buscar dependencias usando métodos modernos
 find_package(PkgConfig REQUIRED)
@@ -54,32 +120,12 @@ if(NETCDF_FOUND)
     target_compile_definitions(barrier PRIVATE ${NETCDF_CFLAGS_OTHER})
 endif()
 
-# ✅ ELIMINADO: Todo el código de OpenMP
-# Definir que OpenMP está deshabilitado
-target_compile_definitions(barrier PRIVATE NO_OPENMP)
-
-# ✅ ELIMINADO: Threads (ya no necesarios sin paralelización)
-# find_package(Threads REQUIRED)
-# target_link_libraries(barrier PUBLIC Threads::Threads)
-
 # Librerías matemáticas
 target_link_libraries(barrier PUBLIC m)
 
-# Opciones adicionales para mejor debugging
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(barrier PRIVATE DEBUG_MODE)
-    target_compile_options(barrier PRIVATE 
-        -ggdb3 
-        -fno-omit-frame-pointer
-        -fno-optimize-sibling-calls
-        -fsanitize=address           # Detecta buffer overflows
-        -fsanitize=undefined         # Detecta undefined behavior
-    )
-    target_link_options(barrier PRIVATE 
-        -fsanitize=address 
-        -fsanitize=undefined
-    )
-endif()
+#======================================================================================================================
+#! 4️⃣ CONFIGURACIÓN ESPECÍFICA DE COMPILADORES
+#======================================================================================================================
 
 # Configuración específica para compiladores
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -87,6 +133,13 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(barrier PUBLIC -fcolor-diagnostics)
 endif()
+
+# Definir que OpenMP está deshabilitado
+target_compile_definitions(barrier PRIVATE NO_OPENMP)
+
+#======================================================================================================================
+#! 5️⃣ INFORMACIÓN DE BUILD
+#======================================================================================================================
 
 # Información de build
 message(STATUS "═══════════════════════════════════════")
