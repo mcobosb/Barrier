@@ -130,5 +130,9 @@ class CCrossSection {
         vector<double> vGetArea();
         vector<double> vGetHydraulicRadius();
         vector<double> vGetWaterDepth();
+        vector<double> vGetWidth();
+        vector<double> vGetBeta();
+        vector<double> vGetRightRBLocation();
+        vector<double> vGetLeftRBLocation();
 };
 #endif

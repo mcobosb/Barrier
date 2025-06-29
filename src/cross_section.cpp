@@ -193,3 +193,15 @@ vector<double> CCrossSection::vGetHydraulicRadius() {
 vector<double> CCrossSection::vGetWaterDepth() {
     return m_vWaterDepth;
 }
+vector<double> CCrossSection::vGetWidth() {
+    return m_vWidth;
+}
+vector<double> CCrossSection::vGetBeta() {
+    return m_vBeta;
+}
+vector<double> CCrossSection::vGetLeftRBLocation() {
+    return m_vLeftRBLocation;
+}
+vector<double> CCrossSection::vGetRightRBLocation() {
+    return m_vRightRBLocation;
+}

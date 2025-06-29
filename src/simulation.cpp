@@ -380,6 +380,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
 
     initializeVectors();
+    precomputeEstuaryData();
     calculateBedSlope();
     calculateAlongEstuaryInitialConditions();
 
@@ -774,67 +775,83 @@ double CSimulation::linearInterpolation1d(const double dValue, const vector<doub
 void CSimulation::calculateHydraulicParameters() {
     //! Number of estuarine cross-sections
     const int nCrossSections = m_nCrossSectionsNumber;
-    // vector<int> vElevationSection;
-    if (m_nPredictor == 1) {    
-        for (int i = 0; i < nCrossSections; i++) {
-            const double dArea = m_vCrossSectionArea[i];
-            const int nElevationSectionsNumber = estuary[i].nGetElevationSectionsNumber();
-
-            if (estuary[i].dGetArea(0) > dArea) {
-                //! Take the first node if dArea < the Area of the first elevation node
-                // vElevationSection.push_back(0);
-                getFirstHydraulicParameters(i);
-            }
-            else if (estuary[i].dGetArea(nElevationSectionsNumber -1) < dArea) {
-                //! Take the last node if dArea > the Area of the last elevation node
-                // vElevationSection.push_back(nCrossSections - 1);
-                getLastHydraulicParameters(i);
-            }
-            else
-            {
-                for (int j = 0; j < nElevationSectionsNumber; j++) {
-                    //! Getting the elevations node which Area is below dArea and next node Area higher than dArea
-                    if ((estuary[i].dGetArea(j) <= dArea) && (estuary[i].dGetArea(j+1) > dArea)) {
-                        // vElevationSection.push_back(j);
-                        interpolateHydraulicParameters(dArea, i, j);
-                        break;
-                    }
-                }
-            }
-            m_vCrossSectionWaterElevation[i] =  m_vCrossSectionWaterDepth[i] + estuary[i].dGetZ();
+    
+    // ✅ Referencia condicional (sin copia)
+    const auto& dArea = (m_nPredictor == 1) ? m_vCrossSectionArea : m_vPredictedCrossSectionArea;
+    
+    for (int i = 0; i < nCrossSections; i++) {
+        const int nElevationSectionsNumber = m_vElevationSectionsCount[i];
+        
+        if (m_vEstuaryAreas[i][0] > dArea[i]) {  // ✅ Ahora funciona
+            m_vCrossSectionHydraulicRadius[i] = m_vEstuaryHydraulicRadius[i][0];
+            m_vCrossSectionWidth[i] = m_vWidth[i][0];
+            m_vCrossSectionWaterDepth[i] = m_vEstuaryWaterDepths[i][0];
+            m_vCrossSectionBeta[i] = m_vBeta[i][0];
+            m_vCrossSectionLeftRBLocation[i] = m_vLeftY[i][0];
+            m_vCrossSectionRightRBLocation[i] = m_vRightY[i][0];
         }
-    }
-    else {
-        for (int i = 0; i < nCrossSections; i++) {
-            const double dArea = m_vPredictedCrossSectionArea[i];
-            const int nElevationSectionsNumber = estuary[i].nGetElevationSectionsNumber();
-
-            if (estuary[i].dGetArea(0) > dArea) {
-                //! Take the first node if dArea < the Area of the first elevation node
-                // vElevationSection.push_back(0);
-                getFirstHydraulicParameters(i);
-            }
-            else if (estuary[i].dGetArea(nElevationSectionsNumber -1) < dArea) {
-                //! Take the last node if dArea > the Area of the last elevation node
-                // vElevationSection.push_back(nCrossSections - 1);
-                getLastHydraulicParameters(i);
-            }
-            else
-            {
-                for (int j = 0; j < nElevationSectionsNumber; j++) {
-                    //! Getting the elevations node which Area is below dArea and next node Area higher than dArea
-                    if ((estuary[i].dGetArea(j) <= dArea) && (estuary[i].dGetArea(j+1) > dArea)) {
-                        // vElevationSection.push_back(j);
-                        interpolateHydraulicParameters(dArea, i, j);
-                        break;
-                    }
-                }
-            }
-            m_vCrossSectionWaterElevation[i] =  m_vCrossSectionWaterDepth[i] + estuary[i].dGetZ();
+        else if (m_vEstuaryAreas[i][nElevationSectionsNumber-1] < dArea[i]) {
+            int lastNode = nElevationSectionsNumber - 1;
+            m_vCrossSectionHydraulicRadius[i] = m_vEstuaryHydraulicRadius[i][lastNode];
+            m_vCrossSectionWidth[i] = m_vWidth[i][lastNode];
+            m_vCrossSectionWaterDepth[i] = m_vEstuaryWaterDepths[i][lastNode];
+            m_vCrossSectionBeta[i] = m_vBeta[i][lastNode];
+            m_vCrossSectionLeftRBLocation[i] = m_vLeftY[i][lastNode];
+            m_vCrossSectionRightRBLocation[i] = m_vRightY[i][lastNode];
         }
+        else {
+            auto it = std::lower_bound(m_vEstuaryAreas[i].begin(), m_vEstuaryAreas[i].end(), dArea[i]);
+            int j = std::distance(m_vEstuaryAreas[i].begin(), it) - 1;
+            
+            if (j >= 0 && j < nElevationSectionsNumber-1) {
+                const double factor = (dArea[i] - m_vEstuaryAreas[i][j]) / (m_vEstuaryAreas[i][j+1] - m_vEstuaryAreas[i][j]);
+                
+                m_vCrossSectionHydraulicRadius[i] = m_vEstuaryHydraulicRadius[i][j] + 
+                    factor * (m_vEstuaryHydraulicRadius[i][j+1] - m_vEstuaryHydraulicRadius[i][j]);
+                m_vCrossSectionWaterDepth[i] = m_vEstuaryWaterDepths[i][j] + 
+                    factor * (m_vEstuaryWaterDepths[i][j+1] - m_vEstuaryWaterDepths[i][j]);
+                
+                m_vCrossSectionWidth[i] = m_vWidth[i][j] + factor * (m_vWidth[i][j+1] - m_vWidth[i][j]);
+                m_vCrossSectionBeta[i] = m_vBeta[i][j] + factor * (m_vBeta[i][j+1] - m_vBeta[i][j]);
+                m_vCrossSectionLeftRBLocation[i] = m_vLeftY[i][j] + 
+                    factor * (m_vLeftY[i][j+1] - m_vLeftY[i][j]);
+                m_vCrossSectionRightRBLocation[i] = m_vRightY[i][j] + 
+                    factor * (m_vRightY[i][j+1] - m_vRightY[i][j]);
+            }        
+        }
+        
+        m_vCrossSectionWaterElevation[i] = m_vCrossSectionWaterDepth[i] + m_vBedZ[i];
     }
-
 }
+    // else {
+    //     for (int i = 0; i < nCrossSections; i++) {
+    //         const double dArea = m_vPredictedCrossSectionArea[i];
+    //         const int nElevationSectionsNumber = estuary[i].nGetElevationSectionsNumber();
+
+    //         if (estuary[i].dGetArea(0) > dArea) {
+    //             //! Take the first node if dArea < the Area of the first elevation node
+    //             // vElevationSection.push_back(0);
+    //             getFirstHydraulicParameters(i);
+    //         }
+    //         else if (estuary[i].dGetArea(nElevationSectionsNumber -1) < dArea) {
+    //             //! Take the last node if dArea > the Area of the last elevation node
+    //             // vElevationSection.push_back(nCrossSections - 1);
+    //             getLastHydraulicParameters(i);
+    //         }
+    //         else
+    //         {
+    //             for (int j = 0; j < nElevationSectionsNumber; j++) {
+    //                 //! Getting the elevations node which Area is below dArea and next node Area higher than dArea
+    //                 if ((estuary[i].dGetArea(j) <= dArea) && (estuary[i].dGetArea(j+1) > dArea)) {
+    //                     // vElevationSection.push_back(j);
+    //                     interpolateHydraulicParameters(dArea, i, j);
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //         m_vCrossSectionWaterElevation[i] =  m_vCrossSectionWaterDepth[i] + estuary[i].dGetZ();
+    //     }
+    // }
 
 //======================================================================================================================
 //! Interpolate the Hydraulic parameters between the elevation node given.
@@ -1980,3 +1997,45 @@ void CSimulation::bDoSimulationEnd(){
     const string strText = strGetErrorText(m_nStringError);
     CScreenPresenter::AnnounceEnding(strText);
 };
+
+
+//======================================================================================================================
+//! MÉTODO 1: Constructor directo (RECOMENDADO)
+//======================================================================================================================
+void CSimulation::precomputeEstuaryData() {
+    std::cout << "🔄 Pre-computing estuary data..." << std::endl;
+    
+    // Pre-calcular datos escalares básicos
+    m_vElevationSectionsCount.resize(m_nCrossSectionsNumber);
+    m_vBedZ.resize(m_nCrossSectionsNumber);
+    m_vManningN.resize(m_nCrossSectionsNumber);
+    m_vPositionX.resize(m_nCrossSectionsNumber);
+    
+    // ✅ MEJOR: Inicializar con dimensiones conocidas
+    m_vWidth.assign(m_nCrossSectionsNumber, vector<double>());        // Vector vacío inicial
+    m_vBeta.assign(m_nCrossSectionsNumber, vector<double>());         
+    m_vLeftY.assign(m_nCrossSectionsNumber, vector<double>());        
+    m_vRightY.assign(m_nCrossSectionsNumber, vector<double>());       
+    m_vEstuaryAreas.assign(m_nCrossSectionsNumber, vector<double>());
+    m_vEstuaryHydraulicRadius.assign(m_nCrossSectionsNumber, vector<double>());
+    m_vEstuaryWaterDepths.assign(m_nCrossSectionsNumber, vector<double>());
+    
+    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+        // Datos escalares básicos
+        m_vBedZ[i] = estuary[i].dGetZ();
+        m_vManningN[i] = estuary[i].dGetManningNumber();
+        m_vPositionX[i] = estuary[i].dGetX();
+        m_vElevationSectionsCount[i] = estuary[i].nGetElevationSectionsNumber();
+        
+        // ✅ PERFECTO: Asignación completa (redimensiona automáticamente)
+        m_vWidth[i] = estuary[i].vGetWidth();   
+        m_vEstuaryAreas[i] = estuary[i].vGetArea();
+        m_vEstuaryHydraulicRadius[i] = estuary[i].vGetHydraulicRadius();
+        m_vEstuaryWaterDepths[i] = estuary[i].vGetWaterDepth();
+        m_vBeta[i] = estuary[i].vGetBeta();
+        m_vLeftY[i] = estuary[i].vGetLeftRBLocation();
+        m_vRightY[i] = estuary[i].vGetRightRBLocation();
+    }
+    
+    std::cout << "✅ Estuary data pre-computed successfully" << std::endl;
+}

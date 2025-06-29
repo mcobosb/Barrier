@@ -597,5 +597,26 @@ class CSimulation
             << std::setw(2) << m_nSimStartSec;
         return oss.str();
     }
+
+    private:
+    // ✅ CORREGIR: Estas deben ser vector<vector<double>>
+    vector<double> m_vBedZ;
+    vector<double> m_vManningN;
+    vector<double> m_vPositionX;
+    
+    // ✅ CAMBIAR de vector<double> a vector<vector<double>>
+    vector<vector<double>> m_vWidth;      // ✅ CORREGIDO
+    vector<vector<double>> m_vBeta;       // ✅ CORREGIDO
+    vector<vector<double>> m_vLeftY;      // ✅ CORREGIDO
+    vector<vector<double>> m_vRightY;     // ✅ CORREGIDO
+    
+    vector<vector<double>> m_vEstuaryAreas;
+    vector<vector<double>> m_vEstuaryHydraulicRadius;
+    vector<vector<double>> m_vEstuaryWaterDepths;
+    vector<int> m_vElevationSectionsCount;
+
+    public:
+    // ✅ Solo método de optimización simple
+    void precomputeEstuaryData();
 };
 #endif // SIMULATION_H
