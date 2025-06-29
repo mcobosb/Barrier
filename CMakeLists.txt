@@ -11,17 +11,20 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Establecer el tipo de build por defecto
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug)
+    set(CMAKE_BUILD_TYPE "Debug")
 endif()
 
 # Opciones de compilación modernas
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic")
+    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic -fsanitize=address -fsanitize=undefined")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -ffast-math")
+    # ✅ MÁS CONSERVADOR: Sin -ffast-math ni -march=native por ahora
+    set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG -Wall -Wextra")
+elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    # ✅ COMPROMISO: Optimizado pero con debug info
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG -Wall -Wextra")
 else()
-    # Para cualquier otro build type (como "RelWithDebInfo")
-    set(CMAKE_CXX_FLAGS "-O2 -g -Wall -Wextra")
+    set(CMAKE_CXX_FLAGS "-O1 -g -Wall -Wextra")
 endif()
 
 # Crear ejecutable
@@ -69,6 +72,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         -ggdb3 
         -fno-omit-frame-pointer
         -fno-optimize-sibling-calls
+        -fsanitize=address           # Detecta buffer overflows
+        -fsanitize=undefined         # Detecta undefined behavior
+    )
+    target_link_options(barrier PRIVATE 
+        -fsanitize=address 
+        -fsanitize=undefined
     )
 endif()
 
