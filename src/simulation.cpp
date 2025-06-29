@@ -31,45 +31,66 @@ using std::pow;
 //! The CSimulation constructor
 //===============================================================================================================================
 CSimulation::CSimulation() {
-    m_dSimDuration =
-    m_dSimTimestep =
-    m_dTimeFactor =
-    m_dTimestep =
-    m_dLambda =
+    m_dSimDuration = 0.0;
+    m_dSimTimestep = 0.0;
+    m_dTimeFactor = 0.0;
+    m_dTimestep = 0.0;
+    m_dLambda = 0.0;
     m_dCurrentTime = 0.0;
 
     m_nPredictor = -1;
     m_nTimeLogId = 0;
     m_nStringError = 0;
+    m_nCrossSectionsNumber = 0;        
+    m_nHydrographsNumber = 0;            
+    m_nTimeId = 0;                      
 
-    m_nInitialEstuarineCondition =
-    m_nLogFileDetail =
-    m_nTimeLogId =
-    m_nTimeId =
-    m_nPredictor =
-    m_nEquationSedimentTransport =
-    m_nUpwardSalinityCondition =
+    m_nInitialEstuarineCondition = 0;
+    m_nLogFileDetail = 0;
+    m_nEquationSedimentTransport = 0;
+    m_nUpwardSalinityCondition = 0;
     m_nDownwardSalinityCondition = 0;
+    m_nUpwardEstuarineCondition = 0;     
+    m_nDownwardEstuarineCondition = 0;  
 
-    m_bSaveTime =
-    m_bDoSedimentTransport =
-    m_bHydroFile =
+    m_bSaveTime = false;
+    m_bDoSedimentTransport = false;
+    m_bHydroFile = false;
     m_bReturnError = false;
+    m_bDoWaterSalinity = false;          
+    m_bDoMcCormackLimiterFlux = false;  
+    m_bDoSurfaceGradientMethod = false;  
+    m_bDoSourceTermBalance = false;     
+    m_bDoBetaCoefficient = false;        
+    m_bDoDryBed = false;                
+    m_bDoMurilloCondition = false;       
+    m_bDoWaterDensity = false;          
 
+    m_dBetaSalinityConstant = 0.0;      
+    m_dLongitudinalDispersion = 0.0;     
+    m_dUpwardBoundaryValue = 0.0;        
+    m_dNextUpwardBoundaryValue = 0.0;    
+    m_dDownwardBoundaryValue = 0.0;      
+    m_dNextDownwardBoundaryValue = 0.0;  
+    m_dCourantNumber = 0.0;              
+    m_nEquationMcCormackLimiterFlux = 0; 
+    m_nPsiFormula = 0;                   
+    m_dDeltaValue = 0.0;                 
 
-
-    vector<string> m_vOutputVariables;
-
-    vector<CCrossSection> estuary;
-    vector<CHydrograph> hydrographs;
-
-    // ✅ INICIALIZAR: Fecha de inicio por defecto
+    // ✅ FECHA DE INICIO
     m_nSimStartSec = 0;
     m_nSimStartMin = 0;
     m_nSimStartHour = 0;
     m_nSimStartDay = 1;
     m_nSimStartMonth = 1;
     m_nSimStartYear = 2024;
+
+    m_vOutputVariables.clear();
+    estuary.clear();
+    hydrographs.clear();
+
+    m_tSysStartTime = 0;
+    m_tSysStartLoopTime = 0;
 }
 
 //===============================================================================================================================
@@ -610,7 +631,7 @@ void CSimulation::calculateBedSlope() {
     double dX2;
     
     // // Reservar espacio antes del bucle paralelo
-    // m_vCrossSectionBedSlopeDirection.resize(m_nCrossSectionsNumber);
+    // m_vCrossSectionBedSlopeDirection.resize(m_nCrossSections);
     
     //Calculate S0
     for (int i = 0; i < m_nCrossSectionsNumber ; i++) {
@@ -806,17 +827,18 @@ void CSimulation::calculateHydraulicParameters() {
             if (j >= 0 && j < nElevationSectionsNumber-1) {
                 const double factor = (dArea[i] - m_vEstuaryAreas[i][j]) / (m_vEstuaryAreas[i][j+1] - m_vEstuaryAreas[i][j]);
                 
-                m_vCrossSectionHydraulicRadius[i] = m_vEstuaryHydraulicRadius[i][j] + 
-                    factor * (m_vEstuaryHydraulicRadius[i][j+1] - m_vEstuaryHydraulicRadius[i][j]);
-                m_vCrossSectionWaterDepth[i] = m_vEstuaryWaterDepths[i][j] + 
-                    factor * (m_vEstuaryWaterDepths[i][j+1] - m_vEstuaryWaterDepths[i][j]);
+                m_vCrossSectionHydraulicRadius[i] = (m_vEstuaryHydraulicRadius[i][j] + 
+                    factor * (m_vEstuaryHydraulicRadius[i][j+1] - m_vEstuaryHydraulicRadius[i][j]));
+                m_vCrossSectionWaterDepth[i] = (m_vEstuaryWaterDepths[i][j] + 
+                    factor * (m_vEstuaryWaterDepths[i][j+1] - m_vEstuaryWaterDepths[i][j]));
                 
                 m_vCrossSectionWidth[i] = m_vWidth[i][j] + factor * (m_vWidth[i][j+1] - m_vWidth[i][j]);
                 m_vCrossSectionBeta[i] = m_vBeta[i][j] + factor * (m_vBeta[i][j+1] - m_vBeta[i][j]);
-                m_vCrossSectionLeftRBLocation[i] = m_vLeftY[i][j] + 
-                    factor * (m_vLeftY[i][j+1] - m_vLeftY[i][j]);
-                m_vCrossSectionRightRBLocation[i] = m_vRightY[i][j] + 
-                    factor * (m_vRightY[i][j+1] - m_vRightY[i][j]);
+                // TODO: Check if the left and right bank locations are correct
+                // m_vCrossSectionLeftRBLocation[i] = (m_vLeftY[i][j] + 
+                //     factor * (m_vLeftY[i][j+1] - m_vLeftY[i][j]));
+                // m_vCrossSectionRightRBLocation[i] = (m_vRightY[i][j] + 
+                //     factor * (m_vRightY[i][j+1] - m_vRightY[i][j]));
             }        
         }
         
@@ -827,7 +849,7 @@ void CSimulation::calculateHydraulicParameters() {
     //     for (int i = 0; i < nCrossSections; i++) {
     //         const double dArea = m_vPredictedCrossSectionArea[i];
     //         const int nElevationSectionsNumber = estuary[i].nGetElevationSectionsNumber();
-
+    //
     //         if (estuary[i].dGetArea(0) > dArea) {
     //             //! Take the first node if dArea < the Area of the first elevation node
     //             // vElevationSection.push_back(0);
@@ -1361,7 +1383,7 @@ void CSimulation::updatePredictorBoundaries() {
         // vector<double> vCrossSectionAreaTmp = estuary[m_nCrossSectionsNumber-1].vGetArea();
         // vector<double> vCrossSectionElevationTmp = estuary[m_nCrossSectionsNumber-1].vGetWaterDepth();
         // vector<double> vCrossSectionHydraulicRadiusTmp = estuary[m_nCrossSectionsNumber-1].vGetHydraulicRadius();
-
+        //
         // m_vCrossSectionHydraulicRadius[m_nCrossSectionsNumber-1] = linearInterpolation1d(m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-1], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
         //! Compute Q given the area, no need the directión of slope
         // if (m_vCrossSectionBedSlope[m_nCrossSectionsNumber-1] == 0.0) {
