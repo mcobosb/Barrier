@@ -2003,7 +2003,6 @@ void CSimulation::bDoSimulationEnd(){
 //! MÉTODO 1: Constructor directo (RECOMENDADO)
 //======================================================================================================================
 void CSimulation::precomputeEstuaryData() {
-    std::cout << "🔄 Pre-computing estuary data..." << std::endl;
     
     // Pre-calcular datos escalares básicos
     m_vElevationSectionsCount.resize(m_nCrossSectionsNumber);
@@ -2036,6 +2035,4 @@ void CSimulation::precomputeEstuaryData() {
         m_vLeftY[i] = estuary[i].vGetLeftRBLocation();
         m_vRightY[i] = estuary[i].vGetRightRBLocation();
     }
-    
-    std::cout << "✅ Estuary data pre-computed successfully" << std::endl;
-}
+    }
