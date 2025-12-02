@@ -512,7 +512,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         //==============================================================================================================
         mergePredictorCorrector();
 
-        smoothSolution();
+        // smoothSolution();
 
         //! Boundary conditions
         // updateBoundaries();
@@ -743,20 +743,21 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
         }
     }
     else {
-        //! Water level in calm     
+        //! Water level in calm - REPOSO HIDROSTÁTICO
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
             vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
             vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
 
+            // Calado desde el nivel de referencia (z=0)
             m_vCrossSectionWaterDepth[i] = -estuary[i].dGetZ();
             m_vCrossSectionWaterElevation[i] = 0.0;
             m_vCrossSectionArea[i] = linearInterpolation1d(m_vCrossSectionWaterDepth[i],vCrossSectionElevationTmp, vCrossSectionAreaTmp);
             m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
             m_vCrossSectionHydraulicRadius[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
 
-            //! Compute Q given the area
-            m_vCrossSectionQ[i] = m_vCrossSectionArea[i]*m_vCrossSectionBedSlopeDirection[i]*sqrt(fabs(m_vCrossSectionBedSlope[i]))*pow(m_vCrossSectionHydraulicRadius[i], 2.0/3.0)/estuary[i].dGetManningNumber();
+            //! ✅ CORRECTO: En reposo (calm), Q = 0 en todo el dominio
+            m_vCrossSectionQ[i] = 0.0;
         }
     }
  
@@ -1177,8 +1178,9 @@ void CSimulation::calculate_GS_A_terms() {
                 }
             }
             
-            // ✅ CORRECTO: Término de pendiente de fondo
-            m_vCrossSection_gAS0[i] = G * dMeanArea * m_vCrossSectionBedSlope[i] * m_vCrossSectionBedSlopeDirection[i];
+            // ✅ CORRECTO: Término de pendiente de fondo (S0 ya tiene el signo correcto)
+            // gAS0 = g * A * S0 (positivo si pendiente sube, negativo si baja)
+            m_vCrossSection_gAS0[i] = G * dMeanArea * m_vCrossSectionBedSlope[i];
             
             // ✅ CORRECTO: Pendiente de fricción según Manning
             if (dMeanArea > DRY_AREA && dMeanHydraulicRadius > 1e-6) {
@@ -1195,7 +1197,8 @@ void CSimulation::calculate_GS_A_terms() {
     else {
         // Sin promediado (más simple pero menos preciso)
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            m_vCrossSection_gAS0[i] = G * m_vCrossSectionArea[i] * m_vCrossSectionBedSlope[i] * m_vCrossSectionBedSlopeDirection[i];
+            // ✅ CORRECTO: S0 ya tiene el signo correcto, no necesita factor de dirección
+            m_vCrossSection_gAS0[i] = G * m_vCrossSectionArea[i] * m_vCrossSectionBedSlope[i];
             
             if (m_nPredictor == 1) {
                 if (m_vCrossSectionArea[i] > DRY_AREA && m_vCrossSectionHydraulicRadius[i] > 1e-6) {
@@ -1809,23 +1812,19 @@ void CSimulation::smoothSolution() {
     // Copiar valores originales primero
     vCrossSectionArea = m_vCrossSectionArea;
     vCrossSectionQ = m_vCrossSectionQ;
+    
+    // Suavizado MUY suave: pesos [0.10, 0.80, 0.10] para preservar la solución física
+    // Esto solo elimina oscilaciones de muy alta frecuencia sin degradar la precisión
     for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
-        vCrossSectionArea[i] = 0.25*(m_vCrossSectionArea[i+1] + 2*m_vCrossSectionArea[i] + m_vCrossSectionArea[i-1]);
-        // vCrossSectionArea[i] = 0.5*(m_vCrossSectionArea[i] + m_vCrossSectionArea[i-1]);
-
-        vCrossSectionQ[i] = 0.25*(m_vCrossSectionQ[i+1] +2*m_vCrossSectionQ[i]+ m_vCrossSectionQ[i-1]);
-        // vCrossSectionQ[i] = 0.5*(m_vCrossSectionQ[i]+ m_vCrossSectionQ[i-1]);
+        vCrossSectionArea[i] = 0.10*m_vCrossSectionArea[i-1] + 0.80*m_vCrossSectionArea[i] + 0.10*m_vCrossSectionArea[i+1];
+        vCrossSectionQ[i] = 0.10*m_vCrossSectionQ[i-1] + 0.80*m_vCrossSectionQ[i] + 0.10*m_vCrossSectionQ[i+1];
     }
-    for (int i = 1; i < m_nCrossSectionsNumber-1;i ++)
-    {
+    
+    // Aplicar valores suavizados (manteniendo fronteras intactas)
+    for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
         m_vCrossSectionArea[i] = vCrossSectionArea[i];
         m_vCrossSectionQ[i] = vCrossSectionQ[i];
     }
-    // m_vCrossSectionArea[0] = 0.5*(vCrossSectionArea[1] + m_vCrossSectionArea[0]);
-    // m_vCrossSectionQ[0] = 0.5*(vCrossSectionQ[1] + m_vCrossSectionQ[0]);
-    //
-    // m_vCrossSectionArea[m_nCrossSectionsNumber-1] = 0.5*(m_vCrossSectionArea[m_nCrossSectionsNumber-1] + vCrossSectionArea[m_nCrossSectionsNumber-2]);
-    // m_vCrossSectionArea[m_nCrossSectionsNumber-1] = 0.5*(m_vCrossSectionQ[m_nCrossSectionsNumber-1] + vCrossSectionQ[m_nCrossSectionsNumber-2]);
 }
 
 //======================================================================================================================
@@ -1945,22 +1944,42 @@ void CSimulation::calculate_salinity()
         if (m_vCrossSectionSalinity[i] > 35) m_vCrossSectionSalinity[i] = 35;
     }
 
-    if (nGetUpwardSalinityCondition() == 1)
-    {
-        m_vCrossSectionSalinity[0] = 0;
+    // ================================================================================================================
+    // CONDICIONES DE FRONTERA AGUAS ARRIBA (UPSTREAM) - SALINIDAD
+    // ================================================================================================================
+    if (nGetUpwardSalinityCondition() == 0) {
+        //! ✅ CONDICIÓN LIBRE (FREE): Solo permite entrada de agua dulce
+        //! Si flujo entra (Q > 0): salinidad = 0 (agua dulce)
+        //! Si flujo sale (Q < 0): usar gradiente cero (mantener valor actual sin difusión hacia atrás)
+        if (m_vCrossSectionQ[0] > 0) {
+            // Flujo entrante desde aguas arriba → agua dulce
+            m_vCrossSectionSalinity[0] = 0.0;
+        }
+        // Si flujo saliente, mantener el valor calculado por advección (ya está en m_vCrossSectionSalinity[0])
     }
-    else if (nGetUpwardSalinityCondition() == 2)
-    {
-        m_vCrossSectionSalinity[0] = 35;
+    else if (nGetUpwardSalinityCondition() == 1) {
+        //! Salinidad NULA impuesta
+        m_vCrossSectionSalinity[0] = 0.0;
+    }
+    else if (nGetUpwardSalinityCondition() == 2) {
+        //! Salinidad OCEÁNICA impuesta
+        m_vCrossSectionSalinity[0] = 35.0;
     }
 
-    if (nGetDownwardSalinityCondition() == 1)
-    {
-        m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = 0;
+    // ================================================================================================================
+    // CONDICIONES DE FRONTERA AGUAS ABAJO (DOWNSTREAM) - SALINIDAD
+    // ================================================================================================================
+    if (nGetDownwardSalinityCondition() == 0) {
+        //! CONDICIÓN LIBRE: Gradiente cero en frontera aguas abajo
+        // Ya calculado por advección, no hacer nada
     }
-    else if (nGetDownwardSalinityCondition() == 2)
-    {
-        m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = 35;
+    else if (nGetDownwardSalinityCondition() == 1) {
+        //! Salinidad NULA impuesta
+        m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = 0.0;
+    }
+    else if (nGetDownwardSalinityCondition() == 2) {
+        //! Salinidad OCEÁNICA impuesta
+        m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = 35.0;
     }
 }
 
@@ -1989,7 +2008,22 @@ void CSimulation::calculate_salinity_gradient()
     vKAS_dif_backward[1] = m_vCrossSectionArea[0]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
     vKAS_dif_backward[0] = vKAS_dif_backward[1];
 
-    vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*m_vCrossSectionSalinity[0])*m_dLambda;
+    // ⚠️ FRONTERA AGUAS ARRIBA: Usar esquema upwind puro para evitar difusión inversa
+    if (nGetUpwardSalinityCondition() == 0) {
+        // Condición FREE: solo advección, sin difusión hacia atrás
+        if (m_vCrossSectionQ[0] >= 0) {
+            // Flujo entrante: advectar desde frontera (S=0)
+            vAUS_dif[0] = m_vCrossSectionQ[0] * 0.0 * m_dLambda; // S[0]=0 para agua dulce
+        } else {
+            // Flujo saliente: advectar desde interior usando upwind
+            vAUS_dif[0] = m_vCrossSectionQ[0] * m_vCrossSectionSalinity[1] * m_dLambda;
+        }
+    } else {
+        // Condiciones impuestas (tipo 1 o 2): advección normal
+        vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*m_vCrossSectionSalinity[0])*m_dLambda;
+    }
+    
+    // FRONTERA AGUAS ABAJO: advección normal
     vAUS_dif[m_nCrossSectionsNumber-1] = (m_vCrossSectionQ[m_nCrossSectionsNumber-1]*m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] - m_vCrossSectionQ[m_nCrossSectionsNumber-2]*m_vCrossSectionSalinity[m_nCrossSectionsNumber-2])*m_dLambda;
 
     //! Calculate de ASt term (temporal gradient)
