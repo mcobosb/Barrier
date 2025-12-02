@@ -207,7 +207,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation) {
 	                    // Crear directorio de salida usando el path base
 	                    m_strOutPath = m_strOutputBasePath + "/";
 
-	                    m_pSimulation->m_strOutFile = m_strOutPath + strRH + OUT_EXT;
+	                    m_pSimulation->m_strOutFile = m_strOutPath; // + strRH + OUT_EXT;
 	                    m_pSimulation->m_strLogFile = m_strOutPath + strRH + LOG_EXT;
 	                }
 	                break;
