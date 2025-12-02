@@ -15,7 +15,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Establecer el tipo de build por defecto
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "Debug")
+    set(CMAKE_BUILD_TYPE "ReleaseFast")
 endif()
 
 #======================================================================================================================
@@ -98,7 +98,7 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "ReleaseFast")
         -funroll-loops -fomit-frame-pointer
         -flto
     )
-    target_link_options(barrier PRIVATE -flto -Wl,--gc-sections -Wl,--strip-all)
+    target_link_options(barrier PRIVATE -flto=auto -Wl,--gc-sections -Wl,--strip-all)
     target_compile_definitions(barrier PRIVATE NDEBUG)
 
 else()
