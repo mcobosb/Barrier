@@ -317,6 +317,32 @@ class CSimulation
     //! Gv1 terms
     vector<double> m_vCrossSectionGv1;
 
+    // ⚡ TVD limiter work arrays (pre-allocated to avoid per-timestep allocations)
+    vector<double> m_vTVD_a1_med;
+    vector<double> m_vTVD_a2_med;
+    vector<double> m_vTVD_alfa1_med;
+    vector<double> m_vTVD_alfa2_med;
+    vector<double> m_vTVD_psi1_med;
+    vector<double> m_vTVD_psi2_med;
+    vector<double> m_vTVD_r1_med;
+    vector<double> m_vTVD_r2_med;
+    vector<double> m_vTVD_fi1_med;
+    vector<double> m_vTVD_fi2_med;
+    vector<double> m_vTVD_Factor1;
+    vector<double> m_vTVD_Factor2;
+
+    // ⚡ Salinity gradient work arrays (pre-allocated)
+    vector<double> m_vSalinity_KAS_forward;
+    vector<double> m_vSalinity_KAS_backward;
+    vector<double> m_vSalinity_AUS_diff;
+
+    // ⚡ Precalculated constants (computed once at initialization)
+    vector<double> m_vManningNumberSquared;      // Manning² (usado en fricción ~4000 veces/día)
+    vector<double> m_vInvDX;                     // 1/ΔX (usado en gradientes ~8000 veces/día)
+    vector<double> m_vDxSum;                     // ΔX[i] + ΔX[i+1] (diferencias centradas)
+    vector<double> m_vInvDxSum;                  // 1/(ΔX[i] + ΔX[i+1])
+    vector<double> m_vGtimesDX;                  // g*ΔX (término constante)
+
     //! D1 terms
     vector<double> m_vCrossSectionD1Factor;
 
@@ -520,6 +546,7 @@ class CSimulation
     void initializeVectors();
     void calculateBedSlope();
     void calculateAlongEstuaryInitialConditions();
+    std::string generateOutputFileName() const;
     static double linearInterpolation1d(double dValue, const vector<double> &vX, const vector<double> &vY);
     void calculateHydraulicParameters();
     void interpolateHydraulicParameters(double dArea, int nCrossSection, int nElevationNode);
@@ -613,6 +640,7 @@ class CSimulation
     vector<vector<double>> m_vEstuaryAreas;
     vector<vector<double>> m_vEstuaryHydraulicRadius;
     vector<vector<double>> m_vEstuaryWaterDepths;
+    vector<vector<double>> m_vPrecalculatedSecondTerm;
     vector<int> m_vElevationSectionsCount;
 
     public:

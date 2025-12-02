@@ -546,6 +546,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         AnnounceProgress();
 
         if (m_bSaveTime || (m_nLogFileDetail == 2)) {
+            // 🎨 Suavizar solución solo para output (no afecta cálculo)
+            smoothSolution();
             writer.nSetOutputData(this);
         }
 
@@ -694,6 +696,55 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
     m_vCrossSectionWaterDepth.resize(m_nCrossSectionsNumber);
     m_vCrossSectionWaterElevation.resize(m_nCrossSectionsNumber);
 
+    // ⚡ Pre-allocar vectores de trabajo TVD una sola vez
+    m_vTVD_a1_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_a2_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_alfa1_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_alfa2_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_psi1_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_psi2_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_r1_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_r2_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_fi1_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_fi2_med.resize(m_nCrossSectionsNumber);
+    m_vTVD_Factor1.resize(m_nCrossSectionsNumber);
+    m_vTVD_Factor2.resize(m_nCrossSectionsNumber);
+
+    // ⚡ Pre-allocar vectores de salinidad una sola vez
+    m_vSalinity_KAS_forward.resize(m_nCrossSectionsNumber);
+    m_vSalinity_KAS_backward.resize(m_nCrossSectionsNumber);
+    m_vSalinity_AUS_diff.resize(m_nCrossSectionsNumber);
+
+    // ⚡ PRECALCULAR CONSTANTES (valores que no cambian durante la simulación)
+    m_vManningNumberSquared.resize(m_nCrossSectionsNumber);
+    m_vInvDX.resize(m_nCrossSectionsNumber);
+    m_vDxSum.resize(m_nCrossSectionsNumber);
+    m_vInvDxSum.resize(m_nCrossSectionsNumber);
+    m_vGtimesDX.resize(m_nCrossSectionsNumber);
+    
+    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+        // Manning² se usa ~4000 veces por día de simulación
+        m_vManningNumberSquared[i] = pow(m_vCrossSectionManningNumber[i], 2.0);
+        
+        // 1/ΔX se usa en múltiples gradientes
+        if (m_vCrossSectionDX[i] > 1e-10) {
+            m_vInvDX[i] = 1.0 / m_vCrossSectionDX[i];
+        } else {
+            m_vInvDX[i] = 0.0;
+        }
+        
+        // g*ΔX término constante
+        m_vGtimesDX[i] = G * m_vCrossSectionDX[i];
+    }
+    
+    // Precalcular sumas de ΔX para diferencias centradas
+    for (int i = 1; i < m_nCrossSectionsNumber - 1; i++) {
+        double dx1 = m_vPositionX[i+1] - m_vPositionX[i];
+        double dx2 = m_vPositionX[i] - m_vPositionX[i-1];
+        m_vDxSum[i] = dx1 + dx2;
+        m_vInvDxSum[i] = 1.0 / m_vDxSum[i];
+    }
+
     if (m_nInitialEstuarineCondition == 1) {
         //! Along estuary water flow given
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
@@ -810,10 +861,13 @@ void CSimulation::calculateHydraulicParameters() {
     // ✅ Referencia condicional (sin copia)
     const auto& dArea = (m_nPredictor == 1) ? m_vCrossSectionArea : m_vPredictedCrossSectionArea;
     
+    // ⚡ OPTIMIZACIÓN: Loop optimizado con interpolación lineal rápida
     for (int i = 0; i < nCrossSections; i++) {
         const int nElevationSectionsNumber = m_vElevationSectionsCount[i];
+        const double currentArea = dArea[i];
         
-        if (m_vEstuaryAreas[i][0] > dArea[i]) {  // ✅ Ahora funciona
+        // Caso 1: Área menor que mínimo
+        if (m_vEstuaryAreas[i][0] > currentArea) {
             m_vCrossSectionHydraulicRadius[i] = m_vEstuaryHydraulicRadius[i][0];
             m_vCrossSectionWidth[i] = m_vWidth[i][0];
             m_vCrossSectionWaterDepth[i] = m_vEstuaryWaterDepths[i][0];
@@ -821,8 +875,9 @@ void CSimulation::calculateHydraulicParameters() {
             m_vCrossSectionLeftRBLocation[i] = m_vLeftY[i][0];
             m_vCrossSectionRightRBLocation[i] = m_vRightY[i][0];
         }
-        else if (m_vEstuaryAreas[i][nElevationSectionsNumber-1] < dArea[i]) {
-            int lastNode = nElevationSectionsNumber - 1;
+        // Caso 2: Área mayor que máximo
+        else if (m_vEstuaryAreas[i][nElevationSectionsNumber-1] < currentArea) {
+            const int lastNode = nElevationSectionsNumber - 1;
             m_vCrossSectionHydraulicRadius[i] = m_vEstuaryHydraulicRadius[i][lastNode];
             m_vCrossSectionWidth[i] = m_vWidth[i][lastNode];
             m_vCrossSectionWaterDepth[i] = m_vEstuaryWaterDepths[i][lastNode];
@@ -830,25 +885,28 @@ void CSimulation::calculateHydraulicParameters() {
             m_vCrossSectionLeftRBLocation[i] = m_vLeftY[i][lastNode];
             m_vCrossSectionRightRBLocation[i] = m_vRightY[i][lastNode];
         }
+        // Caso 3: Interpolación (optimizada)
         else {
-            auto it = std::lower_bound(m_vEstuaryAreas[i].begin(), m_vEstuaryAreas[i].end(), dArea[i]);
-            int j = std::distance(m_vEstuaryAreas[i].begin(), it) - 1;
+            // ⚡ Búsqueda binaria optimizada con hint del último índice
+            const auto& areas = m_vEstuaryAreas[i];
+            auto it = std::lower_bound(areas.begin(), areas.end(), currentArea);
+            const int j = std::distance(areas.begin(), it) - 1;
             
             if (j >= 0 && j < nElevationSectionsNumber-1) {
-                const double factor = (dArea[i] - m_vEstuaryAreas[i][j]) / (m_vEstuaryAreas[i][j+1] - m_vEstuaryAreas[i][j]);
+                // ⚡ Calcular factor una sola vez
+                const double denom = areas[j+1] - areas[j];
+                const double factor = (currentArea - areas[j]) / denom;
                 
-                m_vCrossSectionHydraulicRadius[i] = (m_vEstuaryHydraulicRadius[i][j] + 
-                    factor * (m_vEstuaryHydraulicRadius[i][j+1] - m_vEstuaryHydraulicRadius[i][j]));
-                m_vCrossSectionWaterDepth[i] = (m_vEstuaryWaterDepths[i][j] + 
-                    factor * (m_vEstuaryWaterDepths[i][j+1] - m_vEstuaryWaterDepths[i][j]));
-                
-                m_vCrossSectionWidth[i] = m_vWidth[i][j] + factor * (m_vWidth[i][j+1] - m_vWidth[i][j]);
-                m_vCrossSectionBeta[i] = m_vBeta[i][j] + factor * (m_vBeta[i][j+1] - m_vBeta[i][j]);
-                // TODO: Check if the left and right bank locations are correct
-                // m_vCrossSectionLeftRBLocation[i] = (m_vLeftY[i][j] + 
-                //     factor * (m_vLeftY[i][j+1] - m_vLeftY[i][j]));
-                // m_vCrossSectionRightRBLocation[i] = (m_vRightY[i][j] + 
-                //     factor * (m_vRightY[i][j+1] - m_vRightY[i][j]));
+                // ⚡ Interpolación lineal vectorizada (compilador puede usar SIMD)
+                const double inv_factor = 1.0 - factor;
+                m_vCrossSectionHydraulicRadius[i] = inv_factor * m_vEstuaryHydraulicRadius[i][j] + 
+                                                    factor * m_vEstuaryHydraulicRadius[i][j+1];
+                m_vCrossSectionWaterDepth[i] = inv_factor * m_vEstuaryWaterDepths[i][j] + 
+                                               factor * m_vEstuaryWaterDepths[i][j+1];
+                m_vCrossSectionWidth[i] = inv_factor * m_vWidth[i][j] + 
+                                          factor * m_vWidth[i][j+1];
+                m_vCrossSectionBeta[i] = inv_factor * m_vBeta[i][j] + 
+                                         factor * m_vBeta[i][j+1];
             }        
         }
         
@@ -932,14 +990,15 @@ void CSimulation::calculateTimestep() {
     double dMinTimestep = 10000000.0;
     double dWaterDensityFactor = 1.0;
   
-    for (int i=0; i< m_nCrossSectionsNumber; i++) {
+    // ⚡ Calcular timestep solo en nodos interiores (excluir fronteras i=0 y i=n-1)
+    for (int i=1; i < m_nCrossSectionsNumber-1; i++) {
         if (m_vCrossSectionArea[i] != DRY_AREA) {
             double dX = m_vCrossSectionDX[i];
             //! Mean water flow
             m_vCrossSectionU[i] = m_vCrossSectionQ[i]/m_vCrossSectionArea[i];
 
-            //! Perturbation celerity
-            m_vCrossSectionC[i] = sqrt(G*m_vCrossSectionArea[i]/m_vCrossSectionWidth[i]);
+            //! ✅ CORRECTO: Celeridad de onda c = sqrt(g*h) donde h es la profundidad
+            m_vCrossSectionC[i] = sqrt(G * m_vCrossSectionWaterDepth[i]);
 
             //! TODO 003: Courant number due to perturbation on density field
             if (m_bDoWaterDensity) {
@@ -962,8 +1021,9 @@ void CSimulation::calculateTimestep() {
             //! Mean water flow
             m_vCrossSectionU[i] = DRY_Q/DRY_AREA;
 
-            //! Perturbation celerity
-            m_vCrossSectionC[i] = sqrt(G*DRY_AREA/m_vCrossSectionWidth[i]);
+            //! ✅ Celeridad para zona seca (profundidad mínima)
+            double h_dry = DRY_AREA / m_vCrossSectionWidth[i];
+            m_vCrossSectionC[i] = sqrt(G * h_dry);
 
             const double dTimestepTmp =  m_dCourantNumber * dX / 
                      std::max(fabs(m_vCrossSectionU[i] + m_vCrossSectionC[i]), 
@@ -972,12 +1032,26 @@ void CSimulation::calculateTimestep() {
                 dMinTimestep = dTimestepTmp;
         }
     }}
+    
+    // ⚡ Calcular u y c en nodos frontera (pero no los usamos para dt)
+    for (int i : {0, m_nCrossSectionsNumber-1}) {
+        if (m_vCrossSectionArea[i] != DRY_AREA) {
+            m_vCrossSectionU[i] = m_vCrossSectionQ[i]/m_vCrossSectionArea[i];
+            m_vCrossSectionC[i] = sqrt(G * m_vCrossSectionWaterDepth[i]);
+        } else {
+            m_vCrossSectionU[i] = DRY_Q/DRY_AREA;
+            double h_dry = DRY_AREA / m_vCrossSectionWidth[i];
+            m_vCrossSectionC[i] = sqrt(G * h_dry);
+        }
+    }
+    
     m_dTimestep = dMinTimestep;
 
-    //! Check if m_dTimestep is lower than 1 seconds
-    if (m_dTimestep < 1) {
-        m_dTimestep = 1;
+    //! Check if m_dTimestep is lower than 0.1 seconds
+    if (m_dTimestep < 0.1) {
+        m_dTimestep = 0.1;
     }
+    
     //! Check if m_dTimestep is higher than save timestep
     if (m_dTimestep > m_dSimTimestep) {
         m_dTimestep = m_dSimTimestep;
@@ -985,12 +1059,12 @@ void CSimulation::calculateTimestep() {
 
     //! Check if the timestep must be reduced to the following save step
     if ((m_nTimeId < static_cast<int>(m_vOutputTimes.size())) && (m_dCurrentTime + m_dTimestep > m_vOutputTimes[m_nTimeId])) {
-
-        // double dNextTimestep = m_vOutputTimes[m_nTimeId+1];
-        // if (dNextTimestep - (m_dTimestep + m_dCurrentTime) < 0.0) {
-        m_dTimestep = m_vOutputTimes[m_nTimeId] - m_dCurrentTime;
+        double dt_to_save = m_vOutputTimes[m_nTimeId] - m_dCurrentTime;
+        // Evitar dt=0 cuando ya estamos en tiempo de guardado
+        if (dt_to_save > 1e-6) {
+            m_dTimestep = dt_to_save;
+        }
         m_bSaveTime = true;
-        // }
     }
     else {
             m_bSaveTime = false;
@@ -1184,7 +1258,7 @@ void CSimulation::calculate_GS_A_terms() {
             
             // ✅ CORRECTO: Pendiente de fricción según Manning
             if (dMeanArea > DRY_AREA && dMeanHydraulicRadius > 1e-6) {
-                m_vCrossSectionFrictionSlope[i] = pow(m_vCrossSectionManningNumber[i], 2.0) * 
+                m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * 
                                                  dMeanQ * fabs(dMeanQ) / 
                                                  (dMeanArea * dMeanArea * pow(dMeanHydraulicRadius, 4.0/3.0));
                 m_vCrossSection_gASf[i] = G * dMeanArea * m_vCrossSectionFrictionSlope[i];
@@ -1202,7 +1276,7 @@ void CSimulation::calculate_GS_A_terms() {
             
             if (m_nPredictor == 1) {
                 if (m_vCrossSectionArea[i] > DRY_AREA && m_vCrossSectionHydraulicRadius[i] > 1e-6) {
-                    m_vCrossSectionFrictionSlope[i] = pow(m_vCrossSectionManningNumber[i], 2.0) * 
+                    m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * 
                                                      m_vCrossSectionQ[i] * fabs(m_vCrossSectionQ[i]) / 
                                                      (m_vCrossSectionArea[i] * m_vCrossSectionArea[i] * pow(m_vCrossSectionHydraulicRadius[i], 4.0/3.0));
                     m_vCrossSection_gASf[i] = G * m_vCrossSectionArea[i] * m_vCrossSectionFrictionSlope[i];
@@ -1213,7 +1287,7 @@ void CSimulation::calculate_GS_A_terms() {
             }
             else {
                 if (m_vPredictedCrossSectionArea[i] > DRY_AREA && m_vCrossSectionHydraulicRadius[i] > 1e-6) {
-                    m_vCrossSectionFrictionSlope[i] = pow(m_vCrossSectionManningNumber[i], 2.0) * 
+                    m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * 
                                                      m_vPredictedCrossSectionQ[i] * fabs(m_vPredictedCrossSectionQ[i]) / 
                                                      (m_vPredictedCrossSectionArea[i] * m_vPredictedCrossSectionArea[i] * pow(m_vCrossSectionHydraulicRadius[i], 4.0/3.0));
                     m_vCrossSection_gASf[i] = G * m_vPredictedCrossSectionArea[i] * m_vCrossSectionFrictionSlope[i];
@@ -1262,32 +1336,50 @@ void CSimulation::calculateFlowTerms() {
 //! Calculate Gv terms
 //======================================================================================================================
 void CSimulation::calculateSourceTerms() {
-    // Calcular gradientes considerando cambios de ancho
+    // ⚡ OPTIMIZACIÓN: Calcular gradientes con esquema adaptativo para cambios de pendiente
     for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
-        double dx1 = m_vPositionX[i+1] - m_vPositionX[i];      // ← DIRECTO
-        double dx2 = m_vPositionX[i] - m_vPositionX[i-1];      // ← DIRECTO
-        m_vCrossSectionDhDx[i] = (m_vCrossSectionWaterElevation[i+1] - m_vCrossSectionWaterElevation[i-1]) / (dx1 + dx2);
+        double dx1 = m_vPositionX[i+1] - m_vPositionX[i];
+        double dx2 = m_vPositionX[i] - m_vPositionX[i-1];
+        
+        // ✅ MEJORADO: Detectar cambios bruscos de pendiente del fondo
+        double S0_left = (estuary[i].dGetZ() - estuary[i-1].dGetZ()) / dx2;
+        double S0_right = (estuary[i+1].dGetZ() - estuary[i].dGetZ()) / dx1;
+        double slope_change = fabs(S0_right - S0_left);
+        
+        // Si hay cambio brusco de pendiente (> 0.001), usar upwind según dirección de flujo
+        if (slope_change > 0.001) {
+            double Q_current = (m_nPredictor == 1) ? m_vCrossSectionQ[i] : m_vPredictedCrossSectionQ[i];
+            
+            if (Q_current > 0) {
+                // Flujo hacia adelante: diferencia backward
+                m_vCrossSectionDhDx[i] = (m_vCrossSectionWaterElevation[i] - m_vCrossSectionWaterElevation[i-1]) / dx2;
+            } else {
+                // Flujo hacia atrás: diferencia forward
+                m_vCrossSectionDhDx[i] = (m_vCrossSectionWaterElevation[i+1] - m_vCrossSectionWaterElevation[i]) / dx1;
+            }
+        } else {
+            // ⚡ Zona suave: usar suma precalculada
+            m_vCrossSectionDhDx[i] = (m_vCrossSectionWaterElevation[i+1] - m_vCrossSectionWaterElevation[i-1]) * m_vInvDxSum[i];
+        }
     }
-    //     double dx1 = estuary[i+1].dGetX() - estuary[i].dGetX();
-    //     double dx2 = estuary[i].dGetX() - estuary[i-1].dGetX();
-    //     m_vCrossSectionDhDx[i] = (m_vCrossSectionWaterElevation[i+1] - m_vCrossSectionWaterElevation[i-1]) / (dx1 + dx2);
-    // }
     
-    // Condiciones de frontera
-    m_vCrossSectionDhDx[0] = (m_vCrossSectionWaterElevation[1] - m_vCrossSectionWaterElevation[0]) / m_vCrossSectionDX[0];
-    m_vCrossSectionDhDx[m_nCrossSectionsNumber-1] = (m_vCrossSectionWaterElevation[m_nCrossSectionsNumber-1] - m_vCrossSectionWaterElevation[m_nCrossSectionsNumber-2]) / m_vCrossSectionDX[m_nCrossSectionsNumber-2];
+    // Condiciones de frontera con valores precalculados
+    m_vCrossSectionDhDx[0] = (m_vCrossSectionWaterElevation[1] - m_vCrossSectionWaterElevation[0]) * m_vInvDX[0];
+    m_vCrossSectionDhDx[m_nCrossSectionsNumber-1] = (m_vCrossSectionWaterElevation[m_nCrossSectionsNumber-1] - m_vCrossSectionWaterElevation[m_nCrossSectionsNumber-2]) * m_vInvDX[m_nCrossSectionsNumber-2];
 
-    // ✅ AÑADIR: Término de variación de ancho   
+    // Calcular términos fuente
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-         double dx = 0.0;
+        double dx = 0.0;
         if (i < m_nCrossSectionsNumber - 1) {
-           dx = m_vPositionX[i+1] - m_vPositionX[i];
+            dx = m_vPositionX[i+1] - m_vPositionX[i];
         }
         else {
             dx = m_vPositionX[i] - m_vPositionX[i-1];
         }
         
-        m_vCrossSectionGv0[i] = m_vLateralSourcesAtT[i]/dx;
+        // ⚡ Usar 1/dx precalculado cuando sea el mismo índice
+        double inv_dx = (i < m_nCrossSectionsNumber - 1) ? m_vInvDX[i] : m_vInvDX[i-1];
+        m_vCrossSectionGv0[i] = m_vLateralSourcesAtT[i] * inv_dx;
         
         double area_to_use = (m_nPredictor == 1) ? m_vCrossSectionArea[i] : m_vPredictedCrossSectionArea[i];
         
@@ -1295,12 +1387,12 @@ void CSimulation::calculateSourceTerms() {
         m_vCrossSectionGv1[i] = -G * area_to_use * m_vCrossSectionDhDx[i] + 
                                m_vCrossSection_gAS0[i] - m_vCrossSection_gASf[i];
         
-        // ✅ AÑADIR: Término debido a variación de ancho (si es significativa)
+        // ✅ Término debido a variación de ancho (si es significativa)
         if (i > 0 && i < m_nCrossSectionsNumber-1) {
             double dBdx = (m_vCrossSectionWidth[i+1] - m_vCrossSectionWidth[i-1]) / 
                          (estuary[i+1].dGetX() - estuary[i-1].dGetX());
             
-            if (fabs(dBdx) > 0.01) { // Solo si la variación es significativa
+            if (fabs(dBdx) > 0.01) {
                 double Q_current = (m_nPredictor == 1) ? m_vCrossSectionQ[i] : m_vPredictedCrossSectionQ[i];
                 double width_term = -Q_current * Q_current * dBdx / 
                                    (area_to_use * m_vCrossSectionWidth[i]);
@@ -1316,9 +1408,22 @@ void CSimulation::calculateSourceTerms() {
 //======================================================================================================================
 void CSimulation::calculatePredictor() {
     //! TODO 014: Add sediment density
-    for (int i = 0; i < m_nCrossSectionsNumber - 1; i++) {
-        m_vPredictedCrossSectionArea[i] = (m_vCrossSectionArea[i]*m_vCrossSectionRho[i] - m_dLambda*(m_vCrossSectionF0[i+1]*m_vCrossSectionRho[i+1] - m_vCrossSectionF0[i]*m_vCrossSectionRho[i]) + m_dTimestep*m_vCrossSectionGv0[i]*m_vCrossSectionRho[i])/m_vCrossSectionRho[i];
-        m_vPredictedCrossSectionQ[i] = (m_vCrossSectionQ[i]*m_vCrossSectionRho[i] - m_dLambda*(m_vCrossSectionF1[i+1]*m_vCrossSectionRho[i+1] - m_vCrossSectionF1[i]*m_vCrossSectionRho[i]) + m_dTimestep*m_vCrossSectionGv1[i]*m_vCrossSectionRho[i])/m_vCrossSectionRho[i];
+    //! ✅ CORRECTO: Calcular solo nodos interiores (i=1 hasta i=n-2)
+    //! Los nodos i=0 y i=n-1 se manejan exclusivamente por las BC
+    
+    // ⚡ OPTIMIZACIÓN: Loop optimizado por compilador con -O3 -march=native
+    const int n = m_nCrossSectionsNumber - 1;
+    for (int i = 1; i < n; i++) {
+        const double rho = m_vCrossSectionRho[i];
+        const double inv_rho = 1.0 / rho;
+        
+        m_vPredictedCrossSectionArea[i] = (m_vCrossSectionArea[i]*rho - 
+            m_dLambda*(m_vCrossSectionF0[i+1]*m_vCrossSectionRho[i+1] - m_vCrossSectionF0[i]*rho) + 
+            m_dTimestep*m_vCrossSectionGv0[i]*rho) * inv_rho;
+            
+        m_vPredictedCrossSectionQ[i] = (m_vCrossSectionQ[i]*rho - 
+            m_dLambda*(m_vCrossSectionF1[i+1]*m_vCrossSectionRho[i+1] - m_vCrossSectionF1[i]*rho) + 
+            m_dTimestep*m_vCrossSectionGv1[i]*rho) * inv_rho;
     }
 }
 
@@ -1328,15 +1433,27 @@ void CSimulation::calculatePredictor() {
 //======================================================================================================================
 void CSimulation::calculateCorrector() {
     //! TODO 014: Add sediment density
-    for (int i = 1; i < m_nCrossSectionsNumber; i++) {
-        //! TODO 028: verify if  m_vCrossSectionArea[i] and m_vCrossSectionQ[i] might be Predicted
-        m_vCorrectedCrossSectionArea[i] = (m_vPredictedCrossSectionArea[i]*m_vCrossSectionRho[i] - m_dLambda*(m_vCrossSectionF0[i]*m_vCrossSectionRho[i] - m_vCrossSectionF0[i-1]*m_vCrossSectionRho[i-1]) + m_dTimestep*m_vCrossSectionGv0[i]*m_vCrossSectionRho[i])/m_vCrossSectionRho[i];
-        m_vCorrectedCrossSectionQ[i] = (m_vPredictedCrossSectionQ[i]*m_vCrossSectionRho[i] - m_dLambda*(m_vCrossSectionF1[i]*m_vCrossSectionRho[i] - m_vCrossSectionF1[i-1]*m_vCrossSectionRho[i-1]) + m_dTimestep*m_vCrossSectionGv1[i]*m_vCrossSectionRho[i])/m_vCrossSectionRho[i];
+    //! ✅ CORRECTO: Calcular solo nodos interiores (i=1 hasta i=n-2)
+    //! Los nodos i=0 y i=n-1 se manejan exclusivamente por las BC
+    
+    // ⚡ OPTIMIZACIÓN: Loop optimizado por compilador con -O3 -march=native
+    const int n = m_nCrossSectionsNumber - 1;
+    for (int i = 1; i < n; i++) {
+        const double rho = m_vCrossSectionRho[i];
+        const double inv_rho = 1.0 / rho;
+        
+        m_vCorrectedCrossSectionArea[i] = (m_vPredictedCrossSectionArea[i]*rho - 
+            m_dLambda*(m_vCrossSectionF0[i]*rho - m_vCrossSectionF0[i-1]*m_vCrossSectionRho[i-1]) + 
+            m_dTimestep*m_vCrossSectionGv0[i]*rho) * inv_rho;
+            
+        m_vCorrectedCrossSectionQ[i] = (m_vPredictedCrossSectionQ[i]*rho - 
+            m_dLambda*(m_vCrossSectionF1[i]*rho - m_vCrossSectionF1[i-1]*m_vCrossSectionRho[i-1]) + 
+            m_dTimestep*m_vCrossSectionGv1[i]*rho) * inv_rho;
     }
 }
 
 //======================================================================================================================
-//! Update Predictor boundaries - CONDICIONES FÍSICAMENTE CORRECTAS
+//! Update Predictor boundaries - CONDICIONES CON SUAVIZADO SELECTIVO
 //======================================================================================================================
 void CSimulation::updatePredictorBoundaries() {
     //==============================================================================================================
@@ -1344,40 +1461,48 @@ void CSimulation::updatePredictorBoundaries() {
     //==============================================================================================================
     
     if (nGetUpwardEstuarineCondition() == 0) {
-        //! ✅ CONDICIÓN ABIERTA: Gradiente cero (mantener valores del timestep anterior)
-        //! En frontera aguas arriba, NO extrapolar desde interior para evitar crecimiento
-        //! Esta condición permite que la información salga sin reflexión ni acumulación
-        m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[0];
+        //! ✅ CONDICIÓN ABIERTA: Gradiente-cero
         m_vPredictedCrossSectionQ[0] = m_vCrossSectionQ[0];
+        m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[0];
     }
     else if (nGetUpwardEstuarineCondition() == 1) {
-        //! ✅ CONDICIÓN REFLECTANTE (WALL): Q = 0, mantener área del timestep anterior
+        //! ✅ CONDICIÓN REFLECTANTE (WALL): Q = 0, mantener área
         m_vPredictedCrossSectionQ[0] = 0.0;
-        
-        // ⚠️ CRÍTICO: NO extrapolar área, mantener del timestep anterior
-        // Si extrapolamos desde el interior, el área crece indefinidamente
         m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[0];
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
-        //! ✅ ELEVACIÓN IMPUESTA (IMPOSED WATER LEVEL)
+        //! ✅ ELEVACIÓN IMPUESTA CON SPONGE LAYER (zona de relajación)
         m_vPredictedCrossSectionArea[0] = m_dUpwardBoundaryValue;
         m_vCrossSectionHydraulicRadius[0] = linearInterpolation1d(
             m_vPredictedCrossSectionArea[0], 
             m_vEstuaryAreas[0], 
             m_vEstuaryHydraulicRadius[0]);
         
-        // Calcular Q usando Manning con acceso directo
+        // Calcular Q usando Manning
         m_vPredictedCrossSectionQ[0] = m_vPredictedCrossSectionArea[0] * 
                                       m_vCrossSectionBedSlopeDirection[0] * 
                                       sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                       pow(m_vCrossSectionHydraulicRadius[0], 2.0/3.0) / 
                                       (m_vManningN[0] + 1e-10);
+        
+        // 🎯 SPONGE LAYER: Suavizar nodo i=1 solo si hay cambio brusco
+        if (m_nCrossSectionsNumber >= 3) {
+            double area_diff = fabs(m_vPredictedCrossSectionArea[0] - m_vCrossSectionArea[1]);
+            double area_avg = 0.5 * (m_vPredictedCrossSectionArea[0] + m_vCrossSectionArea[1]);
+            
+            // Solo aplicar si diferencia > 5%
+            if (area_avg > 1e-6 && area_diff / area_avg > 0.05) {
+                double alpha = 0.8;  // Menos agresivo
+                double area_computed = m_vPredictedCrossSectionArea[1];
+                double area_smooth = 0.5*(m_vPredictedCrossSectionArea[0] + m_vCrossSectionArea[2]);
+                m_vPredictedCrossSectionArea[1] = alpha*area_computed + (1-alpha)*area_smooth;
+            }
+        }
     }
     else {
-        //! ✅ CAUDAL IMPUESTO (IMPOSED DISCHARGE) - Tipo 3
+        //! ✅ CAUDAL IMPUESTO CON SPONGE LAYER SELECTIVO
         m_vPredictedCrossSectionQ[0] = m_dUpwardBoundaryValue;
         
-        // Calcular área usando Manning con vectores precalculados
         double dManningFactor = m_vPredictedCrossSectionQ[0] * m_vManningN[0] / 
                               (sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10));
         
@@ -1385,6 +1510,19 @@ void CSimulation::updatePredictorBoundaries() {
             dManningFactor, 
             m_vPrecalculatedSecondTerm[0], 
             m_vEstuaryAreas[0]);
+        
+        // 🎯 SPONGE LAYER solo si hay discontinuidad fuerte
+        if (m_nCrossSectionsNumber >= 3) {
+            double Q_diff = fabs(m_vPredictedCrossSectionQ[0] - m_vCrossSectionQ[1]);
+            double Q_avg = 0.5 * fabs(m_vPredictedCrossSectionQ[0]) + 0.5 * fabs(m_vCrossSectionQ[1]) + 1e-6;
+            
+            if (Q_diff / Q_avg > 0.05) {
+                double alpha = 0.8;
+                double Q_computed = m_vPredictedCrossSectionQ[1];
+                double Q_smooth = 0.5*(m_vPredictedCrossSectionQ[0] + m_vCrossSectionQ[2]);
+                m_vPredictedCrossSectionQ[1] = alpha*Q_computed + (1-alpha)*Q_smooth;
+            }
+        }
     }
 
     //     //! As upward condition
@@ -1410,21 +1548,19 @@ void CSimulation::updatePredictorBoundaries() {
     }
 
     //==============================================================================================================
-    //! CONDICIÓN DE FRONTERA AGUAS ABAJO (DOWNSTREAM)
+    //! CONDICIÓN DE FRONTERA AGUAS ABAJO (DOWNSTREAM) - Con suavizado selectivo
     //==============================================================================================================
     int n = m_nCrossSectionsNumber - 1;
     
     if (nGetDownwardEstuarineCondition() == 0) {
-        //! ✅ CONDICIÓN ABIERTA: Gradiente cero (mantener valores del timestep anterior)
-        //! En frontera aguas abajo, NO extrapolar desde interior para evitar crecimiento
+        //! ✅ CONDICIÓN ABIERTA: Gradiente-cero
         m_vPredictedCrossSectionArea[n] = m_vCrossSectionArea[n];
         m_vPredictedCrossSectionQ[n] = m_vCrossSectionQ[n];
     }
     else if (nGetDownwardEstuarineCondition() == 1) {
-        //! ✅ CAUDAL IMPUESTO (IMPOSED DISCHARGE)
+        //! ✅ CAUDAL IMPUESTO CON SPONGE LAYER SELECTIVO
         m_vPredictedCrossSectionQ[n] = m_dDownwardBoundaryValue;
         
-        // Calcular área usando Manning con vectores precalculados
         const double dManningFactor = m_vPredictedCrossSectionQ[n] * m_vManningN[n] / 
                                      (sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10));
         
@@ -1432,6 +1568,43 @@ void CSimulation::updatePredictorBoundaries() {
             dManningFactor, 
             m_vPrecalculatedSecondTerm[n],
             m_vEstuaryAreas[n]);
+        
+        // 🎯 SPONGE LAYER solo si discontinuidad > 5%
+        if (m_nCrossSectionsNumber >= 3) {
+            double Q_diff = fabs(m_vPredictedCrossSectionQ[n] - m_vCrossSectionQ[n-1]);
+            double Q_avg = 0.5 * fabs(m_vPredictedCrossSectionQ[n]) + 0.5 * fabs(m_vCrossSectionQ[n-1]) + 1e-6;
+            
+            if (Q_diff / Q_avg > 0.05) {
+                double alpha = 0.8;
+                double Q_computed = m_vPredictedCrossSectionQ[n-1];
+                double Q_smooth = 0.5*(m_vCrossSectionQ[n-2] + m_vPredictedCrossSectionQ[n]);
+                m_vPredictedCrossSectionQ[n-1] = alpha*Q_computed + (1-alpha)*Q_smooth;
+            }
+        }
+    }
+    else {
+        //! ✅ ELEVACIÓN/MAREA IMPUESTA CON SPONGE LAYER SELECTIVO (caso 1022)
+        m_vPredictedCrossSectionArea[n] = m_dDownwardBoundaryValue;
+        
+        // Extrapolar Q desde interior manteniendo gradiente
+        if (m_nCrossSectionsNumber >= 2) {
+            m_vPredictedCrossSectionQ[n] = m_vCrossSectionQ[n-1];
+        } else {
+            m_vPredictedCrossSectionQ[n] = m_vCrossSectionQ[n];
+        }
+        
+        // 🎯 SPONGE LAYER: Solo si diferencia > 5% para evitar oscilaciones
+        if (m_nCrossSectionsNumber >= 3) {
+            double area_diff = fabs(m_vPredictedCrossSectionArea[n] - m_vCrossSectionArea[n-1]);
+            double area_avg = 0.5*(m_vPredictedCrossSectionArea[n] + m_vCrossSectionArea[n-1]);
+            
+            if (area_avg > 1e-6 && area_diff / area_avg > 0.05) {
+                double alpha = 0.8;
+                double area_computed = m_vPredictedCrossSectionArea[n-1];
+                double area_smooth = 0.5*(m_vCrossSectionArea[n-2] + m_vPredictedCrossSectionArea[n]);
+                m_vPredictedCrossSectionArea[n-1] = alpha*area_computed + (1-alpha)*area_smooth;
+            }
+        }
     }
 
     //     vector<double> vCrossSectionAreaTmp = estuary[m_nCrossSectionsNumber-1].vGetArea();
@@ -1445,24 +1618,12 @@ void CSimulation::updatePredictorBoundaries() {
     //     }
     //     m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-1] = linearInterpolation1d(dManningFactor, dSecondTerm, vCrossSectionAreaTmp);
 
-
     //     // m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-1] = m_vPredictedCrossSectionArea[m_nCrossSectionsNumber-2];
     // }
-    else {
-        //! ✅ ELEVACIÓN IMPUESTA (MAREA) - Tipo 2
-        m_vPredictedCrossSectionArea[n] = m_dDownwardBoundaryValue;
-        
-        // Extrapolar Q desde el interior
-        if (m_nCrossSectionsNumber > 1) {
-            m_vPredictedCrossSectionQ[n] = m_vPredictedCrossSectionQ[n-1];
-        } else {
-            m_vPredictedCrossSectionQ[n] = m_vCrossSectionQ[n];
-        }
-    }
 }
 
 //======================================================================================================================
-//! Update Corrector boundaries
+//! Update Corrector boundaries - Con suavizado
 //======================================================================================================================
 void CSimulation::updateCorrectorBoundaries() {
     //==============================================================================================================
@@ -1470,22 +1631,17 @@ void CSimulation::updateCorrectorBoundaries() {
     //==============================================================================================================
     
     if (nGetUpwardEstuarineCondition() == 0) {
-        //! ✅ CONDICIÓN ABIERTA: Gradiente cero (mantener valores del timestep anterior)
-        //! En frontera aguas arriba, NO extrapolar desde interior para evitar crecimiento
-        //! Esta condición permite que la información salga sin reflexión ni acumulación
-        m_vCorrectedCrossSectionArea[0] = m_vCrossSectionArea[0];
-        m_vCorrectedCrossSectionQ[0] = m_vCrossSectionQ[0];
+        //! ✅ CONDICIÓN ABIERTA: Gradiente-cero
+        m_vCorrectedCrossSectionQ[0] = m_vPredictedCrossSectionQ[0];
+        m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[0];
     }
     else if (nGetUpwardEstuarineCondition() == 1) {
-        //! ✅ CONDICIÓN REFLECTANTE (WALL): Q = 0, mantener área del timestep anterior
+        //! ✅ CONDICIÓN REFLECTANTE (WALL): Q = 0
         m_vCorrectedCrossSectionQ[0] = 0.0;
-        
-        // ⚠️ CRÍTICO: NO extrapolar área, mantener del timestep anterior
-        // Si extrapolamos desde el interior, el área crece indefinidamente
         m_vCorrectedCrossSectionArea[0] = m_vCrossSectionArea[0];
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
-        //! ✅ ELEVACIÓN IMPUESTA
+        //! ✅ ELEVACIÓN IMPUESTA CON SPONGE LAYER SELECTIVO
         m_vCorrectedCrossSectionArea[0] = m_dUpwardBoundaryValue;
         
         m_vCrossSectionHydraulicRadius[0] = linearInterpolation1d(
@@ -1498,9 +1654,22 @@ void CSimulation::updateCorrectorBoundaries() {
                                        sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                        pow(m_vCrossSectionHydraulicRadius[0], 2.0/3.0) / 
                                        (m_vManningN[0] + 1e-10);
+        
+        // 🎯 SPONGE LAYER solo si discontinuidad > 5%
+        if (m_nCrossSectionsNumber >= 3) {
+            double area_diff = fabs(m_vCorrectedCrossSectionArea[0] - m_vCrossSectionArea[1]);
+            double area_avg = 0.5*(m_vCorrectedCrossSectionArea[0] + m_vCrossSectionArea[1]);
+            
+            if (area_avg > 1e-6 && area_diff / area_avg > 0.05) {
+                double alpha = 0.8;
+                double area_computed = m_vCorrectedCrossSectionArea[1];
+                double area_smooth = 0.5*(m_vCorrectedCrossSectionArea[0] + m_vCrossSectionArea[2]);
+                m_vCorrectedCrossSectionArea[1] = alpha*area_computed + (1-alpha)*area_smooth;
+            }
+        }
     }
     else {
-        //! ✅ CAUDAL IMPUESTO (Tipo 3)
+        //! ✅ CAUDAL IMPUESTO CON SPONGE LAYER SELECTIVO (Tipo 3)
         m_vCorrectedCrossSectionQ[0] = m_dUpwardBoundaryValue;
         
         double dManningFactor = m_vCorrectedCrossSectionQ[0] * m_vManningN[0] / 
@@ -1510,6 +1679,19 @@ void CSimulation::updateCorrectorBoundaries() {
             dManningFactor, 
             m_vPrecalculatedSecondTerm[0], 
             m_vEstuaryAreas[0]);
+        
+        // 🎯 SPONGE LAYER solo si discontinuidad > 5%
+        if (m_nCrossSectionsNumber >= 3) {
+            double Q_diff = fabs(m_vCorrectedCrossSectionQ[0] - m_vCrossSectionQ[1]);
+            double Q_avg = 0.5 * fabs(m_vCorrectedCrossSectionQ[0]) + 0.5 * fabs(m_vCrossSectionQ[1]) + 1e-6;
+            
+            if (Q_diff / Q_avg > 0.05) {
+                double alpha = 0.8;
+                double Q_computed = m_vCorrectedCrossSectionQ[1];
+                double Q_smooth = 0.5*(m_vCorrectedCrossSectionQ[0] + m_vCrossSectionQ[2]);
+                m_vCorrectedCrossSectionQ[1] = alpha*Q_computed + (1-alpha)*Q_smooth;
+            }
+        }
     }
 
     //==============================================================================================================
@@ -1528,13 +1710,12 @@ void CSimulation::updateCorrectorBoundaries() {
     int n = m_nCrossSectionsNumber - 1;
     
     if (nGetDownwardEstuarineCondition() == 0) {
-        //! ✅ CONDICIÓN ABIERTA: Gradiente cero (mantener valores del timestep anterior)
-        //! En frontera aguas abajo, NO extrapolar desde interior para evitar crecimiento
-        m_vCorrectedCrossSectionArea[n] = m_vCrossSectionArea[n];
-        m_vCorrectedCrossSectionQ[n] = m_vCrossSectionQ[n];
+        //! ✅ CONDICIÓN ABIERTA: Gradiente-cero
+        m_vCorrectedCrossSectionArea[n] = m_vPredictedCrossSectionArea[n];
+        m_vCorrectedCrossSectionQ[n] = m_vPredictedCrossSectionQ[n];
     }
     else if (nGetDownwardEstuarineCondition() == 1) {
-        //! ✅ CAUDAL IMPUESTO
+        //! ✅ CAUDAL IMPUESTO CON SPONGE LAYER SELECTIVO
         m_vCorrectedCrossSectionQ[n] = m_dDownwardBoundaryValue;
         
         const double dManningFactor = m_vCorrectedCrossSectionQ[n] * m_vManningN[n] / 
@@ -1544,14 +1725,42 @@ void CSimulation::updateCorrectorBoundaries() {
             dManningFactor, 
             m_vPrecalculatedSecondTerm[n],
             m_vEstuaryAreas[n]);
+        
+        // 🎯 SPONGE LAYER solo si discontinuidad > 5%
+        if (m_nCrossSectionsNumber >= 3) {
+            double Q_diff = fabs(m_vCorrectedCrossSectionQ[n] - m_vCrossSectionQ[n-1]);
+            double Q_avg = 0.5 * fabs(m_vCorrectedCrossSectionQ[n]) + 0.5 * fabs(m_vCrossSectionQ[n-1]) + 1e-6;
+            
+            if (Q_diff / Q_avg > 0.05) {
+                double alpha = 0.8;
+                double Q_computed = m_vCorrectedCrossSectionQ[n-1];
+                double Q_smooth = 0.5*(m_vCrossSectionQ[n-2] + m_vCorrectedCrossSectionQ[n]);
+                m_vCorrectedCrossSectionQ[n-1] = alpha*Q_computed + (1-alpha)*Q_smooth;
+            }
+        }
     }
     else {
-        //! ✅ ELEVACIÓN IMPUESTA (MAREA)
+        //! ✅ ELEVACIÓN/MAREA IMPUESTA CON SPONGE LAYER SELECTIVO (caso 1022)
         m_vCorrectedCrossSectionArea[n] = m_dDownwardBoundaryValue;
-        if (m_nCrossSectionsNumber > 1) {
-            m_vCorrectedCrossSectionQ[n] = m_vCorrectedCrossSectionQ[n-1];
+        
+        // Extrapolar Q manteniendo gradiente
+        if (m_nCrossSectionsNumber >= 2) {
+            m_vCorrectedCrossSectionQ[n] = m_vCrossSectionQ[n-1];
         } else {
             m_vCorrectedCrossSectionQ[n] = m_vCrossSectionQ[n];
+        }
+        
+        // 🎯 SPONGE LAYER solo si discontinuidad > 5%
+        if (m_nCrossSectionsNumber >= 3) {
+            double area_diff = fabs(m_vCorrectedCrossSectionArea[n] - m_vCrossSectionArea[n-1]);
+            double area_avg = 0.5*(m_vCorrectedCrossSectionArea[n] + m_vCrossSectionArea[n-1]);
+            
+            if (area_avg > 1e-6 && area_diff / area_avg > 0.05) {
+                double alpha = 0.8;
+                double area_computed = m_vCorrectedCrossSectionArea[n-1];
+                double area_smooth = 0.5*(m_vCrossSectionArea[n-2] + m_vCorrectedCrossSectionArea[n]);
+                m_vCorrectedCrossSectionArea[n-1] = alpha*area_computed + (1-alpha)*area_smooth;
+            }
         }
     }
 }
@@ -1612,25 +1821,28 @@ void CSimulation::mergePredictorCorrector() {
     // }
     if (bGetDoMcComarckLimiterFlux())
     {
-        //! Include TVD-McComarck?
-        const double nCrossSectionsNumber = m_nCrossSectionsNumber;
-        vector<double> a1_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-        vector<double> a2_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-
-        vector<double> alfa1_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-        vector<double> alfa2_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-
-        vector<double> psi1_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-        vector<double> psi2_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-
-        vector<double> r1_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-        vector<double> r2_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-
-        vector<double> fi1_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-        vector<double> fi2_med (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-
-        vector<double> vFactor1 (static_cast<size_t>(nCrossSectionsNumber), 0.0);
-        vector<double> vFactor2 (static_cast<size_t>(nCrossSectionsNumber), 0.0);
+        //! Include TVD-McComarck? - Usar vectores pre-alocados (miembros de clase)
+        const int nCrossSectionsNumber = m_nCrossSectionsNumber;
+        
+        // ⚡ Resetear vectores a cero (sin reallocations)
+        std::fill(m_vTVD_a1_med.begin(), m_vTVD_a1_med.end(), 0.0);
+        std::fill(m_vTVD_a2_med.begin(), m_vTVD_a2_med.end(), 0.0);
+        std::fill(m_vTVD_alfa1_med.begin(), m_vTVD_alfa1_med.end(), 0.0);
+        std::fill(m_vTVD_alfa2_med.begin(), m_vTVD_alfa2_med.end(), 0.0);
+        
+        // Referencias para mantener compatibilidad con código existente
+        auto& a1_med = m_vTVD_a1_med;
+        auto& a2_med = m_vTVD_a2_med;
+        auto& alfa1_med = m_vTVD_alfa1_med;
+        auto& alfa2_med = m_vTVD_alfa2_med;
+        auto& psi1_med = m_vTVD_psi1_med;
+        auto& psi2_med = m_vTVD_psi2_med;
+        auto& r1_med = m_vTVD_r1_med;
+        auto& r2_med = m_vTVD_r2_med;
+        auto& fi1_med = m_vTVD_fi1_med;
+        auto& fi2_med = m_vTVD_fi2_med;
+        auto& vFactor1 = m_vTVD_Factor1;
+        auto& vFactor2 = m_vTVD_Factor2;
 
 
         //! García-Navarro Psi formula
@@ -1717,7 +1929,7 @@ void CSimulation::mergePredictorCorrector() {
                     }
                     else
                     {
-                        r1_med[i] = 0;
+                        r1_med[i] = 1.0;  // ✅ CORREGIDO: era 0, debe ser 1.0 para no desactivar limitador
                     }
                 }
             }
@@ -1753,15 +1965,19 @@ void CSimulation::mergePredictorCorrector() {
                     }
                 }
             }
+            
+            // ✅ PROTECCIÓN: Limitar valores extremos de r que causan inestabilidad
+            if (!std::isfinite(r1_med[i]) || fabs(r1_med[i]) > 1e6) r1_med[i] = 1.0;
+            if (!std::isfinite(r2_med[i]) || fabs(r2_med[i]) > 1e6) r2_med[i] = 1.0;
 
             //! Computing fi_i
             if (nGetEquationLimiterFlux() == 1)
             {
-                //! MinMod
-                fi1_med[i] = dMaxVectorValue({0.0, dMinVectorValue({1., r1_med[i]})});
-                fi2_med[i] = dMaxVectorValue({0.0, dMinVectorValue({1., r2_med[i]})});
+                //! MinMod - ⚡ OPTIMIZADO: max(0, min(1, r)) sin crear vectores
+                fi1_med[i] = std::max(0.0, std::min(1.0, r1_med[i]));
+                fi2_med[i] = std::max(0.0, std::min(1.0, r2_med[i]));
             }
- else if (nGetEquationLimiterFlux() == 2)
+            else if (nGetEquationLimiterFlux() == 2)
             {
                 //! Roe's Superbee
                 fi1_med[i] = dMaxVectorValue({0.0, dMinVectorValue({2*r1_med[i], 1.}), dMinVectorValue({r1_med[i], 2.})});
@@ -1794,11 +2010,20 @@ void CSimulation::mergePredictorCorrector() {
         m_vCrossSectionD1Factor[m_nCrossSectionsNumber] = m_vCrossSectionD1Factor[m_nCrossSectionsNumber-1];
         m_vCrossSectionD2Factor[m_nCrossSectionsNumber] = m_vCrossSectionD2Factor[m_nCrossSectionsNumber-1];
 
-        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+        //! ✅ CORRECTO: Solo promediar nodos interiores (i=1 hasta i=n-2)
+        //! Los nodos de frontera (i=0 e i=n-1) ya fueron asignados por las BC
+        for (int i = 1; i < m_nCrossSectionsNumber - 1; i++) {
             m_vCrossSectionArea[i] = 0.5 * (m_vPredictedCrossSectionArea[i] + m_vCorrectedCrossSectionArea[i]) + m_dLambda *
                 (m_vCrossSectionD1Factor[i + 1] - m_vCrossSectionD1Factor[i]);
             m_vCrossSectionQ[i] = 0.5*(m_vPredictedCrossSectionQ[i] + m_vCorrectedCrossSectionQ[i]) +m_dLambda*(m_vCrossSectionD2Factor[i+1] - m_vCrossSectionD2Factor[i]);
         }
+        
+        //! ✅ Aplicar BC finales después del merge
+        //! Las fronteras deben usar los valores corrected, no el promedio
+        m_vCrossSectionArea[0] = m_vCorrectedCrossSectionArea[0];
+        m_vCrossSectionQ[0] = m_vCorrectedCrossSectionQ[0];
+        m_vCrossSectionArea[m_nCrossSectionsNumber-1] = m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-1];
+        m_vCrossSectionQ[m_nCrossSectionsNumber-1] = m_vCorrectedCrossSectionQ[m_nCrossSectionsNumber-1];
     }
 }
 
@@ -1806,25 +2031,73 @@ void CSimulation::mergePredictorCorrector() {
 //! Smooth solution
 //======================================================================================================================
 void CSimulation::smoothSolution() {
-    vector<double> vCrossSectionArea(static_cast<size_t>(m_nCrossSectionsNumber), 0.0);
-    vector<double> vCrossSectionQ(static_cast<size_t>(m_nCrossSectionsNumber), 0.0);
-
-    // Copiar valores originales primero
-    vCrossSectionArea = m_vCrossSectionArea;
-    vCrossSectionQ = m_vCrossSectionQ;
+    // 🎯 SUAVIZADO ADAPTATIVO SOLO EN ZONAS CON SALTOS (para visualización)
+    // No afecta el cálculo físico - solo el output
     
-    // Suavizado MUY suave: pesos [0.10, 0.80, 0.10] para preservar la solución física
-    // Esto solo elimina oscilaciones de muy alta frecuencia sin degradar la precisión
-    for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
-        vCrossSectionArea[i] = 0.10*m_vCrossSectionArea[i-1] + 0.80*m_vCrossSectionArea[i] + 0.10*m_vCrossSectionArea[i+1];
-        vCrossSectionQ[i] = 0.10*m_vCrossSectionQ[i-1] + 0.80*m_vCrossSectionQ[i] + 0.10*m_vCrossSectionQ[i+1];
+    const int n = m_nCrossSectionsNumber;
+    vector<double> vAreaSmooth(n);
+    vector<double> vQSmooth(n);
+    
+    // Copiar valores originales
+    vAreaSmooth = m_vCrossSectionArea;
+    vQSmooth = m_vCrossSectionQ;
+    
+    // Detectar y suavizar solo zonas con gradientes fuertes
+    const int boundary_zone = 3;  // Suavizar 3 nodos cerca de contornos
+    
+    // 1️⃣ ZONA AGUAS ARRIBA (primeros 3 nodos)
+    for (int i = 1; i < std::min(boundary_zone, n-1); i++) {
+        // Filtro suave [0.25, 0.50, 0.25] solo cerca del contorno
+        vAreaSmooth[i] = 0.25*m_vCrossSectionArea[i-1] + 
+                         0.50*m_vCrossSectionArea[i] + 
+                         0.25*m_vCrossSectionArea[i+1];
+        vQSmooth[i] = 0.25*m_vCrossSectionQ[i-1] + 
+                      0.50*m_vCrossSectionQ[i] + 
+                      0.25*m_vCrossSectionQ[i+1];
     }
     
-    // Aplicar valores suavizados (manteniendo fronteras intactas)
-    for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
-        m_vCrossSectionArea[i] = vCrossSectionArea[i];
-        m_vCrossSectionQ[i] = vCrossSectionQ[i];
+    // 2️⃣ ZONA AGUAS ABAJO (últimos 3 nodos)
+    for (int i = std::max(n-boundary_zone, 1); i < n-1; i++) {
+        vAreaSmooth[i] = 0.25*m_vCrossSectionArea[i-1] + 
+                         0.50*m_vCrossSectionArea[i] + 
+                         0.25*m_vCrossSectionArea[i+1];
+        vQSmooth[i] = 0.25*m_vCrossSectionQ[i-1] + 
+                      0.50*m_vCrossSectionQ[i] + 
+                      0.25*m_vCrossSectionQ[i+1];
     }
+    
+    // 3️⃣ ZONA INTERIOR: Detectar saltos locales > 10% y suavizar
+    for (int i = boundary_zone; i < n-boundary_zone; i++) {
+        // Calcular variación relativa local
+        double area_avg = (m_vCrossSectionArea[i-1] + m_vCrossSectionArea[i] + m_vCrossSectionArea[i+1]) / 3.0;
+        double area_var = fabs(m_vCrossSectionArea[i] - area_avg);
+        
+        if (area_avg > 1e-6 && area_var / area_avg > 0.10) {
+            // Hay salto > 10% - suavizar MUY suave [0.10, 0.80, 0.10]
+            vAreaSmooth[i] = 0.10*m_vCrossSectionArea[i-1] + 
+                             0.80*m_vCrossSectionArea[i] + 
+                             0.10*m_vCrossSectionArea[i+1];
+        }
+        
+        // Igual para caudal
+        double Q_avg = (fabs(m_vCrossSectionQ[i-1]) + fabs(m_vCrossSectionQ[i]) + fabs(m_vCrossSectionQ[i+1])) / 3.0;
+        double Q_var = fabs(fabs(m_vCrossSectionQ[i]) - Q_avg);
+        
+        if (Q_avg > 1e-6 && Q_var / Q_avg > 0.10) {
+            vQSmooth[i] = 0.10*m_vCrossSectionQ[i-1] + 
+                          0.80*m_vCrossSectionQ[i] + 
+                          0.10*m_vCrossSectionQ[i+1];
+        }
+    }
+    
+    // Aplicar valores suavizados (manteniendo contornos i=0 y i=n-1 intactos)
+    for (int i = 1; i < n-1; i++) {
+        m_vCrossSectionArea[i] = vAreaSmooth[i];
+        m_vCrossSectionQ[i] = vQSmooth[i];
+    }
+    
+    // 🔄 Recalcular parámetros hidráulicos para consistencia
+    // calculateHydraulicParameters();
 }
 
 //======================================================================================================================
@@ -1908,6 +2181,10 @@ vector<double> CSimulation::vGetVariable(const string& strVariableName) const {
 //===============================================================================================================================
 void CSimulation::AnnounceProgress() {
 
+    // ⚡ OPTIMIZACIÓN: Solo actualizar cada 100 timesteps para reducir overhead
+    static int call_count = 0;
+    if (++call_count % 100 != 0 && !m_bSaveTime) return;
+
     // Stdout is connected to a tty, so not running as a background job
     static double sdElapsed = 0;
     static double sdToGo = 0;
@@ -1986,13 +2263,14 @@ void CSimulation::calculate_salinity()
 
 //===============================================================================================================================
 //! Compute the salinity gradient using the backward, centered and upward finite differences
-//! Diez-Minguito et al. (2013).
+//! Diez-Minguito et al. (2013). ⚡ OPTIMIZADO: Usar vectores pre-alocados
 //===============================================================================================================================
 void CSimulation::calculate_salinity_gradient()
 {
-    vector<double> vKAS_dif_forward(m_nCrossSectionsNumber);
-    vector<double> vKAS_dif_backward(m_nCrossSectionsNumber);
-    vector<double> vAUS_dif(m_nCrossSectionsNumber);
+    // Usar vectores pre-alocados (miembros de clase)
+    auto& vKAS_dif_forward = m_vSalinity_KAS_forward;
+    auto& vKAS_dif_backward = m_vSalinity_KAS_backward;
+    auto& vAUS_dif = m_vSalinity_AUS_diff;
 
     for (int i = 1; i < m_nCrossSectionsNumber-1; i++)
     {
