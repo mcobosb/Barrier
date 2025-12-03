@@ -406,74 +406,85 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     presenter.StartingRun(nArg, pcArgv, this);
 
     //! Detect configuration file type and read accordingly
+    std::string configFile;
+    
     if (nArg > 1) {
-        std::string configFile = pcArgv[1];
-        std::filesystem::path configPath(configFile);
-        std::string extension = configPath.extension().string();
-        
-        if (extension == ".yaml" || extension == ".yml") {
-            // Use YAML reader
-            std::cout << "📄 Detected YAML configuration file" << std::endl;
-            CYAMLReader yamlReader;
-            if (!yamlReader.loadConfiguration(configFile, this)) {
-                std::cerr << "❌ Error loading YAML configuration: " 
-                          << yamlReader.getErrorMessage() << std::endl;
-                m_bReturnError = true;
-                return;
-            }
-            
-            // Transfer file paths to reader
-            reader.m_strAlongChannelDataFilename = yamlReader.m_strAlongChannelDataFilename;
-            reader.m_strCrossSectionsFilename = yamlReader.m_strCrossSectionGeometryFilename;
-            reader.m_strTidalFilename = yamlReader.m_strUpwardBoundaryConditionFilename.empty() ? 
-                yamlReader.m_strDownwardBoundaryConditionFilename : yamlReader.m_strUpwardBoundaryConditionFilename;
-            reader.m_strSedimentPropertiesFilename = yamlReader.m_strSedimentPropertiesFilename;
-            reader.m_strHydroFilename = yamlReader.m_strHydrographsFilename;
-            
-            // Read geometry and forcing files
-            CDataReader::bOpenLogFile(this);
-            reader.bReadAlongChannelDataFile(this);
-            reader.bReadCrossSectionGeometryFile(this);
-            if (m_nUpwardEstuarineCondition > 1) {
-                CDataReader::bReadUpwardBoundaryConditionFile(this);
-            }
-            if (m_nDownwardEstuarineCondition > 1) {
-                CDataReader::bReadDownwardBoundaryConditionFile(this);
-            }
-            if (m_bDoSedimentTransport) {
-                reader.bReadAlongChannelSedimentsFile(this);
-            }
-            if (m_bHydroFile) {
-                reader.bReadHydrographsFile(this);
-            }
+        configFile = pcArgv[1];
+    } else {
+        // No config file specified, try to find config.yaml in current directory
+        if (std::filesystem::exists("config.yaml")) {
+            configFile = "config.yaml";
+            std::cout << "📄 No configuration file specified, using ./config.yaml" << std::endl;
         } else {
-            // Use legacy .conf reader
-            std::cout << "📄 Detected legacy .conf configuration file" << std::endl;
-            reader.bReadConfigurationFile(this);
-            if (m_bReturnError) {
-                return;
-            }
-
-            CDataReader::bOpenLogFile(this);
-            reader.bReadAlongChannelDataFile(this);
-            reader.bReadCrossSectionGeometryFile(this);
-            if (m_nUpwardEstuarineCondition > 1) {
-                CDataReader::bReadUpwardBoundaryConditionFile(this);
-            }
-            if (m_nDownwardEstuarineCondition > 1) {
-                CDataReader::bReadDownwardBoundaryConditionFile(this);
-            }
-            if (m_bDoSedimentTransport) {
-                reader.bReadAlongChannelSedimentsFile(this);
-            }
-            if (m_bHydroFile) {
-                reader.bReadHydrographsFile(this);
-            }
+            std::cerr << "❌ Error: No configuration file specified and ./config.yaml not found" << std::endl;
+            std::cerr << "Usage: " << pcArgv[0] << " <config_file>" << std::endl;
+            m_bReturnError = true;
+            return;
+        }
+    }
+    std::filesystem::path configPath(configFile);
+    std::string extension = configPath.extension().string();
+    
+    if (extension == ".yaml" || extension == ".yml") {
+        // Use YAML reader
+        std::cout << "📄 Detected YAML configuration file" << std::endl;
+        CYAMLReader yamlReader;
+        if (!yamlReader.loadConfiguration(configFile, this)) {
+            std::cerr << "❌ Error loading YAML configuration: " 
+                      << yamlReader.getErrorMessage() << std::endl;
+            m_bReturnError = true;
+            return;
+        }
+        
+        // Transfer file paths to reader and simulation
+        reader.m_strAlongChannelDataFilename = yamlReader.m_strAlongChannelDataFilename;
+        reader.m_strCrossSectionsFilename = yamlReader.m_strCrossSectionGeometryFilename;
+        reader.m_strSedimentPropertiesFilename = yamlReader.m_strSedimentPropertiesFilename;
+        reader.m_strHydroFilename = yamlReader.m_strHydrographsFilename;
+        
+        // Transfer boundary condition filenames directly to simulation
+        m_strUpwardBoundaryConditionFilename = yamlReader.m_strUpwardBoundaryConditionFilename;
+        m_strDownwardBoundaryConditionFilename = yamlReader.m_strDownwardBoundaryConditionFilename;
+        
+        // Read geometry and forcing files
+        CDataReader::bOpenLogFile(this);
+        reader.bReadAlongChannelDataFile(this);
+        reader.bReadCrossSectionGeometryFile(this);
+        if (m_nUpwardEstuarineCondition > 1) {
+            CDataReader::bReadUpwardBoundaryConditionFile(this);
+        }
+        if (m_nDownwardEstuarineCondition > 1) {
+            CDataReader::bReadDownwardBoundaryConditionFile(this);
+        }
+        if (m_bDoSedimentTransport) {
+            reader.bReadAlongChannelSedimentsFile(this);
+        }
+        if (m_bHydroFile) {
+            reader.bReadHydrographsFile(this);
         }
     } else {
-        std::cerr << "❌ No configuration file provided" << std::endl;
-        m_bReturnError = true;
-        return;
+        // Use legacy .conf reader
+        std::cout << "📄 Detected legacy .conf configuration file" << std::endl;
+        reader.bReadConfigurationFile(this);
+        if (m_bReturnError) {
+            return;
+        }
+
+        CDataReader::bOpenLogFile(this);
+        reader.bReadAlongChannelDataFile(this);
+        reader.bReadCrossSectionGeometryFile(this);
+        if (m_nUpwardEstuarineCondition > 1) {
+            CDataReader::bReadUpwardBoundaryConditionFile(this);
+        }
+        if (m_nDownwardEstuarineCondition > 1) {
+            CDataReader::bReadDownwardBoundaryConditionFile(this);
+        }
+        if (m_bDoSedimentTransport) {
+            reader.bReadAlongChannelSedimentsFile(this);
+        }
+        if (m_bHydroFile) {
+            reader.bReadHydrographsFile(this);
+        }
     }
 
 

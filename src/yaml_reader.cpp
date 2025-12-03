@@ -78,7 +78,7 @@ bool CYAMLReader::loadConfiguration(const std::string& filepath, CSimulation* si
 void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* sim) {
     // Output file names
     if (node["name"]) {
-        sim->m_strOutFile = node["name"].as<std::string>();
+        sim->m_strOutFile = node["name"].as<std::string>() + "_";
         sim->m_strLogFile = sim->m_strOutFile;
     }
     
@@ -141,13 +141,22 @@ void CYAMLReader::parseGeometrySection(const YAML::Node& node, CSimulation* sim)
 
 void CYAMLReader::parseInitialConditionsSection(const YAML::Node& node, CSimulation* sim) {
     if (node["type"]) {
-        std::string type = node["type"].as<std::string>();
-        if (type == "calm") {
-            sim->nSetInitialEstuarineCondition(0);
-        } else if (type == "flow") {
-            sim->nSetInitialEstuarineCondition(1);
-        } else if (type == "elevation") {
-            sim->nSetInitialEstuarineCondition(2);
+        if (node["type"].IsScalar()) {
+            // Try to parse as integer first
+            try {
+                int type = node["type"].as<int>();
+                sim->nSetInitialEstuarineCondition(type);
+            } catch (...) {
+                // Parse as string
+                std::string type = node["type"].as<std::string>();
+                if (type == "calm") {
+                    sim->nSetInitialEstuarineCondition(0);
+                } else if (type == "flow") {
+                    sim->nSetInitialEstuarineCondition(1);
+                } else if (type == "elevation") {
+                    sim->nSetInitialEstuarineCondition(2);
+                }
+            }
         }
     }
 }
@@ -157,17 +166,26 @@ void CYAMLReader::parseBoundaryConditionsSection(const YAML::Node& node, CSimula
     if (node["upstream"]) {
         const auto& upstream = node["upstream"];
         if (upstream["type"]) {
-            std::string type = upstream["type"].as<std::string>();
-            if (type == "open") {
-                sim->nSetUpwardEstuarineCondition(0);
-            } else if (type == "reflective") {
-                sim->nSetUpwardEstuarineCondition(1);
-            } else if (type == "elevation") {
-                sim->nSetUpwardEstuarineCondition(2);
+            // Try to parse as integer first, then as string
+            try {
+                int type = upstream["type"].as<int>();
+                sim->nSetUpwardEstuarineCondition(type);
+            } catch (...) {
+                std::string type = upstream["type"].as<std::string>();
+                if (type == "open") {
+                    sim->nSetUpwardEstuarineCondition(0);
+                } else if (type == "reflective") {
+                    sim->nSetUpwardEstuarineCondition(1);
+                } else if (type == "elevation") {
+                    sim->nSetUpwardEstuarineCondition(2);
+                }
             }
         }
         if (upstream["file"] && !upstream["file"].IsNull()) {
-            m_strUpwardBoundaryConditionFilename = m_strInputPath + upstream["file"].as<std::string>() + ".csv";
+            std::string filename = upstream["file"].as<std::string>();
+            if (!filename.empty()) {
+                m_strUpwardBoundaryConditionFilename = m_strInputPath + filename + ".csv";
+            }
         }
     }
     
@@ -175,24 +193,41 @@ void CYAMLReader::parseBoundaryConditionsSection(const YAML::Node& node, CSimula
     if (node["downstream"]) {
         const auto& downstream = node["downstream"];
         if (downstream["type"]) {
-            std::string type = downstream["type"].as<std::string>();
-            if (type == "open") {
-                sim->nSetDownwardEstuarineCondition(0);
-            } else if (type == "reflective") {
-                sim->nSetDownwardEstuarineCondition(1);
-            } else if (type == "elevation") {
-                sim->nSetDownwardEstuarineCondition(2);
+            // Try to parse as integer first, then as string
+            try {
+                int type = downstream["type"].as<int>();
+                sim->nSetDownwardEstuarineCondition(type);
+            } catch (...) {
+                std::string type = downstream["type"].as<std::string>();
+                if (type == "open") {
+                    sim->nSetDownwardEstuarineCondition(0);
+                } else if (type == "reflective") {
+                    sim->nSetDownwardEstuarineCondition(1);
+                } else if (type == "elevation") {
+                    sim->nSetDownwardEstuarineCondition(2);
+                }
             }
         }
         if (downstream["file"] && !downstream["file"].IsNull()) {
-            m_strDownwardBoundaryConditionFilename = m_strInputPath + downstream["file"].as<std::string>() + ".csv";
+            std::string filename = downstream["file"].as<std::string>();
+            if (!filename.empty()) {
+                m_strDownwardBoundaryConditionFilename = m_strInputPath + filename + ".csv";
+            }
         }
     }
 }
 
 void CYAMLReader::parseForcingSection(const YAML::Node& node, CSimulation* sim) {
+    // Support both "lateral_inflows" and "tributaries_file" field names
+    std::string filename;
     if (node["lateral_inflows"]) {
-        m_strHydrographsFilename = m_strInputPath + node["lateral_inflows"].as<std::string>() + ".csv";
+        filename = node["lateral_inflows"].as<std::string>();
+    } else if (node["tributaries_file"]) {
+        filename = node["tributaries_file"].as<std::string>();
+    }
+    
+    if (!filename.empty()) {
+        m_strHydrographsFilename = m_strInputPath + filename + ".csv";
         sim->m_bHydroFile = true;
     }
 }
@@ -262,21 +297,38 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* sim
         }
         
         if (salinity["initial_file"]) {
-            m_strSalinityFilename = m_strInputPath + salinity["initial_file"].as<std::string>() + ".csv";
+            std::string filename = salinity["initial_file"].as<std::string>();
+            if (!filename.empty()) {
+                m_strSalinityFilename = m_strInputPath + filename + ".csv";
+            }
         }
         
-        if (salinity["upstream_bc"]) {
-            std::string bc = salinity["upstream_bc"].as<std::string>();
-            if (bc == "free") sim->nSetUpwardSalinityCondition(0);
-            else if (bc == "null") sim->nSetUpwardSalinityCondition(1);
-            else if (bc == "ocean") sim->nSetUpwardSalinityCondition(2);
+        // Support both "upstream_bc" and "upstream_condition"
+        auto upstreamNode = salinity["upstream_bc"] ? salinity["upstream_bc"] : salinity["upstream_condition"];
+        if (upstreamNode) {
+            try {
+                int bc = upstreamNode.as<int>();
+                sim->nSetUpwardSalinityCondition(bc);
+            } catch (...) {
+                std::string bc = upstreamNode.as<std::string>();
+                if (bc == "free") sim->nSetUpwardSalinityCondition(0);
+                else if (bc == "null") sim->nSetUpwardSalinityCondition(1);
+                else if (bc == "ocean") sim->nSetUpwardSalinityCondition(2);
+            }
         }
         
-        if (salinity["downstream_bc"]) {
-            std::string bc = salinity["downstream_bc"].as<std::string>();
-            if (bc == "free") sim->nSetDownwardSalinityCondition(0);
-            else if (bc == "null") sim->nSetDownwardSalinityCondition(1);
-            else if (bc == "ocean") sim->nSetDownwardSalinityCondition(2);
+        // Support both "downstream_bc" and "downstream_condition"
+        auto downstreamNode = salinity["downstream_bc"] ? salinity["downstream_bc"] : salinity["downstream_condition"];
+        if (downstreamNode) {
+            try {
+                int bc = downstreamNode.as<int>();
+                sim->nSetDownwardSalinityCondition(bc);
+            } catch (...) {
+                std::string bc = downstreamNode.as<std::string>();
+                if (bc == "free") sim->nSetDownwardSalinityCondition(0);
+                else if (bc == "null") sim->nSetDownwardSalinityCondition(1);
+                else if (bc == "ocean") sim->nSetDownwardSalinityCondition(2);
+            }
         }
         
         if (salinity["beta"]) {
