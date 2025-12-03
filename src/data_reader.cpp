@@ -760,6 +760,34 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation) {
 						 m_pSimulation->bSetDoWaterDensity(false);
 					 break;
 				}
+				
+				case 35: {
+						// Smooth bathymetry before simulation?
+						strRH = strToLower(&strRH);
+
+						if (strRH.empty())
+						 strErr = "line " + to_string(nLine) + ": Smooth bathymetry?";
+
+					 if  (strRH.find('y') != string::npos)
+						 m_pSimulation->bSetDoSmoothBathymetry(true);
+					 else
+						 m_pSimulation->bSetDoSmoothBathymetry(false);
+					 break;
+				}
+				
+				case 36: {
+						// Smooth solution during simulation?
+						strRH = strToLower(&strRH);
+
+						if (strRH.empty())
+						 strErr = "line " + to_string(nLine) + ": Smooth solution?";
+
+					 if  (strRH.find('y') != string::npos)
+						 m_pSimulation->bSetDoSmoothSolution(true);
+					 else
+						 m_pSimulation->bSetDoSmoothSolution(false);
+					 break;
+				}
 
             	default: {
 						// More lines in the configuration file

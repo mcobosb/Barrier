@@ -209,6 +209,12 @@ class CSimulation
 
     //! Compute water density?
     bool m_bDoWaterDensity{};
+    
+    //! Smooth bathymetry before simulation?
+    bool m_bDoSmoothBathymetry{};
+    
+    //! Smooth solution during simulation?
+    bool m_bDoSmoothSolution{};
 
     //! Number of cross-sections
     int m_nCrossSectionsNumber{};
@@ -297,6 +303,18 @@ class CSimulation
 
     //! Cross-section right river bank locations
     vector<double> m_vCrossSectionRightRBLocation;
+    
+    //! Cross-section left river bank UTM X coordinates
+    vector<double> m_vCrossSectionLeftRBLocation_UTM_X;
+    
+    //! Cross-section left river bank UTM Y coordinates
+    vector<double> m_vCrossSectionLeftRBLocation_UTM_Y;
+    
+    //! Cross-section right river bank UTM X coordinates
+    vector<double> m_vCrossSectionRightRBLocation_UTM_X;
+    
+    //! Cross-section right river bank UTM Y coordinates
+    vector<double> m_vCrossSectionRightRBLocation_UTM_Y;
 
     //! Cross-section mean water velocity
     vector<double> m_vCrossSectionU;
@@ -539,6 +557,16 @@ class CSimulation
     [[nodiscard]] bool bGetDoWaterDensity() const;
     //! Method for setting the compute water density
     void bSetDoWaterDensity(bool doWaterDensity);
+    
+    //! Method for getting smooth bathymetry flag
+    [[nodiscard]] bool bGetDoSmoothBathymetry() const;
+    //! Method for setting smooth bathymetry flag
+    void bSetDoSmoothBathymetry(bool doSmoothBathymetry);
+    
+    //! Method for getting smooth solution flag
+    [[nodiscard]] bool bGetDoSmoothSolution() const;
+    //! Method for setting smooth solution flag
+    void bSetDoSmoothSolution(bool doSmoothSolution);
 
     //! Method for getting save all timesteps flag
     [[nodiscard]] bool bGetSaveAllTimesteps() const;
@@ -574,6 +602,7 @@ class CSimulation
     std::string generateOutputFileName() const;
     static double linearInterpolation1d(double dValue, const vector<double> &vX, const vector<double> &vY);
     void calculateHydraulicParameters();
+    void calculateRiverBankUTMCoordinates();
     void interpolateHydraulicParameters(double dArea, int nCrossSection, int nElevationNode);
     void getFirstHydraulicParameters(int nCrossSection);
     void getLastHydraulicParameters(int nCrossSection);
@@ -594,6 +623,7 @@ class CSimulation
     void updateBoundaries();
     void mergePredictorCorrector();
     void smoothSolution();
+    void smoothBathymetry();
     void calculate_salinity_gradient();
     void calculate_salinity();
 

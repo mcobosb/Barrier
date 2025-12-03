@@ -329,6 +329,26 @@ void CSimulation::bSetDoWaterDensity(const bool doWaterDensity) {
     m_bDoWaterDensity = doWaterDensity;
 }
 
+//! Method for getting smooth bathymetry flag
+bool CSimulation::bGetDoSmoothBathymetry() const {
+    return m_bDoSmoothBathymetry;
+}
+
+//! Method for setting smooth bathymetry flag
+void CSimulation::bSetDoSmoothBathymetry(const bool doSmoothBathymetry) {
+    m_bDoSmoothBathymetry = doSmoothBathymetry;
+}
+
+//! Method for getting smooth solution flag
+bool CSimulation::bGetDoSmoothSolution() const {
+    return m_bDoSmoothSolution;
+}
+
+//! Method for setting smooth solution flag
+void CSimulation::bSetDoSmoothSolution(const bool doSmoothSolution) {
+    m_bDoSmoothSolution = doSmoothSolution;
+}
+
 //! Method for getting the save all timesteps flag
 bool CSimulation::bGetSaveAllTimesteps() const {
     return m_bSaveAllTimesteps;
@@ -412,9 +432,21 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     initializeVectors();
     precomputeEstuaryData();
+    
+    //! ✅ Suavizar el fondo antes de calcular pendientes (si está activado)
+    if (bGetDoSmoothBathymetry()) {
+        smoothBathymetry();
+    }
+    
     calculateBedSlope();
     calculateAlongEstuaryInitialConditions();
-
+    
+    //! Calculate initial hydraulic parameters (width, depth, LeftRB, RightRB, etc.)
+    m_nPredictor = 1;
+    calculateHydraulicParameters();
+    
+    //! Calculate UTM coordinates of river banks
+    calculateRiverBankUTMCoordinates();
 
     // ✅ CON esto:
     std::string m_strOutFileName = generateOutputFileName();
@@ -524,8 +556,10 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         if (bGetDoDryBed())
             dryArea();
 
-        //! 🎯 SUAVIZADO: Aplicar filtro espacial cada paso para estabilidad
-        smoothSolution();
+        //! 🎯 SUAVIZADO: Aplicar filtro espacial cada paso para estabilidad (si está activado)
+        if (bGetDoSmoothSolution()) {
+            smoothSolution();
+        }
 
         //! Compute salinity gradient for next timestep
         if (bGetDoWaterSalinity())
@@ -597,6 +631,10 @@ void CSimulation::initializeVectors()
     m_vCrossSectionQt =
     m_vCrossSectionLeftRBLocation =
     m_vCrossSectionRightRBLocation =
+    m_vCrossSectionLeftRBLocation_UTM_X =
+    m_vCrossSectionLeftRBLocation_UTM_Y =
+    m_vCrossSectionRightRBLocation_UTM_X =
+    m_vCrossSectionRightRBLocation_UTM_Y =
     m_vCrossSectionBedSlope =
     m_vCrossSectionBedSlopePredictor =
     m_vCrossSectionBedSlopeCorrector =
@@ -729,6 +767,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
     m_vSalinity_AUS_diff.resize(m_nCrossSectionsNumber);
 
     // ⚡ PRECALCULAR CONSTANTES (valores que no cambian durante la simulación)
+    // NOTA: m_vManningNumberSquared se calculará después de leer los valores reales
     m_vManningNumberSquared.resize(m_nCrossSectionsNumber);
     m_vInvDX.resize(m_nCrossSectionsNumber);
     m_vDxSum.resize(m_nCrossSectionsNumber);
@@ -737,8 +776,8 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
     m_vCrossSectionDI1Dx.resize(m_nCrossSectionsNumber, 0.0);  // Gradiente de I1
     
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-        // Manning² se usa ~4000 veces por día de simulación
-        m_vManningNumberSquared[i] = pow(m_vCrossSectionManningNumber[i], 2.0);
+        // ⚠️ Manning² NO se calcula aquí (valores aún no leídos desde estuary[])
+        // Se calculará en calculateAlongEstuaryInitialConditions()
         
         // 1/ΔX se usa en múltiples gradientes
         if (m_vCrossSectionDX[i] > 1e-10) {
@@ -838,6 +877,11 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
         //! Insert the Manning number onto the simulation object
         m_vCrossSectionManningNumber[i] = estuary[i].dGetManningNumber();
+    }
+    
+    //! ✅ CRITICAL: Precalculate Manning² AFTER reading the values from estuary
+    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+        m_vManningNumberSquared[i] = pow(m_vCrossSectionManningNumber[i], 2.0);
     }
 
     if (m_bDoWaterDensity)
@@ -944,6 +988,10 @@ void CSimulation::calculateHydraulicParameters() {
                                           factor * m_vWidth[i][j+1];
                 m_vCrossSectionBeta[i] = inv_factor * m_vBeta[i][j] + 
                                          factor * m_vBeta[i][j+1];
+                m_vCrossSectionLeftRBLocation[i] = inv_factor * m_vLeftY[i][j] + 
+                                                   factor * m_vLeftY[i][j+1];
+                m_vCrossSectionRightRBLocation[i] = inv_factor * m_vRightY[i][j] + 
+                                                    factor * m_vRightY[i][j+1];
                 
                 // Interpolate I1 for predictor/normal states
                 const double I1_interpolated = inv_factor * m_vEstuaryI1[i][j] + 
@@ -959,6 +1007,42 @@ void CSimulation::calculateHydraulicParameters() {
         m_vCrossSectionWaterElevation[i] = m_vCrossSectionWaterDepth[i] + m_vBedZ[i];
     }
 }
+
+//======================================================================================================================
+//! Calculate UTM coordinates of left and right river banks based on centerline position, angles, and distances
+//======================================================================================================================
+void CSimulation::calculateRiverBankUTMCoordinates() {
+    const double PI = 3.14159265358979323846;
+    const double DEG_TO_RAD = PI / 180.0;
+    
+    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+        // Get centerline UTM coordinates
+        const double x_center = estuary[i].dGetX_UTM();
+        const double y_center = estuary[i].dGetY_UTM();
+        
+        // Get angles (in degrees, assuming they are relative to North or channel direction)
+        const double angle_left = estuary[i].dGetLeftRBAngle();   // AngMd
+        const double angle_right = estuary[i].dGetRightRBAngle(); // AngMi
+        
+        // Get distances from centerline
+        const double dist_left = fabs(m_vCrossSectionLeftRBLocation[i]);
+        const double dist_right = fabs(m_vCrossSectionRightRBLocation[i]);
+        
+        // Convert angles to radians
+        const double angle_left_rad = angle_left * DEG_TO_RAD;
+        const double angle_right_rad = angle_right * DEG_TO_RAD;
+        
+        // Calculate UTM coordinates for left bank
+        // Assuming angles are measured from North (clockwise positive)
+        m_vCrossSectionLeftRBLocation_UTM_X[i] = x_center + dist_left * sin(angle_left_rad);
+        m_vCrossSectionLeftRBLocation_UTM_Y[i] = y_center + dist_left * cos(angle_left_rad);
+        
+        // Calculate UTM coordinates for right bank
+        m_vCrossSectionRightRBLocation_UTM_X[i] = x_center + dist_right * sin(angle_right_rad);
+        m_vCrossSectionRightRBLocation_UTM_Y[i] = y_center + dist_right * cos(angle_right_rad);
+    }
+}
+
     // else {
     //     for (int i = 0; i < nCrossSections; i++) {
     //         const double dArea = m_vPredictedCrossSectionArea[i];
@@ -2095,6 +2179,39 @@ void CSimulation::mergePredictorCorrector() {
 }
 
 //======================================================================================================================
+//! Smooth bathymetry before simulation
+//======================================================================================================================
+void CSimulation::smoothBathymetry() {
+    // Suavizar la batimetría (z_bed) para reducir oscilaciones numéricas
+    // Aplicar múltiples pases con filtro [0.25, 0.5, 0.25]
+    
+    const int n = m_nCrossSectionsNumber;
+    const int num_passes = 3;  // Número de pases de suavizado
+    
+    std::cout << "🌊 Suavizando batimetría (" << num_passes << " pases)..." << std::endl;
+    
+    vector<double> vZSmooth(n);
+    
+    for (int pass = 0; pass < num_passes; pass++) {
+        // Mantener contornos sin cambios
+        vZSmooth[0] = m_vBedZ[0];
+        vZSmooth[n-1] = m_vBedZ[n-1];
+        
+        // Aplicar filtro a nodos interiores
+        for (int i = 1; i < n-1; i++) {
+            vZSmooth[i] = 0.25*m_vBedZ[i-1] + 0.50*m_vBedZ[i] + 0.25*m_vBedZ[i+1];
+        }
+        
+        // Actualizar para el siguiente pase
+        for (int i = 1; i < n-1; i++) {
+            m_vBedZ[i] = vZSmooth[i];
+        }
+    }
+    
+    std::cout << "   ✓ Batimetría suavizada correctamente" << std::endl;
+}
+
+//======================================================================================================================
 //! Smooth solution
 //======================================================================================================================
 void CSimulation::smoothSolution() {
@@ -2139,6 +2256,7 @@ void CSimulation::smoothSolution() {
     for (int i = 1; i < n-1; i++) {
         m_vCrossSectionArea[i] = vAreaSmooth[i];
         m_vCrossSectionQ[i] = vQSmooth[i];
+        m_vCrossSectionU[i] = m_vCrossSectionQ[i] / (m_vCrossSectionArea[i] + 1e-10);
     }
 }
 
@@ -2200,6 +2318,18 @@ vector<double> CSimulation::vGetVariable(const string& strVariableName) const {
     }
     else if (strVariableName == "xr") {
         return m_vCrossSectionRightRBLocation;
+    }
+    else if (strVariableName == "xl_utm_x") {
+        return m_vCrossSectionLeftRBLocation_UTM_X;
+    }
+    else if (strVariableName == "xl_utm_y") {
+        return m_vCrossSectionLeftRBLocation_UTM_Y;
+    }
+    else if (strVariableName == "xr_utm_x") {
+        return m_vCrossSectionRightRBLocation_UTM_X;
+    }
+    else if (strVariableName == "xr_utm_y") {
+        return m_vCrossSectionRightRBLocation_UTM_Y;
     }
     else if (strVariableName == "Qb") {
         return m_vCrossSectionQb;
