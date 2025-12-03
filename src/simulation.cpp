@@ -24,6 +24,8 @@ using std::pow;
 #include "main.h"
 #include "utils.h"
 #include "error_handling.h"
+#include "yaml_reader.h"
+#include <filesystem>
 
 
 
@@ -403,30 +405,75 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     //! Show starting run message
     presenter.StartingRun(nArg, pcArgv, this);
 
-    //! Read the configuration file
-    reader.bReadConfigurationFile(this);
-    if (m_bReturnError)
-    {
+    //! Detect configuration file type and read accordingly
+    if (nArg > 1) {
+        std::string configFile = pcArgv[1];
+        std::filesystem::path configPath(configFile);
+        std::string extension = configPath.extension().string();
+        
+        if (extension == ".yaml" || extension == ".yml") {
+            // Use YAML reader
+            std::cout << "📄 Detected YAML configuration file" << std::endl;
+            CYAMLReader yamlReader;
+            if (!yamlReader.loadConfiguration(configFile, this)) {
+                std::cerr << "❌ Error loading YAML configuration: " 
+                          << yamlReader.getErrorMessage() << std::endl;
+                m_bReturnError = true;
+                return;
+            }
+            
+            // Transfer file paths to reader
+            reader.m_strAlongChannelDataFilename = yamlReader.m_strAlongChannelDataFilename;
+            reader.m_strCrossSectionsFilename = yamlReader.m_strCrossSectionGeometryFilename;
+            reader.m_strTidalFilename = yamlReader.m_strUpwardBoundaryConditionFilename.empty() ? 
+                yamlReader.m_strDownwardBoundaryConditionFilename : yamlReader.m_strUpwardBoundaryConditionFilename;
+            reader.m_strSedimentPropertiesFilename = yamlReader.m_strSedimentPropertiesFilename;
+            reader.m_strHydroFilename = yamlReader.m_strHydrographsFilename;
+            
+            // Read geometry and forcing files
+            CDataReader::bOpenLogFile(this);
+            reader.bReadAlongChannelDataFile(this);
+            reader.bReadCrossSectionGeometryFile(this);
+            if (m_nUpwardEstuarineCondition > 1) {
+                CDataReader::bReadUpwardBoundaryConditionFile(this);
+            }
+            if (m_nDownwardEstuarineCondition > 1) {
+                CDataReader::bReadDownwardBoundaryConditionFile(this);
+            }
+            if (m_bDoSedimentTransport) {
+                reader.bReadAlongChannelSedimentsFile(this);
+            }
+            if (m_bHydroFile) {
+                reader.bReadHydrographsFile(this);
+            }
+        } else {
+            // Use legacy .conf reader
+            std::cout << "📄 Detected legacy .conf configuration file" << std::endl;
+            reader.bReadConfigurationFile(this);
+            if (m_bReturnError) {
+                return;
+            }
+
+            CDataReader::bOpenLogFile(this);
+            reader.bReadAlongChannelDataFile(this);
+            reader.bReadCrossSectionGeometryFile(this);
+            if (m_nUpwardEstuarineCondition > 1) {
+                CDataReader::bReadUpwardBoundaryConditionFile(this);
+            }
+            if (m_nDownwardEstuarineCondition > 1) {
+                CDataReader::bReadDownwardBoundaryConditionFile(this);
+            }
+            if (m_bDoSedimentTransport) {
+                reader.bReadAlongChannelSedimentsFile(this);
+            }
+            if (m_bHydroFile) {
+                reader.bReadHydrographsFile(this);
+            }
+        }
+    } else {
+        std::cerr << "❌ No configuration file provided" << std::endl;
+        m_bReturnError = true;
         return;
-    }
-
-    CDataReader::bOpenLogFile(this);
-    reader.bReadAlongChannelDataFile(this);
-    reader.bReadCrossSectionGeometryFile(this);
-    if (m_nUpwardEstuarineCondition > 1) {
-        CDataReader::bReadUpwardBoundaryConditionFile(this);
-    }
-    if (m_nDownwardEstuarineCondition > 1) {
-        CDataReader::bReadDownwardBoundaryConditionFile(this);
-    }
-    if (m_bDoSedimentTransport)
-    {
-        reader.bReadAlongChannelSedimentsFile(this);
-    }
-
-    if (m_bHydroFile)
-    {
-        reader.bReadHydrographsFile(this);
     }
 
 
@@ -1546,14 +1593,6 @@ void CSimulation::calculateSourceTerms() {
 
     // Calcular términos fuente
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-        double dx = 0.0;
-        if (i < m_nCrossSectionsNumber - 1) {
-            dx = m_vPositionX[i+1] - m_vPositionX[i];
-        }
-        else {
-            dx = m_vPositionX[i] - m_vPositionX[i-1];
-        }
-        
         // ⚡ Usar 1/dx precalculado cuando sea el mismo índice
         double inv_dx = (i < m_nCrossSectionsNumber - 1) ? m_vInvDX[i] : m_vInvDX[i-1];
         m_vCrossSectionGv0[i] = m_vLateralSourcesAtT[i] * inv_dx;
@@ -1967,7 +2006,6 @@ void CSimulation::mergePredictorCorrector() {
     if (bGetDoMcComarckLimiterFlux())
     {
         //! Include TVD-McComarck? - Usar vectores pre-alocados (miembros de clase)
-        const int nCrossSectionsNumber = m_nCrossSectionsNumber;
         
         // ⚡ Resetear vectores a cero (sin reallocations)
         std::fill(m_vTVD_a1_med.begin(), m_vTVD_a1_med.end(), 0.0);

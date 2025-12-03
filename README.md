@@ -1,7 +1,7 @@
 # BARRIER - Building Analysis capacity to improve the Resilience of the Guadalquivir river estuary
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Version](https://img.shields.io/badge/Version-0.5.0-blue.svg)](https://github.com/mcobosb/Barrier)
+[![Version](https://img.shields.io/badge/Version-0.6.0-blue.svg)](https://github.com/mcobosb/Barrier)
 [![C++](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/)
 [![CMake](https://img.shields.io/badge/CMake-3.16%2B-green.svg)](https://cmake.org/)
 [![OpenMP](https://img.shields.io/badge/OpenMP-parallel-orange.svg)](https://www.openmp.org/)
@@ -816,7 +816,7 @@ If you use BARRIER in your research, please cite:
   title = {{BARRIER}: 1D Estuarine Hydrodynamic Model},
   author = {Cobos, Manuel and Baquerizo, Asunción and Díez-Minguito, Manuel and Millares, Agustín},
   year = {2026},
-  version = {0.5.0},
+  version = {0.6.0},
   url = {https://github.com/mcobosb/Barrier},
   note = {Building Analysis capacity to improve the Resilience of the Guadalquivir river estuary}
 }
@@ -826,4 +826,4 @@ If you use BARRIER in your research, please cite:
 
 *For technical support, scientific collaboration, or general inquiries, please contact the development team.*
 
-**Last updated**: December 2025 | **Version**: 0.5.0
+**Last updated**: December 2025 | **Version**: 0.6.0

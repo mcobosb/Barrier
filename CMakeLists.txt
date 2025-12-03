@@ -6,7 +6,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Definir el nombre del proyecto.
-project(barrier VERSION 1.1.0 LANGUAGES CXX)
+project(barrier VERSION 0.6.0 LANGUAGES CXX)
 
 # Establecer el estándar de C++.
 set(CMAKE_CXX_STANDARD 20)
@@ -32,6 +32,7 @@ add_executable(barrier
     src/simulation.cpp 
     src/screen_presenter.cpp 
     src/data_reader.cpp
+    src/yaml_reader.cpp
     src/utils.cpp 
     src/error_handling.cpp 
     src/cross_section.cpp 
@@ -155,6 +156,14 @@ if(NETCDF_FOUND)
     target_include_directories(barrier PRIVATE ${NETCDF_INCLUDE_DIRS})
     target_link_libraries(barrier PRIVATE ${NETCDF_LIBRARIES})
     target_compile_definitions(barrier PRIVATE ${NETCDF_CFLAGS_OTHER})
+endif()
+
+# yaml-cpp (configuración en YAML)
+pkg_check_modules(YAMLCPP REQUIRED yaml-cpp)
+if(YAMLCPP_FOUND)
+    target_include_directories(barrier PRIVATE ${YAMLCPP_INCLUDE_DIRS})
+    target_link_libraries(barrier PRIVATE ${YAMLCPP_LIBRARIES})
+    message(STATUS "yaml-cpp encontrado y configurado")
 endif()
 
 # Librerías matemáticas
