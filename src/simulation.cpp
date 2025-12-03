@@ -524,6 +524,9 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         if (bGetDoDryBed())
             dryArea();
 
+        //! 🎯 SUAVIZADO: Aplicar filtro espacial cada paso para estabilidad
+        smoothSolution();
+
         //! Compute salinity gradient for next timestep
         if (bGetDoWaterSalinity())
         {
@@ -1090,6 +1093,19 @@ void CSimulation::calculateTimestep() {
     }
     
     m_dTimestep = dMinTimestep;
+
+    //! ✅ CONDICIÓN DE ESTABILIDAD PARA DISPERSIÓN DE SALINIDAD (si está activa)
+    //! Criterio: Δt ≤ (Δx)² / (2 * Kh)
+    //! Para evitar inestabilidades numéricas en el término de difusión
+    if (m_bDoWaterSalinity && m_dLongitudinalDispersion > 0.0) {
+        for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
+            double dX = m_vCrossSectionDX[i];
+            double dt_diffusion = 0.5 * dX * dX / m_dLongitudinalDispersion;  // Factor 0.5 para seguridad
+            if (dt_diffusion < m_dTimestep) {
+                m_dTimestep = dt_diffusion;
+            }
+        }
+    }
 
     //! Check if m_dTimestep is lower than 0.1 seconds
     if (m_dTimestep < 0.1) {
@@ -2084,23 +2100,20 @@ void CSimulation::mergePredictorCorrector() {
 //! Smooth solution
 //======================================================================================================================
 void CSimulation::smoothSolution() {
-    // 🎯 SUAVIZADO ADAPTATIVO SOLO EN ZONAS CON SALTOS (para visualización)
-    // No afecta el cálculo físico - solo el output
+    // Filtro espacial simple [0.25, 0.5, 0.25] aplicado a todos los nodos interiores
     
     const int n = m_nCrossSectionsNumber;
     vector<double> vAreaSmooth(n);
     vector<double> vQSmooth(n);
     
-    // Copiar valores originales
-    vAreaSmooth = m_vCrossSectionArea;
-    vQSmooth = m_vCrossSectionQ;
+    // Mantener contornos (i=0 y i=n-1) sin cambios
+    vAreaSmooth[0] = m_vCrossSectionArea[0];
+    vAreaSmooth[n-1] = m_vCrossSectionArea[n-1];
+    vQSmooth[0] = m_vCrossSectionQ[0];
+    vQSmooth[n-1] = m_vCrossSectionQ[n-1];
     
-    // Detectar y suavizar solo zonas con gradientes fuertes
-    const int boundary_zone = 3;  // Suavizar 3 nodos cerca de contornos
-    
-    // 1️⃣ ZONA AGUAS ARRIBA (primeros 3 nodos)
-    for (int i = 1; i < std::min(boundary_zone, n-1); i++) {
-        // Filtro suave [0.25, 0.50, 0.25] solo cerca del contorno
+    // Aplicar filtro a todos los nodos interiores
+    for (int i = 1; i < n-1; i++) {
         vAreaSmooth[i] = 0.25*m_vCrossSectionArea[i-1] + 
                          0.50*m_vCrossSectionArea[i] + 
                          0.25*m_vCrossSectionArea[i+1];
@@ -2109,48 +2122,11 @@ void CSimulation::smoothSolution() {
                       0.25*m_vCrossSectionQ[i+1];
     }
     
-    // 2️⃣ ZONA AGUAS ABAJO (últimos 3 nodos)
-    for (int i = std::max(n-boundary_zone, 1); i < n-1; i++) {
-        vAreaSmooth[i] = 0.25*m_vCrossSectionArea[i-1] + 
-                         0.50*m_vCrossSectionArea[i] + 
-                         0.25*m_vCrossSectionArea[i+1];
-        vQSmooth[i] = 0.25*m_vCrossSectionQ[i-1] + 
-                      0.50*m_vCrossSectionQ[i] + 
-                      0.25*m_vCrossSectionQ[i+1];
-    }
-    
-    // 3️⃣ ZONA INTERIOR: Detectar saltos locales > 10% y suavizar
-    for (int i = boundary_zone; i < n-boundary_zone; i++) {
-        // Calcular variación relativa local
-        double area_avg = (m_vCrossSectionArea[i-1] + m_vCrossSectionArea[i] + m_vCrossSectionArea[i+1]) / 3.0;
-        double area_var = fabs(m_vCrossSectionArea[i] - area_avg);
-        
-        if (area_avg > 1e-6 && area_var / area_avg > 0.10) {
-            // Hay salto > 10% - suavizar MUY suave [0.10, 0.80, 0.10]
-            vAreaSmooth[i] = 0.10*m_vCrossSectionArea[i-1] + 
-                             0.80*m_vCrossSectionArea[i] + 
-                             0.10*m_vCrossSectionArea[i+1];
-        }
-        
-        // Igual para caudal
-        double Q_avg = (fabs(m_vCrossSectionQ[i-1]) + fabs(m_vCrossSectionQ[i]) + fabs(m_vCrossSectionQ[i+1])) / 3.0;
-        double Q_var = fabs(fabs(m_vCrossSectionQ[i]) - Q_avg);
-        
-        if (Q_avg > 1e-6 && Q_var / Q_avg > 0.10) {
-            vQSmooth[i] = 0.10*m_vCrossSectionQ[i-1] + 
-                          0.80*m_vCrossSectionQ[i] + 
-                          0.10*m_vCrossSectionQ[i+1];
-        }
-    }
-    
-    // Aplicar valores suavizados (manteniendo contornos i=0 y i=n-1 intactos)
+    // Aplicar valores suavizados
     for (int i = 1; i < n-1; i++) {
         m_vCrossSectionArea[i] = vAreaSmooth[i];
         m_vCrossSectionQ[i] = vQSmooth[i];
     }
-    
-    // 🔄 Recalcular parámetros hidráulicos para consistencia
-    // calculateHydraulicParameters();
 }
 
 //======================================================================================================================
@@ -2264,53 +2240,60 @@ void CSimulation::AnnounceProgress() {
 //===============================================================================================================================
 void CSimulation::calculate_salinity()
 {
-    // Add salinity variable to dry bed function
+    // CONSERVACIÓN DE MASA PURA: M_new = M_old + ΔM, luego S_new = M_new / A_new
     for (int i = 0; i < m_nCrossSectionsNumber; i++)
     {
-        m_vCrossSectionSalinity[i] = m_vCrossSectionSalinityASt[i]/m_vCrossSectionArea[i] + m_vCrossSectionSalinity[i];
-        // Bound the minimum and maximum values of salinity to 0 a 35 psu
-
-        if (m_vCrossSectionSalinity[i] < 0) m_vCrossSectionSalinity[i] = 0;
-        if (m_vCrossSectionSalinity[i] > 35) m_vCrossSectionSalinity[i] = 35;
-    }
-
-    // ================================================================================================================
-    // CONDICIONES DE FRONTERA AGUAS ARRIBA (UPSTREAM) - SALINIDAD
-    // ================================================================================================================
-    if (nGetUpwardSalinityCondition() == 0) {
-        //! ✅ CONDICIÓN LIBRE (FREE): Solo permite entrada de agua dulce
-        //! Si flujo entra (Q > 0): salinidad = 0 (agua dulce)
-        //! Si flujo sale (Q < 0): usar gradiente cero (mantener valor actual sin difusión hacia atrás)
-        if (m_vCrossSectionQ[0] > 0) {
-            // Flujo entrante desde aguas arriba → agua dulce
-            m_vCrossSectionSalinity[0] = 0.0;
+        if (m_vCrossSectionArea[i] > DRY_AREA) {
+            // Masa de sal actual
+            double salt_mass = m_vCrossSectionArea[i] * m_vCrossSectionSalinity[i];
+            
+            // Cambio de masa por advección + dispersión
+            double delta_mass = m_vCrossSectionSalinityASt[i];
+            
+            // Actualizar masa
+            salt_mass += delta_mass;
+            
+            // Asegurar masa no negativa
+            if (salt_mass < 0.0) salt_mass = 0.0;
+            
+            // Nueva concentración = masa / volumen
+            m_vCrossSectionSalinity[i] = salt_mass / m_vCrossSectionArea[i];
+            
+            // Limitar a rango físico [0, 35] psu
+            if (m_vCrossSectionSalinity[i] < 0.0) m_vCrossSectionSalinity[i] = 0.0;
+            if (m_vCrossSectionSalinity[i] > 35.0) m_vCrossSectionSalinity[i] = 35.0;
+        } else {
+            // Celda seca: agua dulce
+            m_vCrossSectionSalinity[i] = 0.0;
         }
-        // Si flujo saliente, mantener el valor calculado por advección (ya está en m_vCrossSectionSalinity[0])
     }
-    else if (nGetUpwardSalinityCondition() == 1) {
-        //! Salinidad NULA impuesta
+
+    // ================================================================================================================
+    // CONDICIONES DE FRONTERA - SALINIDAD
+    // ================================================================================================================
+    // Solo imponer valores si es condición tipo 1 o 2 (impuestas), no tipo 0 (FREE)
+    
+    // UPSTREAM
+    if (nGetUpwardSalinityCondition() == 1) {
+        // Salinidad NULA impuesta
         m_vCrossSectionSalinity[0] = 0.0;
     }
     else if (nGetUpwardSalinityCondition() == 2) {
-        //! Salinidad OCEÁNICA impuesta
+        // Salinidad OCEÁNICA impuesta
         m_vCrossSectionSalinity[0] = 35.0;
     }
+    // Si es tipo 0 (FREE): no hacer nada, dejar evolucionar libremente
 
-    // ================================================================================================================
-    // CONDICIONES DE FRONTERA AGUAS ABAJO (DOWNSTREAM) - SALINIDAD
-    // ================================================================================================================
-    if (nGetDownwardSalinityCondition() == 0) {
-        //! CONDICIÓN LIBRE: Gradiente cero en frontera aguas abajo
-        // Ya calculado por advección, no hacer nada
-    }
-    else if (nGetDownwardSalinityCondition() == 1) {
-        //! Salinidad NULA impuesta
+    // DOWNSTREAM
+    if (nGetDownwardSalinityCondition() == 1) {
+        // Salinidad NULA impuesta
         m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = 0.0;
     }
     else if (nGetDownwardSalinityCondition() == 2) {
-        //! Salinidad OCEÁNICA impuesta
+        // Salinidad OCEÁNICA impuesta
         m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = 35.0;
     }
+    // Si es tipo 0 (FREE): no hacer nada, dejar evolucionar libremente
 }
 
 
@@ -2327,46 +2310,80 @@ void CSimulation::calculate_salinity_gradient()
 
     for (int i = 1; i < m_nCrossSectionsNumber-1; i++)
     {
-        vKAS_dif_forward[i] = m_vCrossSectionArea[i+1]*(m_vCrossSectionSalinity[i+1]-m_vCrossSectionSalinity[i]);
-        vKAS_dif_backward[i+1] = m_vCrossSectionArea[i]*(m_vCrossSectionSalinity[i+1]-m_vCrossSectionSalinity[i]);
+        // ✅ DISPERSIÓN CON ÁREA VARIABLE: Usar área promedio en las interfaces
+        // Flujo difusivo en interfaz i+1/2: K * A_avg * ΔS/Δx
+        double A_interface_right = 0.5 * (m_vCrossSectionArea[i] + m_vCrossSectionArea[i+1]);
+        vKAS_dif_forward[i] = A_interface_right * (m_vCrossSectionSalinity[i+1] - m_vCrossSectionSalinity[i]);
+        
+        // Flujo difusivo en interfaz i-1/2: K * A_avg * ΔS/Δx
+        double A_interface_left = 0.5 * (m_vCrossSectionArea[i-1] + m_vCrossSectionArea[i]);
+        vKAS_dif_backward[i] = A_interface_left * (m_vCrossSectionSalinity[i] - m_vCrossSectionSalinity[i-1]);
+        
+        // Advección con diferencias centradas (segundo orden)
         vAUS_dif[i] = (m_vCrossSectionQ[i+1]*m_vCrossSectionSalinity[i+1] - m_vCrossSectionQ[i-1]*m_vCrossSectionSalinity[i-1])*m_dLambda*0.5;
     }
 
-    // Add the end and initial values
-    vKAS_dif_forward[0] = m_vCrossSectionArea[1]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
+    // ✅ Fronteras con área promedio en interfaces
+    double A_interface_0 = 0.5 * (m_vCrossSectionArea[0] + m_vCrossSectionArea[1]);
+    vKAS_dif_forward[0] = A_interface_0 * (m_vCrossSectionSalinity[1] - m_vCrossSectionSalinity[0]);
     vKAS_dif_forward[m_nCrossSectionsNumber-1] = vKAS_dif_forward[m_nCrossSectionsNumber-2];
 
-    // ✅ CORRECCIÓN: En frontera upstream con condición FREE, no permitir difusión hacia atrás
     if (nGetUpwardSalinityCondition() == 0) {
-        // Condición FREE: solo difusión hacia adelante, no hacia atrás (evita acumulación artificial)
-        vKAS_dif_backward[1] = m_vCrossSectionArea[0]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
-        vKAS_dif_backward[0] = 0.0;  // SIN difusión hacia atrás de la frontera
+        // Condición FREE: solo difusión hacia adelante
+        vKAS_dif_backward[1] = A_interface_0 * (m_vCrossSectionSalinity[1] - m_vCrossSectionSalinity[0]);
+        vKAS_dif_backward[0] = 0.0;
     } else {
         // Condiciones impuestas: difusión normal
-        vKAS_dif_backward[1] = m_vCrossSectionArea[0]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
+        vKAS_dif_backward[1] = A_interface_0 * (m_vCrossSectionSalinity[1] - m_vCrossSectionSalinity[0]);
         vKAS_dif_backward[0] = vKAS_dif_backward[1];
     }
 
-    // ✅ FRONTERA AGUAS ARRIBA: Esquema upwind basado en dirección del flujo
+    // ✅ FRONTERA AGUAS ARRIBA: Tratamiento correcto según dirección del flujo
     if (nGetUpwardSalinityCondition() == 0) {
-        // Condición FREE: agua dulce cuando entra, permite salida cuando refluye
-        if (m_vCrossSectionQ[0] >= 0) {
-            // Flujo entrante (Q > 0): advectar agua dulce desde frontera
-            vAUS_dif[0] = m_vCrossSectionQ[0] * 0.0 * m_dLambda; // S[0]=0 para agua dulce entrante
+        // FREE: Agua dulce entra, permite salida
+        if (m_vCrossSectionQ[0] >= 0.0) {
+            // Q > 0: flujo entrante de agua dulce
+            // Advección = Q[0]*S_exterior - Q[1]*S[0] = Q[0]*0 - Q[1]*S[0]
+            vAUS_dif[0] = -m_vCrossSectionQ[1] * m_vCrossSectionSalinity[0] * m_dLambda;
         } else {
-            // Flujo saliente (Q < 0): advectar la salinidad del propio nodo hacia fuera
-            // CORRECCIÓN: Usar S[0] no S[1] para permitir lavado con la marea
-            vAUS_dif[0] = m_vCrossSectionQ[0] * m_vCrossSectionSalinity[0] * m_dLambda;
+            // Q < 0: flujo saliente (reflujo)
+            // Advección = Q[1]*S[1] - Q[0]*S[0] (deja salir la sal)
+            vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*m_vCrossSectionSalinity[0]) * m_dLambda;
         }
-    } else {
-        // Condiciones impuestas (tipo 1 o 2): advección normal
-        vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*m_vCrossSectionSalinity[0])*m_dLambda;
+    } else if (nGetUpwardSalinityCondition() == 1) {
+        // Agua dulce impuesta: S[exterior] = 0
+        vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*0.0) * m_dLambda;
+    } else if (nGetUpwardSalinityCondition() == 2) {
+        // Agua oceánica impuesta: S[exterior] = 35
+        vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*35.0) * m_dLambda;
     }
     
-    // FRONTERA AGUAS ABAJO: advección normal
-    vAUS_dif[m_nCrossSectionsNumber-1] = (m_vCrossSectionQ[m_nCrossSectionsNumber-1]*m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] - m_vCrossSectionQ[m_nCrossSectionsNumber-2]*m_vCrossSectionSalinity[m_nCrossSectionsNumber-2])*m_dLambda;
+    // ✅ FRONTERA AGUAS ABAJO: Tratamiento correcto según condición
+    int n = m_nCrossSectionsNumber - 1;
+    if (nGetDownwardSalinityCondition() == 0) {
+        // FREE: Gradiente cero (deja salir lo que tenga)
+        vAUS_dif[n] = (m_vCrossSectionQ[n]*m_vCrossSectionSalinity[n] - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
+    } else if (nGetDownwardSalinityCondition() == 1) {
+        // Agua dulce impuesta: S[exterior] = 0
+        if (m_vCrossSectionQ[n] < 0.0) {
+            // Flujo saliente: advectar S[n]
+            vAUS_dif[n] = (m_vCrossSectionQ[n]*m_vCrossSectionSalinity[n] - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
+        } else {
+            // Flujo entrante: advectar agua dulce S=0
+            vAUS_dif[n] = (m_vCrossSectionQ[n]*0.0 - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
+        }
+    } else if (nGetDownwardSalinityCondition() == 2) {
+        // Agua oceánica impuesta: S[exterior] = 35
+        if (m_vCrossSectionQ[n] < 0.0) {
+            // Flujo saliente: advectar S[n] (deja salir)
+            vAUS_dif[n] = (m_vCrossSectionQ[n]*m_vCrossSectionSalinity[n] - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
+        } else {
+            // Flujo entrante: advectar agua oceánica S=35
+            vAUS_dif[n] = (m_vCrossSectionQ[n]*35.0 - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
+        }
+    }
 
-    //! Calculate de ASt term (temporal gradient)
+    //! Calculate de ASt term (cambio de masa de sal)
     for (int i = 0; i < m_nCrossSectionsNumber; i++)
     {
         m_vCrossSectionSalinityASt[i] = m_dLongitudinalDispersion*m_dLambda*m_dLambda/m_dTimestep*(vKAS_dif_forward[i] - vKAS_dif_backward[i]) - vAUS_dif[i];
