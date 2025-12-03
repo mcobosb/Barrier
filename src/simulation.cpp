@@ -1009,37 +1009,31 @@ void CSimulation::calculateHydraulicParameters() {
 }
 
 //======================================================================================================================
-//! Calculate UTM coordinates of left and right river banks based on centerline position, angles, and distances
+//! Calculate UTM coordinates of left and right river banks based on thalweg position, angles, and distances
 //======================================================================================================================
 void CSimulation::calculateRiverBankUTMCoordinates() {
-    const double PI = 3.14159265358979323846;
-    const double DEG_TO_RAD = PI / 180.0;
     
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-        // Get centerline UTM coordinates
-        const double x_center = estuary[i].dGetX_UTM();
-        const double y_center = estuary[i].dGetY_UTM();
+        // Get thalweg (centerline) UTM coordinates from along_channel_data.csv
+        const double x_thalweg = estuary[i].dGetX_UTM();
+        const double y_thalweg = estuary[i].dGetY_UTM();
         
-        // Get angles (in degrees, assuming they are relative to North or channel direction)
-        const double angle_left = estuary[i].dGetLeftRBAngle();   // AngMd
-        const double angle_right = estuary[i].dGetRightRBAngle(); // AngMi
+        // Get angles in radians (AngMd for left, AngMi for right)
+        const double angle_left = estuary[i].dGetLeftRBAngle();   // Already in radians
+        const double angle_right = estuary[i].dGetRightRBAngle(); // Already in radians
         
-        // Get distances from centerline
+        // Get distances from thalweg to river banks
         const double dist_left = fabs(m_vCrossSectionLeftRBLocation[i]);
         const double dist_right = fabs(m_vCrossSectionRightRBLocation[i]);
         
-        // Convert angles to radians
-        const double angle_left_rad = angle_left * DEG_TO_RAD;
-        const double angle_right_rad = angle_right * DEG_TO_RAD;
-        
         // Calculate UTM coordinates for left bank
-        // Assuming angles are measured from North (clockwise positive)
-        m_vCrossSectionLeftRBLocation_UTM_X[i] = x_center + dist_left * sin(angle_left_rad);
-        m_vCrossSectionLeftRBLocation_UTM_Y[i] = y_center + dist_left * cos(angle_left_rad);
+        // Starting from thalweg position, moving perpendicular to channel direction
+        m_vCrossSectionLeftRBLocation_UTM_X[i] = x_thalweg + dist_left * cos(angle_left);
+        m_vCrossSectionLeftRBLocation_UTM_Y[i] = y_thalweg + dist_left * sin(angle_left);
         
         // Calculate UTM coordinates for right bank
-        m_vCrossSectionRightRBLocation_UTM_X[i] = x_center + dist_right * sin(angle_right_rad);
-        m_vCrossSectionRightRBLocation_UTM_Y[i] = y_center + dist_right * cos(angle_right_rad);
+        m_vCrossSectionRightRBLocation_UTM_X[i] = x_thalweg + dist_right * cos(angle_right);
+        m_vCrossSectionRightRBLocation_UTM_Y[i] = y_thalweg + dist_right * sin(angle_right);
     }
 }
 

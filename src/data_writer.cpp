@@ -122,9 +122,25 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["xlb"]["longname"] = "x-left";
     m_mVariableDefinitions["xl"]["units"] = "m";
 
-    m_mVariableDefinitions["Qb"]["description"] = "Distance from the thalweg to the right riverbank";
-    m_mVariableDefinitions["Qb"]["longname"] = "x-right";
-    m_mVariableDefinitions["Qb"]["units"] = "m";
+    m_mVariableDefinitions["xr"]["description"] = "Distance from the thalweg to the right riverbank";
+    m_mVariableDefinitions["xr"]["longname"] = "x-right";
+    m_mVariableDefinitions["xr"]["units"] = "m";
+    
+    m_mVariableDefinitions["xl_utm_x"]["description"] = "UTM X coordinate of left riverbank";
+    m_mVariableDefinitions["xl_utm_x"]["longname"] = "left bank UTM X";
+    m_mVariableDefinitions["xl_utm_x"]["units"] = "m";
+    
+    m_mVariableDefinitions["xl_utm_y"]["description"] = "UTM Y coordinate of left riverbank";
+    m_mVariableDefinitions["xl_utm_y"]["longname"] = "left bank UTM Y";
+    m_mVariableDefinitions["xl_utm_y"]["units"] = "m";
+    
+    m_mVariableDefinitions["xr_utm_x"]["description"] = "UTM X coordinate of right riverbank";
+    m_mVariableDefinitions["xr_utm_x"]["longname"] = "right bank UTM X";
+    m_mVariableDefinitions["xr_utm_x"]["units"] = "m";
+    
+    m_mVariableDefinitions["xr_utm_y"]["description"] = "UTM Y coordinate of right riverbank";
+    m_mVariableDefinitions["xr_utm_y"]["longname"] = "right bank UTM Y";
+    m_mVariableDefinitions["xr_utm_y"]["units"] = "m";
 }
 
 //======================================================================================================================
