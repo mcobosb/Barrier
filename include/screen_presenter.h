@@ -2,7 +2,8 @@
 *
  * \class CScreenPresenter
  * \brief
- * \details TODO 001 This is a more detailed description of the ScreenPresenter class
+ * \details Manages console output: progress updates, simulation status,
+ *          timing information, and user notifications.
  * \author Manuel Cobos Budia
 
  * \date 2024

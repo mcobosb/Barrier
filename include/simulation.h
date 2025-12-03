@@ -105,6 +105,9 @@ class CSimulation
     //! Is this timestep saved?
     bool m_bSaveTime;
 
+    //! Save at every computational timestep (for debugging)?
+    bool m_bSaveAllTimesteps;
+
     //! Computational timestep obtained from Courant number
     double m_dTimestep;
 
@@ -225,6 +228,12 @@ class CSimulation
     //! Cross-section Bed slope
     vector<double> m_vCrossSectionBedSlope;
 
+    //! Cross-section Bed slope for predictor (forward difference) - balance de términos fuente
+    vector<double> m_vCrossSectionBedSlopePredictor;
+
+    //! Cross-section Bed slope for corrector (backward difference) - balance de términos fuente
+    vector<double> m_vCrossSectionBedSlopeCorrector;
+
     //! Cross-section Bed slope Direction +/- ve, 1/-1
     vector<int> m_vCrossSectionBedSlopeDirection;
 
@@ -265,6 +274,17 @@ class CSimulation
 
     //! Cross-section betas
     vector<double> m_vCrossSectionBeta;
+
+    //! Cross-section I1 pressure integral
+    vector<double> m_vCrossSectionI1;
+    //! Predicted cross-section I1 pressure integral
+    vector<double> m_vPredictedCrossSectionI1;
+
+    //! Cross-section I2 momentum integral
+    vector<double> m_vCrossSectionI2;
+
+    //! Cross-section dI1/dx (pressure gradient for non-prismatic channels)
+    vector<double> m_vCrossSectionDI1Dx;
 
     //! Cross-section DhDx
     vector<double> m_vCrossSectionDhDx;
@@ -520,6 +540,11 @@ class CSimulation
     //! Method for setting the compute water density
     void bSetDoWaterDensity(bool doWaterDensity);
 
+    //! Method for getting save all timesteps flag
+    [[nodiscard]] bool bGetSaveAllTimesteps() const;
+    //! Method for setting save all timesteps flag
+    void bSetSaveAllTimesteps(bool saveAllTimesteps);
+
     //! Add output variable
     void strAddOutputVariable(const string& strItem);
 
@@ -603,7 +628,7 @@ class CSimulation
     void nSetSimStartMonth(int month) { m_nSimStartMonth = month; }
     void nSetSimStartYear(int year) { m_nSimStartYear = year; }
 
-    // ✅ AÑADIR: Método para establecer toda la fecha de una vez
+    //! Set complete simulation start date and time at once
     void setSimulationStartDateTime(int year, int month, int day, int hour, int min, int sec) {
         m_nSimStartYear = year;
         m_nSimStartMonth = month;
@@ -613,7 +638,7 @@ class CSimulation
         m_nSimStartSec = sec;
     }
 
-    // ✅ AÑADIR: Método para obtener fecha como string
+    //! Get simulation start date and time as formatted string (ISO 8601)
     std::string getSimulationStartDateTimeString() const {
         std::ostringstream oss;
         oss << std::setfill('0') << std::setw(4) << m_nSimStartYear << "-"
@@ -640,6 +665,7 @@ class CSimulation
     vector<vector<double>> m_vEstuaryAreas;
     vector<vector<double>> m_vEstuaryHydraulicRadius;
     vector<vector<double>> m_vEstuaryWaterDepths;
+    vector<vector<double>> m_vEstuaryI1;  // Pressure integral I1 for each elevation
     vector<vector<double>> m_vPrecalculatedSecondTerm;
     vector<int> m_vElevationSectionsCount;
 

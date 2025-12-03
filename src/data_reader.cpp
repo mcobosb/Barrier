@@ -1,8 +1,10 @@
 /*!
  *
  * \file data_reader.cpp
- * \brief Reads non-GIS input files
- * \details TODO 001 A more detailed description of these routines.
+ * \brief Reads configuration and input data files
+ * \details Parses configuration files (.conf), cross-section geometry,
+ *          along-channel data, boundary conditions, and hydrograph data.
+ *          Validates input and initializes simulation parameters.
  * \author Manuel Cobos Budia
 
  * \date 15/08/2024
@@ -306,7 +308,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation) {
             	 strRH = strToLower(&strRH);
 
             	 dMultiplier = dGetTimeMultiplier(&strRH);
-	            	//! TODO 007: Options for another time unit
+	            	//! Time unit conversion for output timestep (currently only seconds supported)
 	            	m_pSimulation->m_dTimeFactor = 1.0;
 
             		if (static_cast<int>(dMultiplier) == TIME_UNKNOWN)
@@ -338,8 +340,11 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation) {
 
             		double dTimeStep = strtod(strRH.c_str(), nullptr) * dMultiplier*m_pSimulation->m_dTimeFactor; // in hours
 
-            		if (dTimeStep <= 0)
-            		 strErr = "line " + to_string(nLine) + ": timestep of simulation must be > 0";
+            		// Si timestep es 0 o negativo, activar modo de guardar en todos los pasos
+            		if (dTimeStep <= 0) {
+            			m_pSimulation->bSetSaveAllTimesteps(true);
+            			dTimeStep = 1.0; // Valor dummy, se usará dt adaptativo
+            		}
 
             		if (dTimeStep >= m_pSimulation->dGetSimulationDuration())
             			strErr = "line " + to_string(nLine) + ": timestep of simulation must be < the duration of the simulation";
@@ -451,7 +456,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation) {
 	            	{
 	            		int nEstuaryCondition = strtol(strRH.c_str(), nullptr, 10);
 	            		if (nEstuaryCondition != 0 && nEstuaryCondition != 1 && nEstuaryCondition != 2) {
-	            			//! TODO 007: return an error code
+	            			//! Invalid boundary condition value (must be 0, 1, or 2)
 	            		}
 	            		else {
 	            			m_pSimulation->nSetDownwardEstuarineCondition(nEstuaryCondition);
@@ -1013,6 +1018,11 @@ void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 	// Number of elevation sections for the last Cross-Section
 	m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine + 1);
 
+	// Calculate I1 pressure integral for all cross-sections after reading geometry
+	for (int i = 0; i <= nCrossSectionNumber; i++) {
+		m_pSimulation->estuary[i].calculateI1();
+	}
+
 }
 
 
@@ -1056,7 +1066,7 @@ void CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 			while (getline(string_line, token, ',')) {
 				double dValue = strtod(token.c_str(), nullptr);
 				if (j == 0) {
-					//! TODO 010: Setter and getter
+					//! Store boundary condition time value
 					m_pSimulation->m_vUpwardBoundaryConditionTime.push_back(dValue);
 				}
 

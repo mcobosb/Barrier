@@ -1,7 +1,8 @@
 /*!
 *
  * \class CHydrograph
- * \details TODO 001 This is a more detailed description of the CDataReader class
+ * \details Represents lateral inflow sources (tributaries, point sources) along the channel.
+ *          Handles interpolation of flow rates over time.
  * \author Manuel Cobos Budia
 
  * \date 2024

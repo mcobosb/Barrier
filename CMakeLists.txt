@@ -6,12 +6,18 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Definir el nombre del proyecto.
-project(barrier VERSION 1.0.0 LANGUAGES CXX)
+project(barrier VERSION 1.1.0 LANGUAGES CXX)
 
 # Establecer el estándar de C++.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    message(STATUS "OpenMP encontrado - Paralelización habilitada")
+endif()
 
 # Establecer el tipo de build por defecto
 if(NOT CMAKE_BUILD_TYPE)
@@ -57,19 +63,21 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(barrier PRIVATE DEBUG_MODE)
 
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    # ✅ OPTIMIZADO: Pero sin las opciones más problemáticas
+    # ✅ OPTIMIZADO: Máximo rendimiento con paralelización
     target_compile_options(barrier PRIVATE
         -O3 -DNDEBUG -Wall -Wextra 
+        -march=native -mtune=native  # Optimizar para CPU actual
+        -ffast-math                  # Matemática rápida
         -funroll-loops -fomit-frame-pointer
-        -flto                     # Link Time Optimization
-        -fno-signed-zeros        # Optimizaciones flotantes seguras
-        -fno-trapping-math       # Optimizaciones matemáticas
-        -fassociative-math       # Reordenar operaciones matemáticas
+        -flto                        # Link Time Optimization
+        -fno-signed-zeros            # Optimizaciones flotantes
+        -fno-trapping-math
+        -fassociative-math
     )
     target_link_options(barrier PRIVATE
-        -flto                     # LTO en linking también
-        -Wl,--gc-sections        # Eliminar secciones no usadas
-        -Wl,--strip-all          # Strip símbolos debug
+        -flto=auto                   # LTO paralelo
+        -Wl,--gc-sections            # Eliminar secciones no usadas
+        -Wl,--strip-all              # Strip símbolos debug
     )
     target_compile_definitions(barrier PRIVATE 
         NDEBUG                    # Desactiva assert()
@@ -100,6 +108,35 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "ReleaseFast")
     )
     target_link_options(barrier PRIVATE -flto=auto -Wl,--gc-sections -Wl,--strip-all)
     target_compile_definitions(barrier PRIVATE NDEBUG)
+
+elseif(CMAKE_BUILD_TYPE STREQUAL "PGOGenerate")
+    # 🔍 PASO 1: Generar datos de perfil
+    target_compile_options(barrier PRIVATE
+        -O3 -DNDEBUG -march=native -ffast-math 
+        -funroll-loops -fomit-frame-pointer
+        -fprofile-generate           # Instrumentación PGO
+    )
+    target_link_options(barrier PRIVATE -fprofile-generate)
+    target_compile_definitions(barrier PRIVATE NDEBUG)
+    message(STATUS "🔍 PGO: Modo generación de perfil activado")
+
+elseif(CMAKE_BUILD_TYPE STREQUAL "PGOUse")
+    # ⚡ PASO 2: Usar datos de perfil para optimización máxima
+    target_compile_options(barrier PRIVATE
+        -O3 -DNDEBUG -march=native -ffast-math 
+        -funroll-loops -fomit-frame-pointer
+        -flto
+        -fprofile-use                # Optimización basada en perfil
+        -fprofile-correction         # Corregir inconsistencias menores
+    )
+    target_link_options(barrier PRIVATE 
+        -fprofile-use 
+        -flto=auto 
+        -Wl,--gc-sections 
+        -Wl,--strip-all
+    )
+    target_compile_definitions(barrier PRIVATE NDEBUG)
+    message(STATUS "⚡ PGO: Modo optimización con perfil activado")
 
 else()
     target_compile_options(barrier PRIVATE -O2 -g -Wall -Wextra)
@@ -134,8 +171,13 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(barrier PUBLIC -fcolor-diagnostics)
 endif()
 
-# Definir que OpenMP está deshabilitado
-target_compile_definitions(barrier PRIVATE NO_OPENMP)
+# ⚡ Habilitar OpenMP para paralelización
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(barrier PRIVATE OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP habilitado y enlazado")
+else()
+    message(WARNING "OpenMP no encontrado - ejecución secuencial")
+endif()
 
 #======================================================================================================================
 #! 5️⃣ INFORMACIÓN DE BUILD

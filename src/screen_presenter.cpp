@@ -1,8 +1,9 @@
 /*!
  *
- * \file utils.cpp
- * \brief Utility routines
- * \details TODO 001 A more detailed description of this routine.
+ * \file screen_presenter.cpp
+ * \brief Console output and progress display
+ * \details Manages terminal output for simulation progress, timing,
+ *          system information, and user notifications.
  * \author Manuel Cobos Budia
 
  * \date 2024

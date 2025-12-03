@@ -134,5 +134,10 @@ class CCrossSection {
         vector<double> vGetBeta();
         vector<double> vGetRightRBLocation();
         vector<double> vGetLeftRBLocation();
+        vector<double> vGetI1();
+        vector<double> vGetI2();
+        
+        //! Calculate I1 pressure integral for each elevation
+        void calculateI1();
 };
 #endif
