@@ -545,8 +545,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         AnnounceProgress();
 
         if (m_bSaveTime || (m_nLogFileDetail == 2)) {
-            // 🎨 Suavizar solución solo para output (no afecta cálculo)
-            smoothSolution();
+            // Guardar sin suavizado adicional (ya aplicado arriba)
             writer.nSetOutputData(this);
         }
 
@@ -1481,17 +1480,16 @@ void CSimulation::calculateSourceTerms() {
         double inv_dx = (i < m_nCrossSectionsNumber - 1) ? m_vInvDX[i] : m_vInvDX[i-1];
         m_vCrossSectionGv0[i] = m_vLateralSourcesAtT[i] * inv_dx;
         
-        // Gv1 = -g*A*dh/dx + gAS0 - gASf (aproximación hidrostática)
-        // NOTA: Para canales no prismáticos, lo correcto sería -g*dI1/dx
-        // pero causa inestabilidad numérica. La aproximación -g*A*dh/dx es estable
-        // y válida cuando la geometría varía suavemente en x
+        // ✅ WELL-BALANCED: Usar gradiente de superficie (WSE) directamente
+        // Esto balancea automáticamente presión y gravedad en reposo
+        // WSE = h + z, entonces d(WSE)/dx = dh/dx + dz/dx
+        // El término -g*A*d(WSE)/dx incluye tanto presión como gravedad de forma balanceada
         double area_to_use = (m_nPredictor == 1) ? m_vCrossSectionArea[i] : m_vPredictedCrossSectionArea[i];
-        m_vCrossSectionGv1[i] = -G * area_to_use * m_vCrossSectionDhDx[i] + 
-                               m_vCrossSection_gAS0[i] - m_vCrossSection_gASf[i];
         
-        // Versión con dI1/dx (DESACTIVADA - inestable):
-        // m_vCrossSectionGv1[i] = -G * m_vCrossSectionDI1Dx[i] + 
-        //                        m_vCrossSection_gAS0[i] - m_vCrossSection_gASf[i];
+        // Gradiente de WSE ya incluye tanto cambios de profundidad como de fondo
+        m_vCrossSectionGv1[i] = -G * area_to_use * m_vCrossSectionDhDx[i] - m_vCrossSection_gASf[i];
+        
+        // NOTA: No sumamos g*A*S0 porque ya está incluido en d(WSE)/dx = dh/dx + S0
     }
 }
 
@@ -2100,7 +2098,8 @@ void CSimulation::mergePredictorCorrector() {
 //! Smooth solution
 //======================================================================================================================
 void CSimulation::smoothSolution() {
-    // Filtro espacial simple [0.25, 0.5, 0.25] aplicado a todos los nodos interiores
+    // Filtro espacial [0.25, 0.5, 0.25] aplicado a todos los nodos interiores
+    // En zonas con cambios bruscos de área, aplicar doble suavizado
     
     const int n = m_nCrossSectionsNumber;
     vector<double> vAreaSmooth(n);
@@ -2112,7 +2111,7 @@ void CSimulation::smoothSolution() {
     vQSmooth[0] = m_vCrossSectionQ[0];
     vQSmooth[n-1] = m_vCrossSectionQ[n-1];
     
-    // Aplicar filtro a todos los nodos interiores
+    // Primer pase: filtro estándar
     for (int i = 1; i < n-1; i++) {
         vAreaSmooth[i] = 0.25*m_vCrossSectionArea[i-1] + 
                          0.50*m_vCrossSectionArea[i] + 
@@ -2120,6 +2119,20 @@ void CSimulation::smoothSolution() {
         vQSmooth[i] = 0.25*m_vCrossSectionQ[i-1] + 
                       0.50*m_vCrossSectionQ[i] + 
                       0.25*m_vCrossSectionQ[i+1];
+    }
+    
+    // Detectar zonas con cambios bruscos de área y aplicar segundo pase
+    for (int i = 2; i < n-2; i++) {
+        double dA_ratio_left = m_vCrossSectionArea[i] / (m_vCrossSectionArea[i-1] + 1e-10);
+        double dA_ratio_right = m_vCrossSectionArea[i+1] / (m_vCrossSectionArea[i] + 1e-10);
+        
+        // Si hay cambio > 50% de área, aplicar suavizado extra
+        if (dA_ratio_left > 1.5 || dA_ratio_left < 0.67 || 
+            dA_ratio_right > 1.5 || dA_ratio_right < 0.67) {
+            // Segundo pase solo en esta zona
+            vAreaSmooth[i] = 0.25*vAreaSmooth[i-1] + 0.50*vAreaSmooth[i] + 0.25*vAreaSmooth[i+1];
+            vQSmooth[i] = 0.25*vQSmooth[i-1] + 0.50*vQSmooth[i] + 0.25*vQSmooth[i+1];
+        }
     }
     
     // Aplicar valores suavizados
@@ -2240,7 +2253,7 @@ void CSimulation::AnnounceProgress() {
 //===============================================================================================================================
 void CSimulation::calculate_salinity()
 {
-    // CONSERVACIÓN DE MASA PURA: M_new = M_old + ΔM, luego S_new = M_new / A_new
+    // CONSERVACIÓN DE MASA: M_new = M_old + ΔM, luego S_new = M_new / A_new
     for (int i = 0; i < m_nCrossSectionsNumber; i++)
     {
         if (m_vCrossSectionArea[i] > DRY_AREA) {
@@ -2271,10 +2284,16 @@ void CSimulation::calculate_salinity()
     // ================================================================================================================
     // CONDICIONES DE FRONTERA - SALINIDAD
     // ================================================================================================================
-    // Solo imponer valores si es condición tipo 1 o 2 (impuestas), no tipo 0 (FREE)
     
     // UPSTREAM
-    if (nGetUpwardSalinityCondition() == 1) {
+    if (nGetUpwardSalinityCondition() == 0) {
+        // FREE: Si flujo entra (Q > 0), imponer agua dulce para evitar que la sal suba por difusión
+        if (m_vCrossSectionQ[0] > 0.0) {
+            m_vCrossSectionSalinity[0] = 0.0;
+        }
+        // Si Q <= 0 (salida), dejar evolucionar libremente
+    }
+    else if (nGetUpwardSalinityCondition() == 1) {
         // Salinidad NULA impuesta
         m_vCrossSectionSalinity[0] = 0.0;
     }
@@ -2282,7 +2301,6 @@ void CSimulation::calculate_salinity()
         // Salinidad OCEÁNICA impuesta
         m_vCrossSectionSalinity[0] = 35.0;
     }
-    // Si es tipo 0 (FREE): no hacer nada, dejar evolucionar libremente
 
     // DOWNSTREAM
     if (nGetDownwardSalinityCondition() == 1) {
@@ -2310,26 +2328,25 @@ void CSimulation::calculate_salinity_gradient()
 
     for (int i = 1; i < m_nCrossSectionsNumber-1; i++)
     {
-        // ✅ DISPERSIÓN CON ÁREA VARIABLE: Usar área promedio en las interfaces
-        // Flujo difusivo en interfaz i+1/2: K * A_avg * ΔS/Δx
-        double A_interface_right = 0.5 * (m_vCrossSectionArea[i] + m_vCrossSectionArea[i+1]);
+        // ✅ DISPERSIÓN CON ÁREA VARIABLE: Usar área MÍNIMA en la interfaz
+        // Esto evita sobrestimar el flujo difusivo en transiciones bruscas
+        // Físicamente: el flujo está limitado por la sección más estrecha
+        double A_interface_right = std::min(m_vCrossSectionArea[i], m_vCrossSectionArea[i+1]);
         vKAS_dif_forward[i] = A_interface_right * (m_vCrossSectionSalinity[i+1] - m_vCrossSectionSalinity[i]);
         
-        // Flujo difusivo en interfaz i-1/2: K * A_avg * ΔS/Δx
-        double A_interface_left = 0.5 * (m_vCrossSectionArea[i-1] + m_vCrossSectionArea[i]);
+        double A_interface_left = std::min(m_vCrossSectionArea[i-1], m_vCrossSectionArea[i]);
         vKAS_dif_backward[i] = A_interface_left * (m_vCrossSectionSalinity[i] - m_vCrossSectionSalinity[i-1]);
         
-        // Advección con diferencias centradas (segundo orden)
+        // Advección centrada (segundo orden)
         vAUS_dif[i] = (m_vCrossSectionQ[i+1]*m_vCrossSectionSalinity[i+1] - m_vCrossSectionQ[i-1]*m_vCrossSectionSalinity[i-1])*m_dLambda*0.5;
     }
 
-    // ✅ Fronteras con área promedio en interfaces
-    double A_interface_0 = 0.5 * (m_vCrossSectionArea[0] + m_vCrossSectionArea[1]);
+    // ✅ Fronteras: usar área mínima en interfaces
+    double A_interface_0 = std::min(m_vCrossSectionArea[0], m_vCrossSectionArea[1]);
     vKAS_dif_forward[0] = A_interface_0 * (m_vCrossSectionSalinity[1] - m_vCrossSectionSalinity[0]);
-    vKAS_dif_forward[m_nCrossSectionsNumber-1] = vKAS_dif_forward[m_nCrossSectionsNumber-2];
-
+    
     if (nGetUpwardSalinityCondition() == 0) {
-        // Condición FREE: solo difusión hacia adelante
+        // Condición FREE: Bloquear difusión hacia atrás solamente
         vKAS_dif_backward[1] = A_interface_0 * (m_vCrossSectionSalinity[1] - m_vCrossSectionSalinity[0]);
         vKAS_dif_backward[0] = 0.0;
     } else {
@@ -2337,17 +2354,20 @@ void CSimulation::calculate_salinity_gradient()
         vKAS_dif_backward[1] = A_interface_0 * (m_vCrossSectionSalinity[1] - m_vCrossSectionSalinity[0]);
         vKAS_dif_backward[0] = vKAS_dif_backward[1];
     }
+    
+    vKAS_dif_forward[m_nCrossSectionsNumber-1] = vKAS_dif_forward[m_nCrossSectionsNumber-2];
 
     // ✅ FRONTERA AGUAS ARRIBA: Tratamiento correcto según dirección del flujo
     if (nGetUpwardSalinityCondition() == 0) {
         // FREE: Agua dulce entra, permite salida
         if (m_vCrossSectionQ[0] >= 0.0) {
             // Q > 0: flujo entrante de agua dulce
-            // Advección = Q[0]*S_exterior - Q[1]*S[0] = Q[0]*0 - Q[1]*S[0]
-            vAUS_dif[0] = -m_vCrossSectionQ[1] * m_vCrossSectionSalinity[0] * m_dLambda;
+            // Balance: (flujo_in × S_in) - (flujo_out × S_out)
+            // Entrada: Q[0] × 0 (agua dulce)
+            // Salida: usar esquema centrado para consistencia
+            vAUS_dif[0] = (m_vCrossSectionQ[0]*0.0 - m_vCrossSectionQ[1]*m_vCrossSectionSalinity[0]) * m_dLambda;
         } else {
-            // Q < 0: flujo saliente (reflujo)
-            // Advección = Q[1]*S[1] - Q[0]*S[0] (deja salir la sal)
+            // Q < 0: flujo saliente (reflujo) - deja salir la sal
             vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*m_vCrossSectionSalinity[0]) * m_dLambda;
         }
     } else if (nGetUpwardSalinityCondition() == 1) {
