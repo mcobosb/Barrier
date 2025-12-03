@@ -80,7 +80,7 @@ The simulation is configured through a **`.conf` file** (plain text format). Eac
 Main output/log file names                                          [omit path and extension]: simulation_name
 Content of log file                                      [0 = no log file, 1 = most detailed]: 0
 
-Simulation start date and time                                          [hh-mm-ss dd/mm/yyyy]: 00-00-00 01/01/2024
+Simulation start date and time                                          [hh-mm-ss dd/mm/yyyy]: 00-00-00 01/01/2026
 Simulation duration                                         [units may differ from Time step]: 604800 seconds
 Time step                                                                  [seconds or hours]: 3600 seconds
 Names of output variables                                                                    : full
@@ -812,11 +812,11 @@ This project uses the following open-source libraries:
 If you use BARRIER in your research, please cite:
 
 ```bibtex
-@software{barrier2024,
+@software{barrier2026,
   title = {{BARRIER}: 1D Estuarine Hydrodynamic Model},
   author = {Cobos, Manuel and Baquerizo, Asunción and Díez-Minguito, Manuel and Millares, Agustín},
-  year = {2024},
-  version = {1.1.0},
+  year = {2026},
+  version = {0.5.0},
   url = {https://github.com/mcobosb/Barrier},
   note = {Building Analysis capacity to improve the Resilience of the Guadalquivir river estuary}
 }
