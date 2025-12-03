@@ -1389,8 +1389,14 @@ void CSimulation::calculateFlowTerms() {
 //! Uses adaptive upwind scheme for water surface gradients at locations with steep bed slope changes
 //======================================================================================================================
 void CSimulation::calculateSourceTerms() {
-    //! Calculate water surface gradient dh/dx using adaptive upwind scheme at bed slope discontinuities
+    //! Calculate water surface gradient dh/dx using central differences
+    //! NOTA: El esquema upwind adaptativo causaba inestabilidad en zonas con depresiones/elevaciones del lecho
+    //! donde hay cambios de signo en la pendiente. Usar siempre diferencias centrales es más robusto.
     for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
+        //! Use central differences with precomputed inverse for all nodes
+        m_vCrossSectionDhDx[i] = (m_vCrossSectionWaterElevation[i+1] - m_vCrossSectionWaterElevation[i-1]) * m_vInvDxSum[i];
+        
+        /* ESQUEMA UPWIND DESACTIVADO - Causaba inestabilidad con pendiente variable
         double dx1 = m_vPositionX[i+1] - m_vPositionX[i];
         double dx2 = m_vPositionX[i] - m_vPositionX[i-1];
         
@@ -1414,6 +1420,7 @@ void CSimulation::calculateSourceTerms() {
             //! Smooth bed region: use central differences with precomputed inverse
             m_vCrossSectionDhDx[i] = (m_vCrossSectionWaterElevation[i+1] - m_vCrossSectionWaterElevation[i-1]) * m_vInvDxSum[i];
         }
+        */
     }
     
     // Condiciones de frontera con valores precalculados
@@ -2313,18 +2320,27 @@ void CSimulation::calculate_salinity_gradient()
     vKAS_dif_forward[0] = m_vCrossSectionArea[1]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
     vKAS_dif_forward[m_nCrossSectionsNumber-1] = vKAS_dif_forward[m_nCrossSectionsNumber-2];
 
-    vKAS_dif_backward[1] = m_vCrossSectionArea[0]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
-    vKAS_dif_backward[0] = vKAS_dif_backward[1];
-
-    // ⚠️ FRONTERA AGUAS ARRIBA: Usar esquema upwind puro para evitar difusión inversa
+    // ✅ CORRECCIÓN: En frontera upstream con condición FREE, no permitir difusión hacia atrás
     if (nGetUpwardSalinityCondition() == 0) {
-        // Condición FREE: solo advección, sin difusión hacia atrás
+        // Condición FREE: solo difusión hacia adelante, no hacia atrás (evita acumulación artificial)
+        vKAS_dif_backward[1] = m_vCrossSectionArea[0]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
+        vKAS_dif_backward[0] = 0.0;  // SIN difusión hacia atrás de la frontera
+    } else {
+        // Condiciones impuestas: difusión normal
+        vKAS_dif_backward[1] = m_vCrossSectionArea[0]*(m_vCrossSectionSalinity[1]-m_vCrossSectionSalinity[0]);
+        vKAS_dif_backward[0] = vKAS_dif_backward[1];
+    }
+
+    // ✅ FRONTERA AGUAS ARRIBA: Esquema upwind basado en dirección del flujo
+    if (nGetUpwardSalinityCondition() == 0) {
+        // Condición FREE: agua dulce cuando entra, permite salida cuando refluye
         if (m_vCrossSectionQ[0] >= 0) {
-            // Flujo entrante: advectar desde frontera (S=0)
-            vAUS_dif[0] = m_vCrossSectionQ[0] * 0.0 * m_dLambda; // S[0]=0 para agua dulce
+            // Flujo entrante (Q > 0): advectar agua dulce desde frontera
+            vAUS_dif[0] = m_vCrossSectionQ[0] * 0.0 * m_dLambda; // S[0]=0 para agua dulce entrante
         } else {
-            // Flujo saliente: advectar desde interior usando upwind
-            vAUS_dif[0] = m_vCrossSectionQ[0] * m_vCrossSectionSalinity[1] * m_dLambda;
+            // Flujo saliente (Q < 0): advectar la salinidad del propio nodo hacia fuera
+            // CORRECCIÓN: Usar S[0] no S[1] para permitir lavado con la marea
+            vAUS_dif[0] = m_vCrossSectionQ[0] * m_vCrossSectionSalinity[0] * m_dLambda;
         }
     } else {
         // Condiciones impuestas (tipo 1 o 2): advección normal
