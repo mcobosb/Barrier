@@ -1538,46 +1538,50 @@ void CSimulation::updatePredictorBoundaries() {
     //==============================================================================================================
     
     if (nGetUpwardEstuarineCondition() == 0) {
-        //! ✅ CONDICIÓN ABIERTA: Gradiente-cero
-        m_vPredictedCrossSectionQ[0] = m_vCrossSectionQ[0];
-        m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[0];
+        //! ✅ CONDICIÓN ABIERTA (FREE): Extrapolación de gradiente cero
+        //! Extrapolar linealmente pero con limitador para estabilidad
+        const double dQ = m_vCrossSectionQ[2] - m_vCrossSectionQ[1];
+        const double dA = m_vCrossSectionArea[2] - m_vCrossSectionArea[1];
+        
+        // Extrapolación lineal: Q[0] = Q[1] + (Q[1]-Q[2])
+        m_vPredictedCrossSectionQ[0] = m_vCrossSectionQ[1] - dQ;
+        m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[1] - dA;
+        
+        // Limitar área mínima
+        if (m_vPredictedCrossSectionArea[0] < DRY_AREA) {
+            m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[1];
+        }
     }
     else if (nGetUpwardEstuarineCondition() == 1) {
-        //! ✅ CONDICIÓN REFLECTANTE (WALL): Q = 0, mantener área
+        //! ✅ CONDICIÓN REFLECTANTE (WALL): Q = 0 (pared sólida)
+        //! Imponer velocidad cero, extrapolar área (nivel de agua) desde interior
         m_vPredictedCrossSectionQ[0] = 0.0;
-        m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[0];
+        
+        // Extrapolar área manteniendo gradiente desde interior
+        const double dA = m_vCrossSectionArea[2] - m_vCrossSectionArea[1];
+        m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[1] - dA;
+        
+        // Limitar área mínima
+        if (m_vPredictedCrossSectionArea[0] < DRY_AREA) {
+            m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[1];
+        }
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
-        //! ✅ ELEVACIÓN IMPUESTA CON SPONGE LAYER (zona de relajación)
+        //! ✅ ELEVACIÓN IMPUESTA: Imponer área y calcular Q con Manning
         m_vPredictedCrossSectionArea[0] = m_dUpwardBoundaryValue;
         m_vCrossSectionHydraulicRadius[0] = linearInterpolation1d(
             m_vPredictedCrossSectionArea[0], 
             m_vEstuaryAreas[0], 
             m_vEstuaryHydraulicRadius[0]);
         
-        // Calcular Q usando Manning
         double sign_S0 = (m_vCrossSectionBedSlope[0] >= 0) ? 1.0 : -1.0;
         m_vPredictedCrossSectionQ[0] = m_vPredictedCrossSectionArea[0] * 
                                       sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                       pow(m_vCrossSectionHydraulicRadius[0], 2.0/3.0) * 
                                       sign_S0 / (m_vManningN[0] + 1e-10);
-        
-        // 🎯 SPONGE LAYER: Suavizar nodo i=1 solo si hay cambio brusco
-        if (m_nCrossSectionsNumber >= 3) {
-            double area_diff = fabs(m_vPredictedCrossSectionArea[0] - m_vCrossSectionArea[1]);
-            double area_avg = 0.5 * (m_vPredictedCrossSectionArea[0] + m_vCrossSectionArea[1]);
-            
-            // Solo aplicar si diferencia > 5%
-            if (area_avg > 1e-6 && area_diff / area_avg > 0.05) {
-                double alpha = 0.8;  // Menos agresivo
-                double area_computed = m_vPredictedCrossSectionArea[1];
-                double area_smooth = 0.5*(m_vPredictedCrossSectionArea[0] + m_vCrossSectionArea[2]);
-                m_vPredictedCrossSectionArea[1] = alpha*area_computed + (1-alpha)*area_smooth;
-            }
-        }
     }
     else {
-        //! ✅ CAUDAL IMPUESTO CON SPONGE LAYER SELECTIVO
+        //! ✅ CAUDAL IMPUESTO
         m_vPredictedCrossSectionQ[0] = m_dUpwardBoundaryValue;
         
         double dManningFactor = m_vPredictedCrossSectionQ[0] * m_vManningN[0] / 
@@ -1587,19 +1591,6 @@ void CSimulation::updatePredictorBoundaries() {
             dManningFactor, 
             m_vPrecalculatedSecondTerm[0], 
             m_vEstuaryAreas[0]);
-        
-        // 🎯 SPONGE LAYER solo si hay discontinuidad fuerte
-        if (m_nCrossSectionsNumber >= 3) {
-            double Q_diff = fabs(m_vPredictedCrossSectionQ[0] - m_vCrossSectionQ[1]);
-            double Q_avg = 0.5 * fabs(m_vPredictedCrossSectionQ[0]) + 0.5 * fabs(m_vCrossSectionQ[1]) + 1e-6;
-            
-            if (Q_diff / Q_avg > 0.05) {
-                double alpha = 0.8;
-                double Q_computed = m_vPredictedCrossSectionQ[1];
-                double Q_smooth = 0.5*(m_vPredictedCrossSectionQ[0] + m_vCrossSectionQ[2]);
-                m_vPredictedCrossSectionQ[1] = alpha*Q_computed + (1-alpha)*Q_smooth;
-            }
-        }
     }
 
     //==============================================================================================================
@@ -1613,17 +1604,24 @@ void CSimulation::updatePredictorBoundaries() {
     }
 
     //==============================================================================================================
-    //! CONDICIÓN DE FRONTERA AGUAS ABAJO (DOWNSTREAM) - Con suavizado selectivo
+    //! CONDICIÓN DE FRONTERA AGUAS ABAJO (DOWNSTREAM)
     //==============================================================================================================
     int n = m_nCrossSectionsNumber - 1;
     
     if (nGetDownwardEstuarineCondition() == 0) {
-        //! ✅ CONDICIÓN ABIERTA: Gradiente-cero
-        m_vPredictedCrossSectionArea[n] = m_vCrossSectionArea[n];
-        m_vPredictedCrossSectionQ[n] = m_vCrossSectionQ[n];
+        //! ✅ CONDICIÓN ABIERTA (FREE): Extrapolación de gradiente cero
+        const double dQ = m_vCrossSectionQ[n-1] - m_vCrossSectionQ[n-2];
+        const double dA = m_vCrossSectionArea[n-1] - m_vCrossSectionArea[n-2];
+        
+        m_vPredictedCrossSectionQ[n] = m_vCrossSectionQ[n-1] + dQ;
+        m_vPredictedCrossSectionArea[n] = m_vCrossSectionArea[n-1] + dA;
+        
+        if (m_vPredictedCrossSectionArea[n] < DRY_AREA) {
+            m_vPredictedCrossSectionArea[n] = m_vCrossSectionArea[n-1];
+        }
     }
     else if (nGetDownwardEstuarineCondition() == 1) {
-        //! ✅ CAUDAL IMPUESTO CON SPONGE LAYER SELECTIVO
+        //! ✅ CAUDAL IMPUESTO
         m_vPredictedCrossSectionQ[n] = m_dDownwardBoundaryValue;
         
         const double dManningFactor = m_vPredictedCrossSectionQ[n] * m_vManningN[n] / 
@@ -1633,36 +1631,42 @@ void CSimulation::updatePredictorBoundaries() {
             dManningFactor, 
             m_vPrecalculatedSecondTerm[n],
             m_vEstuaryAreas[n]);
-        
-        // 🎯 SPONGE LAYER solo si discontinuidad > 5%
-        if (m_nCrossSectionsNumber >= 3) {
-            double Q_diff = fabs(m_vPredictedCrossSectionQ[n] - m_vCrossSectionQ[n-1]);
-            double Q_avg = 0.5 * fabs(m_vPredictedCrossSectionQ[n]) + 0.5 * fabs(m_vCrossSectionQ[n-1]) + 1e-6;
-            
-            if (Q_diff / Q_avg > 0.05) {
-                double alpha = 0.8;
-                double Q_computed = m_vPredictedCrossSectionQ[n-1];
-                double Q_smooth = 0.5*(m_vCrossSectionQ[n-2] + m_vPredictedCrossSectionQ[n]);
-                m_vPredictedCrossSectionQ[n-1] = alpha*Q_computed + (1-alpha)*Q_smooth;
-            }
-        }
     }
     else {
-        //! ✅ ELEVACIÓN/MAREA IMPUESTA: Imponer áreas y calcular Q con Manning
+        //! ✅ ELEVACIÓN/MAREA IMPUESTA: Imponer área en n, calcular Q con dh/dt de marea
         m_vPredictedCrossSectionArea[n] = m_dDownwardBoundaryValue;
-        m_vPredictedCrossSectionArea[n-1] = m_dNextDownwardBoundaryValue;
         
-        m_vCrossSectionHydraulicRadius[n] = linearInterpolation1d(
-            m_vPredictedCrossSectionArea[n], 
-            m_vEstuaryAreas[n], 
-            m_vEstuaryHydraulicRadius[n]);
+        // Calcular dh/dt de la serie temporal de marea
+        double dhdt = 0.0;
+        if (m_vDownwardBoundaryConditionTime.size() > 1) {
+            // Buscar intervalo actual en la serie de marea
+            int idx = 0;
+            for (size_t i = 0; i < m_vDownwardBoundaryConditionTime.size() - 1; i++) {
+                if (m_dCurrentTime >= m_vDownwardBoundaryConditionTime[i] && 
+                    m_dCurrentTime <= m_vDownwardBoundaryConditionTime[i+1]) {
+                    idx = i;
+                    break;
+                }
+            }
+            
+            // Calcular derivada temporal (dh/dt)
+            double dt = m_vDownwardBoundaryConditionTime[idx+1] - m_vDownwardBoundaryConditionTime[idx];
+            if (dt > 0) {
+                double dh = m_vDownwardBoundaryConditionValue[idx+1] - m_vDownwardBoundaryConditionValue[idx];
+                dhdt = dh / dt;
+            }
+        }
         
-        // Calcular Q usando Manning
-        double sign_S0 = (m_vCrossSectionBedSlope[n] >= 0) ? 1.0 : -1.0;
-        m_vPredictedCrossSectionQ[n] = m_vPredictedCrossSectionArea[n] * 
-                                      sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10) * 
-                                      pow(m_vCrossSectionHydraulicRadius[n], 2.0/3.0) * 
-                                      sign_S0 / (m_vManningN[n] + 1e-10);
+        // Q = A * dh/dt (conservación de masa en frontera)
+        // Si dh/dt > 0: marea subiendo, Q entrante negativo
+        // Si dh/dt < 0: marea bajando, Q saliente positivo
+        double Q_tide = -m_vPredictedCrossSectionArea[n] * dhdt;
+        
+        // Combinar con extrapolación desde interior (peso 50/50 para suavizar)
+        const double dQ = m_vCrossSectionQ[n-1] - m_vCrossSectionQ[n-2];
+        double Q_extrap = m_vCrossSectionQ[n-1] + dQ;
+        
+        m_vPredictedCrossSectionQ[n] = 0.5 * Q_tide + 0.5 * Q_extrap;
     }
 
 
@@ -1677,17 +1681,31 @@ void CSimulation::updateCorrectorBoundaries() {
     //==============================================================================================================
     
     if (nGetUpwardEstuarineCondition() == 0) {
-        //! ✅ CONDICIÓN ABIERTA: Gradiente-cero
-        m_vCorrectedCrossSectionQ[0] = m_vPredictedCrossSectionQ[0];
-        m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[0];
+        //! ✅ CONDICIÓN ABIERTA (FREE): Extrapolación de gradiente cero
+        const double dQ = m_vPredictedCrossSectionQ[2] - m_vPredictedCrossSectionQ[1];
+        const double dA = m_vPredictedCrossSectionArea[2] - m_vPredictedCrossSectionArea[1];
+        
+        m_vCorrectedCrossSectionQ[0] = m_vPredictedCrossSectionQ[1] - dQ;
+        m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1] - dA;
+        
+        if (m_vCorrectedCrossSectionArea[0] < DRY_AREA) {
+            m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1];
+        }
     }
     else if (nGetUpwardEstuarineCondition() == 1) {
         //! ✅ CONDICIÓN REFLECTANTE (WALL): Q = 0
         m_vCorrectedCrossSectionQ[0] = 0.0;
-        m_vCorrectedCrossSectionArea[0] = m_vCrossSectionArea[0];
+        
+        // Extrapolar área desde interior (predictor)
+        const double dA = m_vPredictedCrossSectionArea[2] - m_vPredictedCrossSectionArea[1];
+        m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1] - dA;
+        
+        if (m_vCorrectedCrossSectionArea[0] < DRY_AREA) {
+            m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1];
+        }
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
-        //! ✅ ELEVACIÓN IMPUESTA CON SPONGE LAYER SELECTIVO
+        //! ✅ ELEVACIÓN IMPUESTA: Imponer área y calcular Q con Manning
         m_vCorrectedCrossSectionArea[0] = m_dUpwardBoundaryValue;
         
         m_vCrossSectionHydraulicRadius[0] = linearInterpolation1d(
@@ -1695,26 +1713,11 @@ void CSimulation::updateCorrectorBoundaries() {
             m_vEstuaryAreas[0], 
             m_vEstuaryHydraulicRadius[0]);
         
-        // Calcular Q usando Manning
         double sign_S0 = (m_vCrossSectionBedSlope[0] >= 0) ? 1.0 : -1.0;
         m_vCorrectedCrossSectionQ[0] = m_vCorrectedCrossSectionArea[0] * 
                                       sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                       pow(m_vCrossSectionHydraulicRadius[0], 2.0/3.0) * 
                                       sign_S0 / (m_vManningN[0] + 1e-10);
-        
-        // 🎯 SPONGE LAYER: Suavizar nodo i=1 solo si hay cambio brusco
-        if (m_nCrossSectionsNumber >= 3) {
-            double area_diff = fabs(m_vCorrectedCrossSectionArea[0] - m_vPredictedCrossSectionArea[1]);
-            double area_avg = 0.5 * (m_vCorrectedCrossSectionArea[0] + m_vPredictedCrossSectionArea[1]);
-            
-            // Solo aplicar si diferencia > 5%
-            if (area_avg > 1e-6 && area_diff / area_avg > 0.05) {
-                double alpha = 0.8;
-                double area_computed = m_vCorrectedCrossSectionArea[1];
-                double area_smooth = 0.5*(m_vCorrectedCrossSectionArea[0] + m_vPredictedCrossSectionArea[2]);
-                m_vCorrectedCrossSectionArea[1] = alpha*area_computed + (1-alpha)*area_smooth;
-            }
-        }
     }
     else {
         //! ✅ CAUDAL IMPUESTO CON SPONGE LAYER SELECTIVO (Tipo 3)
@@ -1758,12 +1761,19 @@ void CSimulation::updateCorrectorBoundaries() {
     int n = m_nCrossSectionsNumber - 1;
     
     if (nGetDownwardEstuarineCondition() == 0) {
-        //! ✅ CONDICIÓN ABIERTA: Gradiente-cero
-        m_vCorrectedCrossSectionArea[n] = m_vPredictedCrossSectionArea[n];
-        m_vCorrectedCrossSectionQ[n] = m_vPredictedCrossSectionQ[n];
+        //! ✅ CONDICIÓN ABIERTA (FREE): Extrapolación de gradiente cero
+        const double dQ = m_vPredictedCrossSectionQ[n-1] - m_vPredictedCrossSectionQ[n-2];
+        const double dA = m_vPredictedCrossSectionArea[n-1] - m_vPredictedCrossSectionArea[n-2];
+        
+        m_vCorrectedCrossSectionQ[n] = m_vPredictedCrossSectionQ[n-1] + dQ;
+        m_vCorrectedCrossSectionArea[n] = m_vPredictedCrossSectionArea[n-1] + dA;
+        
+        if (m_vCorrectedCrossSectionArea[n] < DRY_AREA) {
+            m_vCorrectedCrossSectionArea[n] = m_vPredictedCrossSectionArea[n-1];
+        }
     }
     else if (nGetDownwardEstuarineCondition() == 1) {
-        //! ✅ CAUDAL IMPUESTO CON SPONGE LAYER SELECTIVO
+        //! ✅ CAUDAL IMPUESTO
         m_vCorrectedCrossSectionQ[n] = m_dDownwardBoundaryValue;
         
         const double dManningFactor = m_vCorrectedCrossSectionQ[n] * m_vManningN[n] / 
@@ -1773,36 +1783,42 @@ void CSimulation::updateCorrectorBoundaries() {
             dManningFactor, 
             m_vPrecalculatedSecondTerm[n],
             m_vEstuaryAreas[n]);
-        
-        // 🎯 SPONGE LAYER solo si discontinuidad > 5%
-        if (m_nCrossSectionsNumber >= 3) {
-            double Q_diff = fabs(m_vCorrectedCrossSectionQ[n] - m_vCrossSectionQ[n-1]);
-            double Q_avg = 0.5 * fabs(m_vCorrectedCrossSectionQ[n]) + 0.5 * fabs(m_vCrossSectionQ[n-1]) + 1e-6;
-            
-            if (Q_diff / Q_avg > 0.05) {
-                double alpha = 0.8;
-                double Q_computed = m_vCorrectedCrossSectionQ[n-1];
-                double Q_smooth = 0.5*(m_vCrossSectionQ[n-2] + m_vCorrectedCrossSectionQ[n]);
-                m_vCorrectedCrossSectionQ[n-1] = alpha*Q_computed + (1-alpha)*Q_smooth;
-            }
-        }
     }
     else {
-        //! ✅ ELEVACIÓN/MAREA IMPUESTA: Imponer áreas y calcular Q con Manning
+        //! ✅ ELEVACIÓN/MAREA IMPUESTA: Imponer área en n, calcular Q con dh/dt de marea
         m_vCorrectedCrossSectionArea[n] = m_dDownwardBoundaryValue;
-        m_vCorrectedCrossSectionArea[n-1] = m_dNextDownwardBoundaryValue;
         
-        m_vCrossSectionHydraulicRadius[n] = linearInterpolation1d(
-            m_vCorrectedCrossSectionArea[n], 
-            m_vEstuaryAreas[n], 
-            m_vEstuaryHydraulicRadius[n]);
+        // Calcular dh/dt de la serie temporal de marea
+        double dhdt = 0.0;
+        if (m_vDownwardBoundaryConditionTime.size() > 1) {
+            // Buscar intervalo actual en la serie de marea
+            int idx = 0;
+            for (size_t i = 0; i < m_vDownwardBoundaryConditionTime.size() - 1; i++) {
+                if (m_dCurrentTime >= m_vDownwardBoundaryConditionTime[i] && 
+                    m_dCurrentTime <= m_vDownwardBoundaryConditionTime[i+1]) {
+                    idx = i;
+                    break;
+                }
+            }
+            
+            // Calcular derivada temporal (dh/dt)
+            double dt = m_vDownwardBoundaryConditionTime[idx+1] - m_vDownwardBoundaryConditionTime[idx];
+            if (dt > 0) {
+                double dh = m_vDownwardBoundaryConditionValue[idx+1] - m_vDownwardBoundaryConditionValue[idx];
+                dhdt = dh / dt;
+            }
+        }
         
-        // Calcular Q usando Manning
-        double sign_S0 = (m_vCrossSectionBedSlope[n] >= 0) ? 1.0 : -1.0;
-        m_vCorrectedCrossSectionQ[n] = m_vCorrectedCrossSectionArea[n] * 
-                                      sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10) * 
-                                      pow(m_vCrossSectionHydraulicRadius[n], 2.0/3.0) * 
-                                      sign_S0 / (m_vManningN[n] + 1e-10);
+        // Q = A * dh/dt (conservación de masa en frontera)
+        // Si dh/dt > 0: marea subiendo, Q entrante negativo
+        // Si dh/dt < 0: marea bajando, Q saliente positivo
+        double Q_tide = -m_vCorrectedCrossSectionArea[n] * dhdt;
+        
+        // Combinar con extrapolación desde interior (peso 50/50 para suavizar)
+        const double dQ = m_vPredictedCrossSectionQ[n-1] - m_vPredictedCrossSectionQ[n-2];
+        double Q_extrap = m_vPredictedCrossSectionQ[n-1] + dQ;
+        
+        m_vCorrectedCrossSectionQ[n] = 0.5 * Q_tide + 0.5 * Q_extrap;
     }
 }
 
