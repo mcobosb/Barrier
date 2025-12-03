@@ -359,7 +359,7 @@ void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation) {
 	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
 	            	else {
 	            		if (strRH == "full") {
-	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", "eta", "level", "beta", "rho", "U", "c", "S", "Qb", "Qs", "Qt", "xl", "xr"};
+	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", "eta", "level", "beta", "rho", "U", "c", "S", "Qb", "Qs", "Qt", "xl", "xr", "xl_utm_x", "xl_utm_y", "xr_utm_x", "xr_utm_y"};
 	            		}
 	            		else {
 	            			vector<string> vOutputVariables;
