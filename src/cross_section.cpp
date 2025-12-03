@@ -7,7 +7,7 @@
  *          wetted perimeter, conveyance) for open channel flow calculations.
  * \author Manuel Cobos Budia
 
- * \date 28/08/2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  */

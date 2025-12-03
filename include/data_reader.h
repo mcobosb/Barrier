@@ -5,7 +5,7 @@
  * \details Description of CDataReader class which contains the methods for reading input files.
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file data_reader.h

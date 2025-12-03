@@ -5,7 +5,7 @@
  *          runtime conditions (file I/O errors, invalid parameters, numerical issues).
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file error_handling.h

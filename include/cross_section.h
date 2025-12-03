@@ -5,7 +5,7 @@
  * \details Definition of CCrossSection class that represents estuarine cross-section geometry.
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file cross_section.h

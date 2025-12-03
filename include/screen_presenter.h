@@ -6,7 +6,7 @@
  *          timing information, and user notifications.
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file screen_presenter.h
