@@ -2,10 +2,11 @@
 *
  * \class CScreenPresenter
  * \brief
- * \details TODO 001 This is a more detailed description of the ScreenPresenter class
+ * \details Manages console output: progress updates, simulation status,
+ *          timing information, and user notifications.
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file screen_presenter.h
@@ -74,7 +75,7 @@ public:
 
     //! Carries out init-of-simulation tidying (error messages etc.)
     void StartingRun(int, char const* [], CSimulation *m_pSimulation);
-    void EndingRun(CSimulation* m_pSimulation);
+    void EndingRun();
 
     void AnnounceStart(CSimulation* m_pSimulation);
     static void AnnounceLicence(const CSimulation *m_pSimulation) ;

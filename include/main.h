@@ -4,7 +4,7 @@
  * \details
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file main.h
@@ -13,8 +13,8 @@
  */
 
 //======================================================================================================================
-// TODO 001: A more detail description of main function.
-// TODO 004: Save Predicted and Corrected variables for m_nLogDetail == 1 and 2.
+//! Main entry point for the Barrier estuarine hydrodynamic model.
+//! Initializes simulation, reads configuration, runs time loop, and writes output.
 //======================================================================================================================
 
 
@@ -43,7 +43,7 @@ inline double DRY_Q = 1e-2;
 inline double FRESH_WATER_DENSITY = 1e3;
 //! Kinematic viscosity
 inline double NU = 1e-6;
-//! Friction factor TODO: Check this definition
+//! Friction factor (Darcy-Weisbach): f = 8*g*n²/R^(1/3)
 inline double KAPPA = 0.4;
 
 // Intel x86, byte order is little-endian, 32-bit
@@ -53,8 +53,8 @@ string const PLATFORM = "Intel x86/GNU C++";
 
 inline auto NAME = "BARRIER Project";
 inline auto AUTHOR =  "Manuel Cobos (GDFA, University of Granada)";
-inline auto VERSION = "v0.4.0 - 20250625";
-string const PROGRAM_NAME = "Hydrodynamic modeling of main channel of estuaries (25 June 2025)";
+inline auto VERSION = "v0.6.0 - 2025-12-03";
+string const PROGRAM_NAME = "Hydrodynamic modeling of main channel of estuaries (03 December 2025)";
 string const PROGRAM_NAME_SHORT = "SV";
 
 

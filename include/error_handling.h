@@ -1,10 +1,11 @@
 /*!
 *
  * \brief
- * \details TODO 001 This is a more detailed description of the Error Handling
+ * \details Defines error codes and provides error message strings for various
+ *          runtime conditions (file I/O errors, invalid parameters, numerical issues).
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file error_handling.h

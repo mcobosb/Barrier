@@ -5,7 +5,7 @@
  * \details Description of CSimulation class
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file simulation.h
@@ -104,6 +104,9 @@ class CSimulation
 
     //! Is this timestep saved?
     bool m_bSaveTime;
+
+    //! Save at every computational timestep (for debugging)?
+    bool m_bSaveAllTimesteps;
 
     //! Computational timestep obtained from Courant number
     double m_dTimestep;
@@ -206,6 +209,12 @@ class CSimulation
 
     //! Compute water density?
     bool m_bDoWaterDensity{};
+    
+    //! Smooth bathymetry before simulation?
+    bool m_bDoSmoothBathymetry{};
+    
+    //! Smooth solution during simulation?
+    bool m_bDoSmoothSolution{};
 
     //! Number of cross-sections
     int m_nCrossSectionsNumber{};
@@ -224,6 +233,12 @@ class CSimulation
 
     //! Cross-section Bed slope
     vector<double> m_vCrossSectionBedSlope;
+
+    //! Cross-section Bed slope for predictor (forward difference) - balance de términos fuente
+    vector<double> m_vCrossSectionBedSlopePredictor;
+
+    //! Cross-section Bed slope for corrector (backward difference) - balance de términos fuente
+    vector<double> m_vCrossSectionBedSlopeCorrector;
 
     //! Cross-section Bed slope Direction +/- ve, 1/-1
     vector<int> m_vCrossSectionBedSlopeDirection;
@@ -266,6 +281,17 @@ class CSimulation
     //! Cross-section betas
     vector<double> m_vCrossSectionBeta;
 
+    //! Cross-section I1 pressure integral
+    vector<double> m_vCrossSectionI1;
+    //! Predicted cross-section I1 pressure integral
+    vector<double> m_vPredictedCrossSectionI1;
+
+    //! Cross-section I2 momentum integral
+    vector<double> m_vCrossSectionI2;
+
+    //! Cross-section dI1/dx (pressure gradient for non-prismatic channels)
+    vector<double> m_vCrossSectionDI1Dx;
+
     //! Cross-section DhDx
     vector<double> m_vCrossSectionDhDx;
 
@@ -277,6 +303,18 @@ class CSimulation
 
     //! Cross-section right river bank locations
     vector<double> m_vCrossSectionRightRBLocation;
+    
+    //! Cross-section left river bank UTM X coordinates
+    vector<double> m_vCrossSectionLeftRBLocation_UTM_X;
+    
+    //! Cross-section left river bank UTM Y coordinates
+    vector<double> m_vCrossSectionLeftRBLocation_UTM_Y;
+    
+    //! Cross-section right river bank UTM X coordinates
+    vector<double> m_vCrossSectionRightRBLocation_UTM_X;
+    
+    //! Cross-section right river bank UTM Y coordinates
+    vector<double> m_vCrossSectionRightRBLocation_UTM_Y;
 
     //! Cross-section mean water velocity
     vector<double> m_vCrossSectionU;
@@ -316,6 +354,32 @@ class CSimulation
 
     //! Gv1 terms
     vector<double> m_vCrossSectionGv1;
+
+    // ⚡ TVD limiter work arrays (pre-allocated to avoid per-timestep allocations)
+    vector<double> m_vTVD_a1_med;
+    vector<double> m_vTVD_a2_med;
+    vector<double> m_vTVD_alfa1_med;
+    vector<double> m_vTVD_alfa2_med;
+    vector<double> m_vTVD_psi1_med;
+    vector<double> m_vTVD_psi2_med;
+    vector<double> m_vTVD_r1_med;
+    vector<double> m_vTVD_r2_med;
+    vector<double> m_vTVD_fi1_med;
+    vector<double> m_vTVD_fi2_med;
+    vector<double> m_vTVD_Factor1;
+    vector<double> m_vTVD_Factor2;
+
+    // ⚡ Salinity gradient work arrays (pre-allocated)
+    vector<double> m_vSalinity_KAS_forward;
+    vector<double> m_vSalinity_KAS_backward;
+    vector<double> m_vSalinity_AUS_diff;
+
+    // ⚡ Precalculated constants (computed once at initialization)
+    vector<double> m_vManningNumberSquared;      // Manning² (usado en fricción ~4000 veces/día)
+    vector<double> m_vInvDX;                     // 1/ΔX (usado en gradientes ~8000 veces/día)
+    vector<double> m_vDxSum;                     // ΔX[i] + ΔX[i+1] (diferencias centradas)
+    vector<double> m_vInvDxSum;                  // 1/(ΔX[i] + ΔX[i+1])
+    vector<double> m_vGtimesDX;                  // g*ΔX (término constante)
 
     //! D1 terms
     vector<double> m_vCrossSectionD1Factor;
@@ -493,6 +557,21 @@ class CSimulation
     [[nodiscard]] bool bGetDoWaterDensity() const;
     //! Method for setting the compute water density
     void bSetDoWaterDensity(bool doWaterDensity);
+    
+    //! Method for getting smooth bathymetry flag
+    [[nodiscard]] bool bGetDoSmoothBathymetry() const;
+    //! Method for setting smooth bathymetry flag
+    void bSetDoSmoothBathymetry(bool doSmoothBathymetry);
+    
+    //! Method for getting smooth solution flag
+    [[nodiscard]] bool bGetDoSmoothSolution() const;
+    //! Method for setting smooth solution flag
+    void bSetDoSmoothSolution(bool doSmoothSolution);
+
+    //! Method for getting save all timesteps flag
+    [[nodiscard]] bool bGetSaveAllTimesteps() const;
+    //! Method for setting save all timesteps flag
+    void bSetSaveAllTimesteps(bool saveAllTimesteps);
 
     //! Add output variable
     void strAddOutputVariable(const string& strItem);
@@ -520,8 +599,10 @@ class CSimulation
     void initializeVectors();
     void calculateBedSlope();
     void calculateAlongEstuaryInitialConditions();
+    std::string generateOutputFileName() const;
     static double linearInterpolation1d(double dValue, const vector<double> &vX, const vector<double> &vY);
     void calculateHydraulicParameters();
+    void calculateRiverBankUTMCoordinates();
     void interpolateHydraulicParameters(double dArea, int nCrossSection, int nElevationNode);
     void getFirstHydraulicParameters(int nCrossSection);
     void getLastHydraulicParameters(int nCrossSection);
@@ -542,6 +623,7 @@ class CSimulation
     void updateBoundaries();
     void mergePredictorCorrector();
     void smoothSolution();
+    void smoothBathymetry();
     void calculate_salinity_gradient();
     void calculate_salinity();
 
@@ -576,7 +658,7 @@ class CSimulation
     void nSetSimStartMonth(int month) { m_nSimStartMonth = month; }
     void nSetSimStartYear(int year) { m_nSimStartYear = year; }
 
-    // ✅ AÑADIR: Método para establecer toda la fecha de una vez
+    //! Set complete simulation start date and time at once
     void setSimulationStartDateTime(int year, int month, int day, int hour, int min, int sec) {
         m_nSimStartYear = year;
         m_nSimStartMonth = month;
@@ -586,7 +668,7 @@ class CSimulation
         m_nSimStartSec = sec;
     }
 
-    // ✅ AÑADIR: Método para obtener fecha como string
+    //! Get simulation start date and time as formatted string (ISO 8601)
     std::string getSimulationStartDateTimeString() const {
         std::ostringstream oss;
         oss << std::setfill('0') << std::setw(4) << m_nSimStartYear << "-"
@@ -597,5 +679,28 @@ class CSimulation
             << std::setw(2) << m_nSimStartSec;
         return oss.str();
     }
+
+    private:
+    // ✅ CORREGIR: Estas deben ser vector<vector<double>>
+    vector<double> m_vBedZ;
+    vector<double> m_vManningN;
+    vector<double> m_vPositionX;
+    
+    // ✅ CAMBIAR de vector<double> a vector<vector<double>>
+    vector<vector<double>> m_vWidth;      // ✅ CORREGIDO
+    vector<vector<double>> m_vBeta;       // ✅ CORREGIDO
+    vector<vector<double>> m_vLeftY;      // ✅ CORREGIDO
+    vector<vector<double>> m_vRightY;     // ✅ CORREGIDO
+    
+    vector<vector<double>> m_vEstuaryAreas;
+    vector<vector<double>> m_vEstuaryHydraulicRadius;
+    vector<vector<double>> m_vEstuaryWaterDepths;
+    vector<vector<double>> m_vEstuaryI1;  // Pressure integral I1 for each elevation
+    vector<vector<double>> m_vPrecalculatedSecondTerm;
+    vector<int> m_vElevationSectionsCount;
+
+    public:
+    // ✅ Solo método de optimización simple
+    void precomputeEstuaryData();
 };
 #endif // SIMULATION_H

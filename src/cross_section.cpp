@@ -1,11 +1,13 @@
 /*!
 *
  * \file cross_section.cpp
- * \brief
- * \details TODO 001 A more detailed description of these routines.
+ * \brief Cross-section geometry and hydraulic properties management
+ * \details Handles cross-section geometric data (width, depth, area)
+ *          and computes derived hydraulic parameters (hydraulic radius,
+ *          wetted perimeter, conveyance) for open channel flow calculations.
  * \author Manuel Cobos Budia
 
- * \date 28/08/2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  */
@@ -192,4 +194,72 @@ vector<double> CCrossSection::vGetHydraulicRadius() {
 }
 vector<double> CCrossSection::vGetWaterDepth() {
     return m_vWaterDepth;
+}
+vector<double> CCrossSection::vGetWidth() {
+    return m_vWidth;
+}
+vector<double> CCrossSection::vGetBeta() {
+    return m_vBeta;
+}
+vector<double> CCrossSection::vGetLeftRBLocation() {
+    return m_vLeftRBLocation;
+}
+vector<double> CCrossSection::vGetRightRBLocation() {
+    return m_vRightRBLocation;
+}
+vector<double> CCrossSection::vGetI1() {
+    return m_vI1;
+}
+vector<double> CCrossSection::vGetI2() {
+    return m_vI2;
+}
+
+//===============================================================================================================================
+//! Calculate I1 pressure integral for each elevation
+//! I1 = ∫₀ʰ (h-η)·σ(x,η)·dη where σ is width, η is elevation from bed, h is water depth
+//! This integral represents the first moment of the pressure distribution about the water surface
+//! For trapezoidal channels: I1 ≈ 0.4·A·h (compared to rectangular: I1 = 0.5·A·h)
+//===============================================================================================================================
+void CCrossSection::calculateI1() {
+    // Clear any existing I1 values
+    m_vI1.clear();
+    m_vI1.resize(m_vWaterDepth.size(), 0.0);
+    
+    // For each elevation level (water depth h)
+    for (size_t i = 0; i < m_vWaterDepth.size(); i++) {
+        if (i == 0 || m_vArea[i] < 1e-6) {
+            m_vI1[i] = 0.0;
+            continue;
+        }
+        
+        double h = m_vWaterDepth[i];  // Total water depth at this level
+        double I1 = 0.0;
+        
+        // Integrate I1 = ∫₀ʰ (h-η)·σ(η)·dη using trapezoidal rule
+        // Integrate from bottom (j=0) to current water level (j=i-1)
+        for (size_t j = 0; j < i; j++) {
+            double eta_j = m_vWaterDepth[j];
+            double eta_j1 = (j+1 < m_vWaterDepth.size()) ? m_vWaterDepth[j+1] : h;
+            double sigma_j = m_vWidth[j];
+            double sigma_j1 = (j+1 < m_vWidth.size()) ? m_vWidth[j+1] : m_vWidth[j];
+            
+            // For the last segment, use current level
+            if (j + 1 >= i) {
+                eta_j1 = h;
+                sigma_j1 = m_vWidth[i];
+            }
+            
+            // Integrand: (h-η)·σ(η)
+            double f_j = (h - eta_j) * sigma_j;
+            double f_j1 = (h - eta_j1) * sigma_j1;
+            
+            // Trapezoidal rule: Δη/2 · (f_j + f_j+1)
+            double deta = eta_j1 - eta_j;
+            if (deta > 1e-10) {
+                I1 += 0.5 * deta * (f_j + f_j1);
+            }
+        }
+        
+        m_vI1[i] = I1;
+    }
 }

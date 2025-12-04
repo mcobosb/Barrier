@@ -1,11 +1,12 @@
 /*!
  *
  * \file main.cpp
- * \brief The start-up routine for Saint Venant solver
- * \details TODO 001 A more detailed description of this routine
+ * \brief Entry point for the Barrier estuarine hydrodynamic model
+ * \details Initializes the simulation engine, handles execution flow,
+ *          catches exceptions, and returns appropriate exit codes.
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  */
@@ -22,9 +23,6 @@
 //===============================================================================================================================
 int main(int argc, char const* argv[])
 {
-    // Enable the use of UTF-8 symbols in Saint Venant output
-    // setlocale(LC_ALL, "en_GB.UTF-8");
-
     int returnCode = 0;
     
     try {
@@ -35,8 +33,6 @@ int main(int argc, char const* argv[])
         // Run the simulation and then check how it ends
         pSimulation.bDoSimulation(argc, argv);
         pSimulation.bDoSimulationEnd();
-        
-        // std::cout << "Simulation completed successfully." << std::endl;
     }
     catch (const std::exception& e) {
         std::cerr << "Error during simulation: " << e.what() << std::endl;

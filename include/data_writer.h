@@ -5,7 +5,7 @@
  * \details Description of CDataWriter class which contains the method for writing output on NetCDF file
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file data_writer.h

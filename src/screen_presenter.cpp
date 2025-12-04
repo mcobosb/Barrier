@@ -1,11 +1,12 @@
 /*!
  *
- * \file utils.cpp
- * \brief Utility routines
- * \details TODO 001 A more detailed description of this routine.
+ * \file screen_presenter.cpp
+ * \brief Console output and progress display
+ * \details Manages terminal output for simulation progress, timing,
+ *          system information, and user notifications.
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  */
@@ -100,20 +101,20 @@ void CScreenPresenter::StartingRun([[maybe_unused]] int nArg, char const* pcArgv
 //===============================================================================================================================
 //! Notifies the user that the simulation has ended, asks for keypress if necessary, and if compiled under GNU can send an email
 //===============================================================================================================================
-void CScreenPresenter::EndingRun(CSimulation* pSimulation)
+void CScreenPresenter::EndingRun()
 {
    // If we don't know the time that the run ended (e.g. because it did not finish correctly), then get it now
-   static double sdElapsed = 0;
+   // static double sdElapsed = 0;
    m_tSysEndTime = time(nullptr);
 
    // Calculate time elapsed and remaining
-   sdElapsed = difftime(m_tSysEndTime, pSimulation->m_tSysStartTime);
+   // sdElapsed = difftime(m_tSysEndTime, pSimulation->m_tSysStartTime);
 
    // if (nRtn  == RTN_OK)
    //    // normal ending
    // {
-   cout << "\r    - Remaining Time: " << std::fixed << setprecision(3) << setw(6) << 0.000 << " s -  Progress: " << std::fixed << setprecision(3) << setw(6) << 100 << '%' << std::flush;
-   cout << "\r    - Elapsed Time: " << std::fixed << setprecision(3) << setw(6) << sdElapsed  << endl;
+   // cout << "\r    - Remaining Time: " << std::fixed << setprecision(3) << setw(6) << 0.000 << " s -  Progress: " << std::fixed << setprecision(3) << setw(6) << 100 << '%' << std::flush;
+   // cout << "\r    - Elapsed Time: " << std::fixed << setprecision(3) << setw(6) << sdElapsed  << endl;
    cout << RUN_END_NOTICE << put_time(localtime(&m_tSysEndTime), "%H:%M on %A %d %B %Y") << endl;
    // }
    //

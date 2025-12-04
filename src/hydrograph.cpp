@@ -1,11 +1,12 @@
 /*!
 *
  * \file hydrograph.cpp
- * \brief
- * \details TODO 001 A more detailed description of these routines.
+ * \brief Lateral inflow (tributary/point source) handling
+ * \details Manages time series of lateral water inflows entering the main channel.
+ *          Interpolates flow rates and locates nearest cross-section for each source.
  * \author Manuel Cobos Budia
 
- * \date 28/08/2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  */

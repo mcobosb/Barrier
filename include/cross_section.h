@@ -5,7 +5,7 @@
  * \details Definition of CCrossSection class that represents estuarine cross-section geometry.
  * \author Manuel Cobos Budia
 
- * \date 2024
+ * \date 2026
  * \copyright GNU General Public License
  *
  * \file cross_section.h
@@ -130,5 +130,14 @@ class CCrossSection {
         vector<double> vGetArea();
         vector<double> vGetHydraulicRadius();
         vector<double> vGetWaterDepth();
+        vector<double> vGetWidth();
+        vector<double> vGetBeta();
+        vector<double> vGetRightRBLocation();
+        vector<double> vGetLeftRBLocation();
+        vector<double> vGetI1();
+        vector<double> vGetI2();
+        
+        //! Calculate I1 pressure integral for each elevation
+        void calculateI1();
 };
 #endif

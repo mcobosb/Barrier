@@ -1,11 +1,13 @@
 /*!
 *
  * \file data_writer.cpp
- * \brief Write output NetCDF file
- * \details TODO 001 A more detailed description of these routines.
+ * \brief Write output NetCDF file with simulation results
+ * \details Handles creation and writing of NetCDF output files containing
+ *          temporal evolution of hydraulic variables (area, flow, velocity, etc.)
+ *          along the estuarine channel.
  * \author Manuel Cobos Budia
 
- * \date 20240905
+ * \date 2026
  * \copyright GNU General Public License
  *
  */
@@ -72,7 +74,7 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["Rh"]["longname"] = "hydraulic radius";
     m_mVariableDefinitions["Rh"]["units"] = "m";
 
-    m_mVariableDefinitions["I1"]["description"] = "Term I1 of the balance"; //!TODO 021: include a best description
+    m_mVariableDefinitions["I1"]["description"] = "Integral I1 = int(B dh) for source term balance";
     m_mVariableDefinitions["I1"]["longname"] = "I1";
     m_mVariableDefinitions["I1"]["units"] = "";
 
@@ -120,9 +122,25 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["xlb"]["longname"] = "x-left";
     m_mVariableDefinitions["xl"]["units"] = "m";
 
-    m_mVariableDefinitions["Qb"]["description"] = "Distance from the thalweg to the right riverbank";
-    m_mVariableDefinitions["Qb"]["longname"] = "x-right";
-    m_mVariableDefinitions["Qb"]["units"] = "m";
+    m_mVariableDefinitions["xr"]["description"] = "Distance from the thalweg to the right riverbank";
+    m_mVariableDefinitions["xr"]["longname"] = "x-right";
+    m_mVariableDefinitions["xr"]["units"] = "m";
+    
+    m_mVariableDefinitions["xl_utm_x"]["description"] = "UTM X coordinate of left riverbank";
+    m_mVariableDefinitions["xl_utm_x"]["longname"] = "left bank UTM X";
+    m_mVariableDefinitions["xl_utm_x"]["units"] = "m";
+    
+    m_mVariableDefinitions["xl_utm_y"]["description"] = "UTM Y coordinate of left riverbank";
+    m_mVariableDefinitions["xl_utm_y"]["longname"] = "left bank UTM Y";
+    m_mVariableDefinitions["xl_utm_y"]["units"] = "m";
+    
+    m_mVariableDefinitions["xr_utm_x"]["description"] = "UTM X coordinate of right riverbank";
+    m_mVariableDefinitions["xr_utm_x"]["longname"] = "right bank UTM X";
+    m_mVariableDefinitions["xr_utm_x"]["units"] = "m";
+    
+    m_mVariableDefinitions["xr_utm_y"]["description"] = "UTM Y coordinate of right riverbank";
+    m_mVariableDefinitions["xr_utm_y"]["longname"] = "right bank UTM Y";
+    m_mVariableDefinitions["xr_utm_y"]["units"] = "m";
 }
 
 //======================================================================================================================
@@ -153,9 +171,16 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     nc_put_att_text(m_ncId, n_VariableId, "long_name", strlen(x_long_name), x_long_name);
     nc_put_att_text(m_ncId, n_VariableId, "units", strlen(x_units), x_units);
 
-    if (m_pSimulation->m_nLogFileDetail == 2) {
+    if (m_pSimulation->m_nLogFileDetail == 2 || m_pSimulation->bGetSaveAllTimesteps()) {
         size_t time_len = NC_UNLIMITED;  // Unlimited time
         nc_def_dim(m_ncId, "time", time_len, &n_TId);
+        
+        // También definir la variable tiempo con NC_UNLIMITED
+        nc_def_var(m_ncId, "time", NC_DOUBLE, 1, &n_TId, &n_VariableId);
+        const char* time_long_name = "time";
+        const char* time_units = "s";
+        nc_put_att_text(m_ncId, n_VariableId, "long_name", strlen(time_long_name), time_long_name);
+        nc_put_att_text(m_ncId, n_VariableId, "units", strlen(time_units), time_units);
     }
     else {
         nc_def_dim(m_ncId, "time", static_cast<size_t>(m_pSimulation->m_vOutputTimes.size()), &n_TId);
@@ -257,7 +282,8 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
 
     //! Write coordinates and times
     nc_put_var_double(m_ncId, n_XId, m_pSimulation->m_vCrossSectionX.data());
-    if (m_pSimulation->m_nLogFileDetail != 2) {
+    // Solo escribir todos los tiempos si NO se usa modo unlimited (detail != 2 y no saveAllTimesteps)
+    if (m_pSimulation->m_nLogFileDetail != 2 && !m_pSimulation->bGetSaveAllTimesteps()) {
         nc_put_var_double(m_ncId, n_TId, m_pSimulation->m_vOutputTimes.data());
     }
 }
@@ -277,8 +303,18 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
     int status = 0;
     //! Choose to save all timestep if m_nLogFileDetail == 2 or only when indicated
     size_t start[2] = {static_cast<size_t>(m_pSimulation->m_nTimeId), 0};
-    if (m_pSimulation->m_nLogFileDetail == 2) {
+    if (m_pSimulation->m_nLogFileDetail == 2 || m_pSimulation->bGetSaveAllTimesteps()) {
         start[0] = static_cast<size_t>(m_pSimulation->m_nTimeLogId);
+        
+        // Escribir el valor del tiempo actual en la dimensión unlimited
+        size_t time_start = static_cast<size_t>(m_pSimulation->m_nTimeLogId);
+        size_t time_count = 1;
+        double current_time = m_pSimulation->m_dCurrentTime;
+        status = nc_put_vara_double(m_ncId, n_TId, &time_start, &time_count, &current_time);
+        if (status != NC_NOERR) {
+            std::cerr << "Error writing time variable: " << nc_strerror(status) << std::endl;
+        }
+        
         m_pSimulation->m_nTimeLogId++;
     }
 
