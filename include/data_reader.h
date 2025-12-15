@@ -121,15 +121,6 @@ public:
     string const OUT_EXT = ".nc";
     string const LOG_EXT = ".log";
 
-    //! Folder for the .ini file
-    string const m_strIni = ".ini";
-
-    //! Folder for the .conf file
-    string m_strConfig = ".conf";
-
-    //! Read configuration file with global data
-    void bReadConfigurationFile(CSimulation* m_pSimulation);
-
     //! Read along channel data and the initial estuarine condition
     void bReadAlongChannelDataFile(CSimulation* m_pSimulation) const;
 
@@ -158,5 +149,7 @@ public:
     //! Get output base path
     string getOutputBasePath() const { return m_strOutputBasePath; }
 
+    //! Leer el último estado de un NetCDF para continuar la simulación
+    void bRestoreStateFromNetCDF(CSimulation* m_pSimulation, const std::string& netcdfPath) const;
 };
 #endif // DATA_READER_H

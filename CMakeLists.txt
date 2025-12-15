@@ -6,7 +6,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Definir el nombre del proyecto.
-project(barrier VERSION 0.6.0 LANGUAGES CXX)
+project(barrier VERSION 0.7.0 LANGUAGES CXX)
 
 # Establecer el estándar de C++.
 set(CMAKE_CXX_STANDARD 20)

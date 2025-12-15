@@ -1,9 +1,10 @@
+
 /*!
 *
- * \class CSimulation
- * \brief This class runs Saint-Venant simulations
- * \details Description of CSimulation class
- * \author Manuel Cobos Budia
+* \class CSimulation
+* \brief This class runs Saint-Venant simulations
+* \details Description of CSimulation class
+* \author Manuel Cobos Budia
 
  * \date 2026
  * \copyright GNU General Public License
@@ -44,6 +45,10 @@ using std::ofstream;
 
 class CSimulation
 {
+public:
+    // === Opciones para continuar simulación ===
+    bool m_bContinueSimulation = false;
+    std::string m_strContinueNetcdfPath;
     // friend class CHydrograph;
     friend class CHydrograph;
 

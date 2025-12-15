@@ -54,7 +54,7 @@ string const PLATFORM = "Intel x86/GNU C++";
 inline auto NAME = "BARRIER Project";
 inline auto AUTHOR =  "Manuel Cobos (GDFA, University of Granada)";
 inline auto VERSION = "v0.6.0 - 2025-12-03";
-string const PROGRAM_NAME = "Hydrodynamic modeling of main channel of estuaries (03 December 2025)";
+string const PROGRAM_NAME = "Hydrodynamic modeling of main channel of estuaries (03 December 2025) - BARRiEr Project (https://barrier.dinamicambiental.es)";
 string const PROGRAM_NAME_SHORT = "SV";
 
 

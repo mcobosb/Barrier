@@ -79,7 +79,7 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* sim) {
     // Output file names
     if (node["name"]) {
         sim->m_strOutFile = node["name"].as<std::string>() + "_";
-        sim->m_strLogFile = sim->m_strOutFile;
+        sim->m_strLogFile = node["name"].as<std::string>() + ".log";
     }
     
     // Log level
@@ -124,6 +124,18 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* sim) {
                 sim->strAddOutputVariable(var.as<std::string>());
             }
         }
+    }
+
+    // Leer opciones de continuación de simulación
+    if (node["continue_simulation"]) {
+        sim->m_bContinueSimulation = node["continue_simulation"].as<bool>();
+    } else {
+        sim->m_bContinueSimulation = false;
+    }
+    if (node["continue_netcdf_path"]) {
+        sim->m_strContinueNetcdfPath = node["continue_netcdf_path"].as<std::string>();
+    } else {
+        sim->m_strContinueNetcdfPath = "";
     }
 }
 

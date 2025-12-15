@@ -414,9 +414,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         // No config file specified, try to find config.yaml in current directory
         if (std::filesystem::exists("config.yaml")) {
             configFile = "config.yaml";
-            std::cout << "📄 No configuration file specified, using ./config.yaml" << std::endl;
         } else {
-            std::cerr << "❌ Error: No configuration file specified and ./config.yaml not found" << std::endl;
+            std::cerr << "❌ Error: No configuration file detected. config.yaml not found" << std::endl;
             std::cerr << "Usage: " << pcArgv[0] << " <config_file>" << std::endl;
             m_bReturnError = true;
             return;
@@ -425,92 +424,77 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     std::filesystem::path configPath(configFile);
     std::string extension = configPath.extension().string();
     
-    if (extension == ".yaml" || extension == ".yml") {
-        // Use YAML reader
-        std::cout << "📄 Detected YAML configuration file" << std::endl;
-        CYAMLReader yamlReader;
-        if (!yamlReader.loadConfiguration(configFile, this)) {
-            std::cerr << "❌ Error loading YAML configuration: " 
-                      << yamlReader.getErrorMessage() << std::endl;
-            m_bReturnError = true;
-            return;
-        }
-        
-        // Transfer file paths to reader and simulation
-        reader.m_strAlongChannelDataFilename = yamlReader.m_strAlongChannelDataFilename;
-        reader.m_strCrossSectionsFilename = yamlReader.m_strCrossSectionGeometryFilename;
-        reader.m_strSedimentPropertiesFilename = yamlReader.m_strSedimentPropertiesFilename;
-        reader.m_strHydroFilename = yamlReader.m_strHydrographsFilename;
-        
-        // Transfer boundary condition filenames directly to simulation
-        m_strUpwardBoundaryConditionFilename = yamlReader.m_strUpwardBoundaryConditionFilename;
-        m_strDownwardBoundaryConditionFilename = yamlReader.m_strDownwardBoundaryConditionFilename;
-        
-        // Read geometry and forcing files
-        CDataReader::bOpenLogFile(this);
-        reader.bReadAlongChannelDataFile(this);
-        reader.bReadCrossSectionGeometryFile(this);
-        if (m_nUpwardEstuarineCondition > 1) {
-            CDataReader::bReadUpwardBoundaryConditionFile(this);
-        }
-        if (m_nDownwardEstuarineCondition > 1) {
-            CDataReader::bReadDownwardBoundaryConditionFile(this);
-        }
-        if (m_bDoSedimentTransport) {
-            reader.bReadAlongChannelSedimentsFile(this);
-        }
-        if (m_bHydroFile) {
-            reader.bReadHydrographsFile(this);
-        }
-    } else {
-        // Use legacy .conf reader
-        std::cout << "📄 Detected legacy .conf configuration file" << std::endl;
-        reader.bReadConfigurationFile(this);
-        if (m_bReturnError) {
-            return;
-        }
 
-        CDataReader::bOpenLogFile(this);
-        reader.bReadAlongChannelDataFile(this);
-        reader.bReadCrossSectionGeometryFile(this);
-        if (m_nUpwardEstuarineCondition > 1) {
-            CDataReader::bReadUpwardBoundaryConditionFile(this);
-        }
-        if (m_nDownwardEstuarineCondition > 1) {
-            CDataReader::bReadDownwardBoundaryConditionFile(this);
-        }
-        if (m_bDoSedimentTransport) {
-            reader.bReadAlongChannelSedimentsFile(this);
-        }
-        if (m_bHydroFile) {
-            reader.bReadHydrographsFile(this);
-        }
+    std::cout << "      - Detected configuration file" << std::endl;
+    CYAMLReader yamlReader;
+    if (!yamlReader.loadConfiguration(configFile, this)) {
+        std::cerr << "❌ Error loading YAML configuration: " 
+                    << yamlReader.getErrorMessage() << std::endl;
+        m_bReturnError = true;
+        return;
+    }
+    
+    // Transfer file paths to reader and simulation
+    reader.m_strAlongChannelDataFilename = yamlReader.m_strAlongChannelDataFilename;
+    reader.m_strCrossSectionsFilename = yamlReader.m_strCrossSectionGeometryFilename;
+    reader.m_strSedimentPropertiesFilename = yamlReader.m_strSedimentPropertiesFilename;
+    reader.m_strHydroFilename = yamlReader.m_strHydrographsFilename;
+    
+    // Transfer boundary condition filenames directly to simulation
+    m_strUpwardBoundaryConditionFilename = yamlReader.m_strUpwardBoundaryConditionFilename;
+    m_strDownwardBoundaryConditionFilename = yamlReader.m_strDownwardBoundaryConditionFilename;
+    
+    // Read geometry and forcing files
+    CDataReader::bOpenLogFile(this);
+    reader.bReadAlongChannelDataFile(this);
+    reader.bReadCrossSectionGeometryFile(this);
+    if (m_nUpwardEstuarineCondition > 1) {
+        CDataReader::bReadUpwardBoundaryConditionFile(this);
+    }
+    if (m_nDownwardEstuarineCondition > 1) {
+        CDataReader::bReadDownwardBoundaryConditionFile(this);
+    }
+    if (m_bDoSedimentTransport) {
+        reader.bReadAlongChannelSedimentsFile(this);
+    }
+    if (m_bHydroFile) {
+        reader.bReadHydrographsFile(this);
     }
 
-
+    // Inicializar vectores antes de restaurar el estado
     initializeVectors();
     precomputeEstuaryData();
+
+    // Si se debe continuar la simulación, restaurar el estado desde el NetCDF
+    if (m_bContinueSimulation && !m_strContinueNetcdfPath.empty()) {
+        std::cout << "      - Loading initial NetCDF for continuing simulation: " << m_strContinueNetcdfPath << std::endl;
+        reader.bRestoreStateFromNetCDF(this, m_strContinueNetcdfPath);
+    }
     
     //! ✅ Suavizar el fondo antes de calcular pendientes (si está activado)
     if (bGetDoSmoothBathymetry()) {
         smoothBathymetry();
     }
-    
+
     calculateBedSlope();
+
+    // Solo inicializar condiciones si NO se continúa desde NetCDF
     calculateAlongEstuaryInitialConditions();
-    
-    //! Calculate initial hydraulic parameters (width, depth, LeftRB, RightRB, etc.)
-    m_nPredictor = 1;
-    calculateHydraulicParameters();
-    
-    //! Calculate UTM coordinates of river banks
+
+    // Calcular parámetros hidráulicos iniciales
+    if (m_bContinueSimulation == true) {
+        m_nPredictor = 1;
+        calculateHydraulicParameters();
+    }
+
+    //! Calcular UTM de river banks siempre (no sobrescribe estado restaurado)
     calculateRiverBankUTMCoordinates();
 
     // ✅ CON esto:
     std::string m_strOutFileName = generateOutputFileName();
     m_strOutFile += m_strOutFileName;
     
-    std::cout << "📁 Output file: " << m_strOutFile << std::endl;
+    std::cout << "      - Output file: " << m_strOutFile << std::endl;
     //! Create the NetCDF file with dimensions, coordinates and variables
     writer.nDefineNetCDFFile(this);
 
@@ -860,75 +844,59 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
         m_vInvDxSum[i] = 1.0 / m_vDxSum[i];
     }
 
-    if (m_nInitialEstuarineCondition == 1) {
-        //! Along estuary water flow given
-        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            double dManningFactor = 0.0;
-            //! As initial condition, it is assumed the independency of A with +/- value of S0
-            if (m_vCrossSectionBedSlope[i] == 0.0) {
-                //! Only for initial conditions S0 = 1e-3
-                dManningFactor = m_vCrossSectionQ[i]*estuary[i].dGetManningNumber()/(sqrt(1e-3));
+    if (!m_bContinueSimulation) {
+        if (m_nInitialEstuarineCondition == 1) {
+            //! Along estuary water flow given
+            for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+                double dManningFactor = 0.0;
+                if (m_vCrossSectionBedSlope[i] == 0.0) {
+                    dManningFactor = m_vCrossSectionQ[i]*estuary[i].dGetManningNumber()/(sqrt(1e-3));
+                }
+                else {
+                    dManningFactor = m_vCrossSectionQ[i]*estuary[i].dGetManningNumber()/(sqrt(fabs(m_vCrossSectionBedSlope[i])));
+                }
+                vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
+                vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
+                vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
+                vector<double> dSecondTerm;
+                dSecondTerm.resize(vCrossSectionAreaTmp.size());
+                for (size_t j = 0; j < vCrossSectionAreaTmp.size(); j++) {
+                    dSecondTerm[j] = vCrossSectionAreaTmp[j]*pow(vCrossSectionHydraulicRadiusTmp[j], 2.0/3.0);
+                }
+                // Solo inicializar variables físicas principales si no se continúa desde NetCDF
+                m_vCrossSectionArea[i] = linearInterpolation1d(dManningFactor, dSecondTerm, vCrossSectionAreaTmp);
+                m_vCrossSectionWaterDepth[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionElevationTmp);
+                m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
+                m_vCrossSectionWaterElevation[i] = m_vCrossSectionWaterDepth[i] + estuary[i].dGetZ();
             }
-            else {
-                dManningFactor = m_vCrossSectionQ[i]*estuary[i].dGetManningNumber()/(sqrt(fabs(m_vCrossSectionBedSlope[i])));
-            }
-
-            vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
-            vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
-            vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
-            
-            // Reservar espacio para dSecondTerm antes del bucle interno
-            vector<double> dSecondTerm;
-            dSecondTerm.resize(vCrossSectionAreaTmp.size());
-
-            //! Second term to obtain the area from slope equation in open channels
-            for (size_t j = 0; j < vCrossSectionAreaTmp.size(); j++) {
-                dSecondTerm[j] = vCrossSectionAreaTmp[j]*pow(vCrossSectionHydraulicRadiusTmp[j], 2.0/3.0);
-            }
-            
-            m_vCrossSectionArea[i] = linearInterpolation1d(dManningFactor, dSecondTerm, vCrossSectionAreaTmp);
-            m_vCrossSectionWaterDepth[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionElevationTmp);
-            m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
-            m_vCrossSectionWaterElevation[i] = m_vCrossSectionWaterDepth[i] + estuary[i].dGetZ();
         }
-    }
-    else if (m_nInitialEstuarineCondition == 2) {
-        //! Along estuary elevation given
-        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
-            vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
-            vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
-
-            //! m_vCrossSectionElevation is the elevation from the water depth m_dZ of every cross-section
-            m_vCrossSectionArea[i] = linearInterpolation1d(m_vCrossSectionWaterElevation[i] - estuary[i].dGetZ(),vCrossSectionElevationTmp, vCrossSectionAreaTmp);
-            m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
-            m_vCrossSectionHydraulicRadius[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
-
-            //! ✅ Usar pendiente de la línea de energía (más robusta que pendiente del lecho)
-            //! Q = (A * R^(2/3) / n) * sqrt(|S0|) * sign(S0)
-            double sign_S0 = (m_vCrossSectionBedSlope[i] >= 0) ? 1.0 : -1.0;
-            m_vCrossSectionQ[i] = m_vCrossSectionArea[i] * 
-                                 pow(m_vCrossSectionHydraulicRadius[i], 2.0/3.0) * 
-                                 sqrt(fabs(m_vCrossSectionBedSlope[i]) + 1e-10) * 
-                                 sign_S0 / estuary[i].dGetManningNumber();
+        else if (m_nInitialEstuarineCondition == 2) {
+            for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+                vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
+                vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
+                vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
+                m_vCrossSectionArea[i] = linearInterpolation1d(m_vCrossSectionWaterElevation[i] - estuary[i].dGetZ(),vCrossSectionElevationTmp, vCrossSectionAreaTmp);
+                m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
+                m_vCrossSectionHydraulicRadius[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
+                double sign_S0 = (m_vCrossSectionBedSlope[i] >= 0) ? 1.0 : -1.0;
+                m_vCrossSectionQ[i] = m_vCrossSectionArea[i] * 
+                                    pow(m_vCrossSectionHydraulicRadius[i], 2.0/3.0) * 
+                                    sqrt(fabs(m_vCrossSectionBedSlope[i]) + 1e-10) * 
+                                    sign_S0 / estuary[i].dGetManningNumber();
+            }
         }
-    }
-    else {
-        //! Water level in calm - REPOSO HIDROSTÁTICO
-        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
-            vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
-            vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
-
-            // Calado desde el nivel de referencia (z=0)
-            m_vCrossSectionWaterDepth[i] = -estuary[i].dGetZ();
-            m_vCrossSectionWaterElevation[i] = 0.0;
-            m_vCrossSectionArea[i] = linearInterpolation1d(m_vCrossSectionWaterDepth[i],vCrossSectionElevationTmp, vCrossSectionAreaTmp);
-            m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
-            m_vCrossSectionHydraulicRadius[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
-
-            //! ✅ CORRECTO: En reposo (calm), Q = 0 en todo el dominio
-            m_vCrossSectionQ[i] = 0.0;
+        else {
+            for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+                vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
+                vector<double> vCrossSectionElevationTmp = estuary[i].vGetWaterDepth();
+                vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
+                m_vCrossSectionWaterDepth[i] = -estuary[i].dGetZ();
+                m_vCrossSectionWaterElevation[i] = 0.0;
+                m_vCrossSectionArea[i] = linearInterpolation1d(m_vCrossSectionWaterDepth[i],vCrossSectionElevationTmp, vCrossSectionAreaTmp);
+                m_vCrossSectionWidth[i] = m_vCrossSectionArea[i] / m_vCrossSectionWaterDepth[i];
+                m_vCrossSectionHydraulicRadius[i] = linearInterpolation1d(m_vCrossSectionArea[i], vCrossSectionAreaTmp, vCrossSectionHydraulicRadiusTmp);
+                m_vCrossSectionQ[i] = 0.0;
+            }
         }
     }
  
@@ -1814,7 +1782,7 @@ void CSimulation::updatePredictorBoundaries() {
 
 }
 
-//======================================================================================================================
+//===============================================================================================================================
 //! Update Corrector boundaries - Con suavizado
 //======================================================================================================================
 void CSimulation::updateCorrectorBoundaries() {
@@ -2231,7 +2199,7 @@ void CSimulation::smoothBathymetry() {
     const int n = m_nCrossSectionsNumber;
     const int num_passes = 3;  // Número de pases de suavizado
     
-    std::cout << "🌊 Suavizando batimetría (" << num_passes << " pases)..." << std::endl;
+    std::cout << "      - Smoothing bathymetry (" << num_passes << " passes)" << std::endl;
     
     vector<double> vZSmooth(n);
     
@@ -2251,7 +2219,6 @@ void CSimulation::smoothBathymetry() {
         }
     }
     
-    std::cout << "   ✓ Batimetría suavizada correctamente" << std::endl;
 }
 
 //======================================================================================================================

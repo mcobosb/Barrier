@@ -1,4 +1,18 @@
-# Changelog
+## [0.7.0] - 2025-12-15
+
+### Major Changes
+- **Full migration to YAML:**
+  - Removed support and documentation for legacy `.ini`, `.conf`, and `.config` formats.
+  - The README now documents exclusively the use of `config.yaml` for simulation configuration.
+  - Example YAML structure and main parameters included in the documentation.
+  - All test cases must use YAML files.
+- **Documentation improvements:**
+  - Clarified the structure and meaning of each YAML section.
+  - Removed obsolete references to old formats throughout the project documentation.
+
+### Notes
+- If you have old configuration files, convert them to YAML following the updated example in the README.
+
 
 ## [0.6.0] - 2025-12-03
 
