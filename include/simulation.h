@@ -247,9 +247,13 @@ public:
     
     //! Smooth bathymetry before simulation?
     bool m_bDoSmoothBathymetry{};
-    
-    //! Smooth solution during simulation?
+    int m_nBathymetrySmoothingPasses{1};
+    double m_dBathymetrySmoothingAlpha{0.25};
+
+    //! Smooth solution (regularization) during simulation?
     bool m_bDoSmoothSolution{};
+    int m_nSolutionSmoothingPasses{1};
+    double m_dSolutionSmoothingAlpha{0.25};
 
     //! Number of cross-sections
     int m_nCrossSectionsNumber{};

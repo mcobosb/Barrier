@@ -394,13 +394,28 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
 }
 
 void CYAMLReader::parseSmoothingSection(const YAML::Node& node, CSimulation* m_pSimulation) {
-    // smoothing:
-    //   bathymetry: true
-    //   solution: true
     if (node["bathymetry"]) {
-        m_pSimulation->bSetDoSmoothBathymetry(node["bathymetry"].as<bool>());
+        const auto& bathy = node["bathymetry"];
+        if (bathy["enabled"]) {
+            m_pSimulation->bSetDoSmoothBathymetry(bathy["enabled"].as<bool>());
+        }
+        if (bathy["num_passes"]) {
+            m_pSimulation->m_nBathymetrySmoothingPasses = bathy["num_passes"].as<int>();
+        }
+        if (bathy["alpha"]) {
+            m_pSimulation->m_dBathymetrySmoothingAlpha = bathy["alpha"].as<double>();
+        }
     }
-    if (node["solution"]) {
-        m_pSimulation->bSetDoSmoothSolution(node["solution"].as<bool>());
+    if (node["regularization"]) {
+        const auto& reg = node["regularization"];
+        if (reg["enabled"]) {
+            m_pSimulation->bSetDoSmoothSolution(reg["enabled"].as<bool>());
+        }
+        if (reg["num_passes"]) {
+            m_pSimulation->m_nSolutionSmoothingPasses = reg["num_passes"].as<int>();
+        }
+        if (reg["alpha"]) {
+            m_pSimulation->m_dSolutionSmoothingAlpha = reg["alpha"].as<double>();
+        }
     }
 }

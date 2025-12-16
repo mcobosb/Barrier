@@ -2186,83 +2186,120 @@ void CSimulation::mergePredictorCorrector() {
 }
 
 //======================================================================================================================
-//! Smooth bathymetry before simulation
+//! Smooth bathymetry before simulation (non-uniform 1D Laplacian)
 //======================================================================================================================
 void CSimulation::smoothBathymetry() {
-    // Suavizar la batimetría (z_bed) para reducir oscilaciones numéricas
-    // Aplicar múltiples pases con filtro [0.25, 0.5, 0.25]
-    
+
     const int n = m_nCrossSectionsNumber;
-    const int num_passes = 3;  // Número de pases de suavizado
-    
-    std::cout << "      - Smoothing bathymetry (" << num_passes << " passes)" << std::endl;
-    
-    vector<double> vZSmooth(n);
-    
+    const int num_passes = m_nBathymetrySmoothingPasses;      // Number of smoothing passes from config
+    const double alpha = m_dBathymetrySmoothingAlpha;         // Diffusion coefficient from config
+
+    std::cout << "      - Smoothing bathymetry (non-uniform Laplacian, "
+              << num_passes << " passes, alpha=" << alpha << ")" << std::endl;
+
+    std::vector<double> vZSmooth(n);
+
     for (int pass = 0; pass < num_passes; pass++) {
-        // Mantener contornos sin cambios
-        vZSmooth[0] = m_vBedZ[0];
+        // Keep boundary values unchanged
+        vZSmooth[0]   = m_vBedZ[0];
         vZSmooth[n-1] = m_vBedZ[n-1];
-        
-        // Aplicar filtro a nodos interiores
+
+        // Apply non-uniform Laplacian smoothing to interior nodes
         for (int i = 1; i < n-1; i++) {
-            vZSmooth[i] = 0.25*m_vBedZ[i-1] + 0.50*m_vBedZ[i] + 0.25*m_vBedZ[i+1];
+            double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i-1];
+            double dxR = m_vCrossSectionX[i+1] - m_vCrossSectionX[i];
+
+            // Non-uniform 1D Laplacian
+            double lap =
+                (2.0 / (dxL + dxR)) *
+                ( (m_vBedZ[i+1] - m_vBedZ[i]) / dxR
+                - (m_vBedZ[i]   - m_vBedZ[i-1]) / dxL );
+
+            // Explicit smoothing step
+            vZSmooth[i] = m_vBedZ[i] + alpha * lap;
         }
-        
-        // Actualizar para el siguiente pase
+
+        // Update values for the next pass
         for (int i = 1; i < n-1; i++) {
             m_vBedZ[i] = vZSmooth[i];
         }
     }
-    
 }
 
-//======================================================================================================================
-//! Smooth solution
+///======================================================================================================================
+//! Smooth solution using non-uniform 1D Laplacian
 //======================================================================================================================
 void CSimulation::smoothSolution() {
-    // Filtro espacial [0.25, 0.5, 0.25] aplicado a todos los nodos interiores
-    // En zonas con cambios bruscos de área, aplicar doble suavizado
-    
     const int n = m_nCrossSectionsNumber;
-    vector<double> vAreaSmooth(n);
-    vector<double> vQSmooth(n);
-    
-    // Mantener contornos (i=0 y i=n-1) sin cambios
-    vAreaSmooth[0] = m_vCrossSectionArea[0];
-    vAreaSmooth[n-1] = m_vCrossSectionArea[n-1];
-    vQSmooth[0] = m_vCrossSectionQ[0];
-    vQSmooth[n-1] = m_vCrossSectionQ[n-1];
-    
-    // Primer pase: filtro estándar
-    for (int i = 1; i < n-1; i++) {
-        vAreaSmooth[i] = 0.25*m_vCrossSectionArea[i-1] + 
-                         0.50*m_vCrossSectionArea[i] + 
-                         0.25*m_vCrossSectionArea[i+1];
-        vQSmooth[i] = 0.25*m_vCrossSectionQ[i-1] + 
-                      0.50*m_vCrossSectionQ[i] + 
-                      0.25*m_vCrossSectionQ[i+1];
-    }
-    
-    // Detectar zonas con cambios bruscos de área y aplicar segundo pase
-    for (int i = 2; i < n-2; i++) {
-        double dA_ratio_left = m_vCrossSectionArea[i] / (m_vCrossSectionArea[i-1] + 1e-10);
-        double dA_ratio_right = m_vCrossSectionArea[i+1] / (m_vCrossSectionArea[i] + 1e-10);
-        
-        // Si hay cambio > 50% de área, aplicar suavizado extra
-        if (dA_ratio_left > 1.5 || dA_ratio_left < 0.67 || 
-            dA_ratio_right > 1.5 || dA_ratio_right < 0.67) {
-            // Segundo pase solo en esta zona
-            vAreaSmooth[i] = 0.25*vAreaSmooth[i-1] + 0.50*vAreaSmooth[i] + 0.25*vAreaSmooth[i+1];
-            vQSmooth[i] = 0.25*vQSmooth[i-1] + 0.50*vQSmooth[i] + 0.25*vQSmooth[i+1];
+    const int num_passes = m_nSolutionSmoothingPasses;
+    const double alpha = m_dSolutionSmoothingAlpha;
+
+    for (int pass = 0; pass < num_passes; ++pass) {
+        std::vector<double> vAreaSmooth(n);
+        std::vector<double> vQSmooth(n);
+
+        // Keep boundaries unchanged
+        vAreaSmooth[0]   = m_vCrossSectionArea[0];
+        vAreaSmooth[n-1] = m_vCrossSectionArea[n-1];
+        vQSmooth[0]      = m_vCrossSectionQ[0];
+        vQSmooth[n-1]    = m_vCrossSectionQ[n-1];
+
+        // First pass: non-uniform Laplacian smoothing
+        for (int i = 1; i < n-1; i++) {
+            double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i-1];
+            double dxR = m_vCrossSectionX[i+1] - m_vCrossSectionX[i];
+
+            // Laplacian for Area
+            double lapA =
+                (2.0 / (dxL + dxR)) *
+                ( (m_vCrossSectionArea[i+1] - m_vCrossSectionArea[i]) / dxR
+                - (m_vCrossSectionArea[i]   - m_vCrossSectionArea[i-1]) / dxL );
+
+            // Laplacian for Q
+            double lapQ =
+                (2.0 / (dxL + dxR)) *
+                ( (m_vCrossSectionQ[i+1] - m_vCrossSectionQ[i]) / dxR
+                - (m_vCrossSectionQ[i]   - m_vCrossSectionQ[i-1]) / dxL );
+
+            vAreaSmooth[i] = m_vCrossSectionArea[i] + alpha * lapA;
+            vQSmooth[i]    = m_vCrossSectionQ[i]    + alpha * lapQ;
         }
-    }
-    
-    // Aplicar valores suavizados
-    for (int i = 1; i < n-1; i++) {
-        m_vCrossSectionArea[i] = vAreaSmooth[i];
-        m_vCrossSectionQ[i] = vQSmooth[i];
-        m_vCrossSectionU[i] = m_vCrossSectionQ[i] / (m_vCrossSectionArea[i] + 1e-10);
+
+        // Second pass only in regions with strong area jumps
+        for (int i = 2; i < n-2; i++) {
+            double ratioL = m_vCrossSectionArea[i]   / (m_vCrossSectionArea[i-1] + 1e-10);
+            double ratioR = m_vCrossSectionArea[i+1] / (m_vCrossSectionArea[i]   + 1e-10);
+
+            bool strongJump =
+                (ratioL > 1.5 || ratioL < 0.67 ||
+                 ratioR > 1.5 || ratioR < 0.67);
+
+            if (strongJump) {
+                double dxL = m_vCrossSectionX[i]   - m_vCrossSectionX[i-1];
+                double dxR = m_vCrossSectionX[i+1] - m_vCrossSectionX[i];
+
+                double lapA =
+                    (2.0 / (dxL + dxR)) *
+                    ( (vAreaSmooth[i+1] - vAreaSmooth[i]) / dxR
+                    - (vAreaSmooth[i]   - vAreaSmooth[i-1]) / dxL );
+
+                double lapQ =
+                    (2.0 / (dxL + dxR)) *
+                    ( (vQSmooth[i+1] - vQSmooth[i]) / dxR
+                    - (vQSmooth[i]   - vQSmooth[i-1]) / dxL );
+
+                vAreaSmooth[i] += alpha * lapA;
+                vQSmooth[i]    += alpha * lapQ;
+            }
+        }
+
+        // Apply smoothed values and update velocity
+        for (int i = 1; i < n-1; i++) {
+            m_vCrossSectionArea[i] = vAreaSmooth[i];
+            m_vCrossSectionQ[i]    = vQSmooth[i];
+            m_vCrossSectionU[i]    = m_vCrossSectionQ[i] /
+                                     (m_vCrossSectionArea[i] + 1e-10);
+        }
     }
 }
 
