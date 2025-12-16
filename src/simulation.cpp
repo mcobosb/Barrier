@@ -440,10 +440,6 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     reader.m_strSedimentPropertiesFilename = yamlReader.m_strSedimentPropertiesFilename;
     reader.m_strHydroFilename = yamlReader.m_strHydrographsFilename;
     
-    // Transfer boundary condition filenames directly to simulation
-    m_strUpwardBoundaryConditionFilename = yamlReader.m_strUpwardBoundaryConditionFilename;
-    m_strDownwardBoundaryConditionFilename = yamlReader.m_strDownwardBoundaryConditionFilename;
-    
     // Read geometry and forcing files
     CDataReader::bOpenLogFile(this);
     reader.bReadAlongChannelDataFile(this);
@@ -2412,9 +2408,9 @@ void CSimulation::calculate_salinity()
             // Nueva concentración = masa / volumen
             m_vCrossSectionSalinity[i] = salt_mass / m_vCrossSectionArea[i];
             
-            // Limitar a rango físico [0, 35] psu
+            // Limitar a rango físico [0, m_dDownwardBoundaryValue] psu
             if (m_vCrossSectionSalinity[i] < 0.0) m_vCrossSectionSalinity[i] = 0.0;
-            if (m_vCrossSectionSalinity[i] > 35.0) m_vCrossSectionSalinity[i] = 35.0;
+            if (m_vCrossSectionSalinity[i] > m_dDownwardSalinityBoundaryValue) m_vCrossSectionSalinity[i] = m_dDownwardSalinityBoundaryValue;
         } else {
             // Celda seca: agua dulce
             m_vCrossSectionSalinity[i] = 0.0;
@@ -2426,30 +2422,65 @@ void CSimulation::calculate_salinity()
     // ================================================================================================================
     
     // UPSTREAM
+    double up_sal = m_dUpwardSalinityBoundaryValue;
+    if (!m_strUpwardSalinityBoundaryConditionFilename.empty() && !m_vUpwardSalinityBoundaryConditionTime.empty() && !m_vUpwardSalinityBoundaryConditionValue.empty()) {
+        // Interpolación lineal en el tiempo
+        double t = m_dCurrentTime;
+        auto it = std::lower_bound(m_vUpwardSalinityBoundaryConditionTime.begin(), m_vUpwardSalinityBoundaryConditionTime.end(), t);
+        if (it == m_vUpwardSalinityBoundaryConditionTime.begin()) {
+            up_sal = m_vUpwardSalinityBoundaryConditionValue.front();
+        } else if (it == m_vUpwardSalinityBoundaryConditionTime.end()) {
+            up_sal = m_vUpwardSalinityBoundaryConditionValue.back();
+        } else {
+            size_t idx = std::distance(m_vUpwardSalinityBoundaryConditionTime.begin(), it);
+            double t1 = m_vUpwardSalinityBoundaryConditionTime[idx-1];
+            double t2 = m_vUpwardSalinityBoundaryConditionTime[idx];
+            double s1 = m_vUpwardSalinityBoundaryConditionValue[idx-1];
+            double s2 = m_vUpwardSalinityBoundaryConditionValue[idx];
+            up_sal = s1 + (s2-s1)*(t-t1)/(t2-t1);
+        }
+    }
     if (nGetUpwardSalinityCondition() == 0) {
         // FREE: Si flujo entra (Q > 0), imponer agua dulce para evitar que la sal suba por difusión
         if (m_vCrossSectionQ[0] > 0.0) {
-            m_vCrossSectionSalinity[0] = 0.0;
+            m_vCrossSectionSalinity[0] = up_sal;
         }
         // Si Q <= 0 (salida), dejar evolucionar libremente
     }
     else if (nGetUpwardSalinityCondition() == 1) {
         // Salinidad NULA impuesta
-        m_vCrossSectionSalinity[0] = 0.0;
+        m_vCrossSectionSalinity[0] = up_sal;
     }
     else if (nGetUpwardSalinityCondition() == 2) {
         // Salinidad OCEÁNICA impuesta
-        m_vCrossSectionSalinity[0] = 35.0;
+        m_vCrossSectionSalinity[0] = up_sal;
     }
 
     // DOWNSTREAM
+    double down_sal = m_dDownwardSalinityBoundaryValue;
+    if (!m_strDownwardSalinityBoundaryConditionFilename.empty() && !m_vDownwardSalinityBoundaryConditionTime.empty() && !m_vDownwardSalinityBoundaryConditionValue.empty()) {
+        double t = m_dCurrentTime;
+        auto it = std::lower_bound(m_vDownwardSalinityBoundaryConditionTime.begin(), m_vDownwardSalinityBoundaryConditionTime.end(), t);
+        if (it == m_vDownwardSalinityBoundaryConditionTime.begin()) {
+            down_sal = m_vDownwardSalinityBoundaryConditionValue.front();
+        } else if (it == m_vDownwardSalinityBoundaryConditionTime.end()) {
+            down_sal = m_vDownwardSalinityBoundaryConditionValue.back();
+        } else {
+            size_t idx = std::distance(m_vDownwardSalinityBoundaryConditionTime.begin(), it);
+            double t1 = m_vDownwardSalinityBoundaryConditionTime[idx-1];
+            double t2 = m_vDownwardSalinityBoundaryConditionTime[idx];
+            double s1 = m_vDownwardSalinityBoundaryConditionValue[idx-1];
+            double s2 = m_vDownwardSalinityBoundaryConditionValue[idx];
+            down_sal = s1 + (s2-s1)*(t-t1)/(t2-t1);
+        }
+    }
     if (nGetDownwardSalinityCondition() == 1) {
         // Salinidad NULA impuesta
-        m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = 0.0;
+        m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = up_sal;
     }
     else if (nGetDownwardSalinityCondition() == 2) {
         // Salinidad OCEÁNICA impuesta
-        m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = 35.0;
+        m_vCrossSectionSalinity[m_nCrossSectionsNumber-1] = down_sal;
     }
     // Si es tipo 0 (FREE): no hacer nada, dejar evolucionar libremente
 }
@@ -2512,10 +2543,10 @@ void CSimulation::calculate_salinity_gradient()
         }
     } else if (nGetUpwardSalinityCondition() == 1) {
         // Agua dulce impuesta: S[exterior] = 0
-        vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*0.0) * m_dLambda;
+        vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*m_dUpwardBoundaryValue) * m_dLambda;
     } else if (nGetUpwardSalinityCondition() == 2) {
         // Agua oceánica impuesta: S[exterior] = 35
-        vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*35.0) * m_dLambda;
+        vAUS_dif[0] = (m_vCrossSectionQ[1]*m_vCrossSectionSalinity[1] - m_vCrossSectionQ[0]*m_dDownwardBoundaryValue) * m_dLambda;
     }
     
     // ✅ FRONTERA AGUAS ABAJO: Tratamiento correcto según condición
@@ -2530,7 +2561,7 @@ void CSimulation::calculate_salinity_gradient()
             vAUS_dif[n] = (m_vCrossSectionQ[n]*m_vCrossSectionSalinity[n] - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
         } else {
             // Flujo entrante: advectar agua dulce S=0
-            vAUS_dif[n] = (m_vCrossSectionQ[n]*0.0 - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
+            vAUS_dif[n] = (m_vCrossSectionQ[n]*m_dUpwardBoundaryValue - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
         }
     } else if (nGetDownwardSalinityCondition() == 2) {
         // Agua oceánica impuesta: S[exterior] = 35
@@ -2539,7 +2570,7 @@ void CSimulation::calculate_salinity_gradient()
             vAUS_dif[n] = (m_vCrossSectionQ[n]*m_vCrossSectionSalinity[n] - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
         } else {
             // Flujo entrante: advectar agua oceánica S=35
-            vAUS_dif[n] = (m_vCrossSectionQ[n]*35.0 - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
+            vAUS_dif[n] = (m_vCrossSectionQ[n]*m_dDownwardBoundaryValue - m_vCrossSectionQ[n-1]*m_vCrossSectionSalinity[n-1]) * m_dLambda;
         }
     }
 

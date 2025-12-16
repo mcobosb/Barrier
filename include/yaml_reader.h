@@ -67,6 +67,8 @@ public:
     std::string m_strCrossSectionGeometryFilename;
     std::string m_strUpwardBoundaryConditionFilename;
     std::string m_strDownwardBoundaryConditionFilename;
+    std::string m_strUpwardSalinityBoundaryConditionFilename;
+    std::string m_strDownwardSalinityBoundaryConditionFilename;
     std::string m_strSedimentPropertiesFilename;
     std::string m_strHydrographsFilename;
     std::string m_strSalinityFilename;

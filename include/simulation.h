@@ -182,6 +182,36 @@ public:
     //! The downward estuarine condition value at previous the last node and time t
     double m_dNextDownwardBoundaryValue{};
 
+    //! The upward estuarine salinity condition filename
+    string m_strUpwardSalinityBoundaryConditionFilename;
+
+    //! The upward estuarine salinity condition time vector
+    vector<double> m_vUpwardSalinityBoundaryConditionTime;
+
+    //! The upward estuarine salinity condition value vector
+    vector<double> m_vUpwardSalinityBoundaryConditionValue;
+
+    //! The upward estuarine salinity condition value at time t
+    double m_dUpwardSalinityBoundaryValue{};
+
+    //! The upward estuarine salinity condition value at previous the last node and time t
+    double m_dNextUpwardSalinityBoundaryValue{};
+
+    //! The downward estuarine salinity condition filename
+    string m_strDownwardSalinityBoundaryConditionFilename;
+
+    //! The downward estuarine salinity condition time vector
+    vector<double> m_vDownwardSalinityBoundaryConditionTime;
+
+    //! The downward estuarine salinity condition value vector
+    vector<double> m_vDownwardSalinityBoundaryConditionValue;
+
+    //! The downward estuarine salinity condition value at time t
+    double m_dDownwardSalinityBoundaryValue{};
+
+    //! The downward estuarine salinity condition value at previous the last node and time t
+    double m_dNextDownwardSalinityBoundaryValue{};
+    
     //! The Courant Number
     double m_dCourantNumber{};
 
