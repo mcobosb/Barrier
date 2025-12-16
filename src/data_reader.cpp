@@ -167,27 +167,9 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(dValue);
 				}
 
-				if (j == 7)
-				{
-					if  (m_pSimulation->nGetInitialEstuarineCondition() == 1)
-					{
-						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
-						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
-						m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
-					}
-					else if (m_pSimulation->nGetInitialEstuarineCondition() == 2)
-					{
-						dValue = dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ();
-						// if (dValue <= 0) {
-						// 	m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
-						// }
-						// else {
-						m_pSimulation->m_vCrossSectionWaterElevation.push_back(dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ());
-						// }
-						m_pSimulation->m_vCrossSectionQ.push_back(0.0);
-						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
-					}
-				}				
+				if (j == 7) {
+					m_pSimulation->estuary[nCrossSectionNumber].dSetBeta(dValue);
+				}		
 				// Increment counter
 				j++;
 
@@ -305,12 +287,6 @@ void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 					string strItem = "right river bank location";
 					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
-
-				if (j == 10) {
-					string strItem = "beta";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
 				// Increase counter
 				j++;
 

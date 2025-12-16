@@ -35,7 +35,7 @@ bool CYAMLReader::loadConfiguration(const std::string& filepath, CSimulation* si
         }
         
         if (config["geometry"]) {
-            parseGeometrySection(config["geometry"], simulation);
+            parseGeometrySection(config["geometry"]);
         }
         
         if (config["initial_conditions"]) {
@@ -115,7 +115,7 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimula
             std::string varStr = node["output_variables"].as<std::string>();
             if (varStr == "full") {
                 m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", 
-                                           "eta", "level", "beta", "rho", "U", "c", "S", 
+                                           "eta", "level", "rho", "U", "c", "S", 
                                            "Qb", "Qs", "Qt", "xl", "xr", "xl_utm_x", 
                                            "xl_utm_y", "xr_utm_x", "xr_utm_y"};
             }
@@ -139,7 +139,7 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimula
     }
 }
 
-void CYAMLReader::parseGeometrySection(const YAML::Node& node, CSimulation* m_pSimulation) {
+void CYAMLReader::parseGeometrySection(const YAML::Node& node) {
     if (node["along_channel_file"]) {
         m_strAlongChannelDataFilename = m_strInputPath + node["along_channel_file"].as<std::string>();
     }

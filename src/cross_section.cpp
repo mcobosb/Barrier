@@ -46,7 +46,8 @@ CCrossSection::CCrossSection(){
     m_dX_UTM =
     m_dY_UTM =
     m_dRightRBAngle =
-    m_dLeftRBAngle =  0.0;
+    m_dLeftRBAngle =
+    m_dBeta =  0.0;
 }
 
 //===============================================================================================================================
@@ -75,8 +76,6 @@ void CCrossSection::dAppend2Vector(const string& strItem, double dValue){
         m_vLeftRBLocation.push_back(dValue);
     else if (strItem == "right river bank location")
         m_vRightRBLocation.push_back(dValue);
-    else if (strItem == "beta")
-       m_vBeta.push_back(dValue);
     else if (strItem == "I1")
         m_vI1.push_back(dValue);
     else if (strItem == "I2")
@@ -115,7 +114,9 @@ void CCrossSection::dSetLeftRBAngle(const double dValue) {
 void CCrossSection::dSetWaterDepth(const double dValue) {
     m_dElevation = dValue;
 }
-
+void CCrossSection::dSetBeta(const double dValue) {
+    m_dBeta = dValue;
+}
 void CCrossSection::nSetElevationSectionsNumber(const int nValue) {
     m_nElevationSectionNumber = nValue;
 }
@@ -147,7 +148,9 @@ double CCrossSection::dGetRightRBAngle() const{
 double CCrossSection::dGetLeftRBAngle() const{
   return m_dLeftRBAngle;
 }
-
+double CCrossSection::dGetBeta() const{
+  return m_dBeta;
+}
 int CCrossSection::nGetElevationSectionsNumber() const{
     return m_nElevationSectionNumber;
 }
@@ -175,9 +178,6 @@ double CCrossSection::dGetLeftY(const int nValue) const {
 double CCrossSection::dGetRightY(const int nValue) const {
   return m_vRightRBLocation[nValue];
 }
-double CCrossSection::dGetBeta(const int nValue) const {
-  return m_vBeta[nValue];
-}
 double CCrossSection::dGetI1(const int nValue) const {
     return m_vI1[nValue];
 }
@@ -197,9 +197,6 @@ vector<double> CCrossSection::vGetWaterDepth() {
 }
 vector<double> CCrossSection::vGetWidth() {
     return m_vWidth;
-}
-vector<double> CCrossSection::vGetBeta() {
-    return m_vBeta;
 }
 vector<double> CCrossSection::vGetLeftRBLocation() {
     return m_vLeftRBLocation;

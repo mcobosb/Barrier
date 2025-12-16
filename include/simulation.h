@@ -317,9 +317,6 @@ public:
     //! Cross-section water elevation (over the mean water level)
     vector<double> m_vCrossSectionWaterElevation;
 
-    //! Cross-section betas
-    vector<double> m_vCrossSectionBeta;
-
     //! Cross-section I1 pressure integral
     vector<double> m_vCrossSectionI1;
     //! Predicted cross-section I1 pressure integral
@@ -724,10 +721,10 @@ public:
     vector<double> m_vBedZ;
     vector<double> m_vManningN;
     vector<double> m_vPositionX;
+    vector<double> m_vBeta;  // ✅ ELIMINADO de vector<double> a vector<vector<double>>
     
     // ✅ CAMBIAR de vector<double> a vector<vector<double>>
     vector<vector<double>> m_vWidth;      // ✅ CORREGIDO
-    vector<vector<double>> m_vBeta;       // ✅ CORREGIDO
     vector<vector<double>> m_vLeftY;      // ✅ CORREGIDO
     vector<vector<double>> m_vRightY;     // ✅ CORREGIDO
     

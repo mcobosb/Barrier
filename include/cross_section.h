@@ -50,6 +50,9 @@ class CCrossSection {
         //! The water elevation
         double m_dElevation;
 
+        //! The beta current coefficient
+        double m_dBeta;
+
         //! Number of Elevation Sections
         int m_nElevationSectionNumber;
 
@@ -77,9 +80,6 @@ class CCrossSection {
         //! The location of the right riverbank at Elevation
         vector<double> m_vRightRBLocation;
 
-        //! The beta value at Elevation
-        vector<double> m_vBeta;
-
         //! The I1 value at Elevation
         vector<double> m_vI1;
 
@@ -100,6 +100,7 @@ class CCrossSection {
         void dSetY_UTM(double dValue);
         void dSetRightRBAngle(double dValue);
         void dSetLeftRBAngle(double dValue);
+        void dSetBeta(double dValue);
         void nSetElevationSectionsNumber(int nValue);
         void dSetWaterDepth(double dValue);
         void dAppend2Vector(const string& strItem, double dValue);
@@ -113,6 +114,7 @@ class CCrossSection {
         [[nodiscard]] double dGetY_UTM() const;
         [[nodiscard]] double dGetRightRBAngle() const;
         [[nodiscard]] double dGetLeftRBAngle() const;
+        [[nodiscard]] double dGetBeta() const;
         [[nodiscard]] int nGetElevationSectionsNumber() const;
         [[nodiscard]] double dGetWaterDepth(int nValue) const;
         [[nodiscard]] double dGetWidth(int nValue) const;
@@ -122,7 +124,6 @@ class CCrossSection {
         [[nodiscard]] double dGetSigma(int nValue) const;
         [[nodiscard]] double dGetLeftY(int nValue) const;
         [[nodiscard]] double dGetRightY(int nValue) const;
-        [[nodiscard]] double dGetBeta(int nValue) const;
         [[nodiscard]] double dGetI1(int nValue) const;
         [[nodiscard]] double dGetI2(int nValue) const;
 
@@ -131,7 +132,6 @@ class CCrossSection {
         vector<double> vGetHydraulicRadius();
         vector<double> vGetWaterDepth();
         vector<double> vGetWidth();
-        vector<double> vGetBeta();
         vector<double> vGetRightRBLocation();
         vector<double> vGetLeftRBLocation();
         vector<double> vGetI1();

@@ -35,7 +35,7 @@ private:
     void parseRunSection(const YAML::Node& node, CSimulation* sim);
     
     //! Parse geometry section  
-    void parseGeometrySection(const YAML::Node& node, CSimulation* sim);
+    void parseGeometrySection(const YAML::Node& node);
     
     //! Parse initial conditions section
     void parseInitialConditionsSection(const YAML::Node& node, CSimulation* sim);
