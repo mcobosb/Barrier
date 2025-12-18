@@ -1,3 +1,25 @@
+## [0.8.0] - 2025-12-18
+
+### Major Features
+- **Temperature Transport Module:**
+  - Implemented full support for water temperature transport, including advection and diffusion.
+  - Added configuration options for temperature transport in `config.yaml` (enable/disable, initial conditions, dispersion coefficient, boundary conditions, and heat fluxes).
+  - Integrated meteorological forcings and energy balance (Qnet) for temperature evolution.
+  - All temperature-related parameters are now configurable via YAML.
+
+- **Density Function Update:**
+  - The density calculation now uses both salinity and temperature, with configurable coefficients (`betaS` and `betaT`) read from `config.yaml`.
+  - The new formula allows for more physically accurate coupling between salinity, temperature, and hydrodynamics.
+
+### Technical Improvements
+- Refactored YAML reader to support temperature transport and new density parameters.
+- Improved documentation for temperature and density configuration in the README and example YAML files.
+
+### Notes
+- Backward compatibility: Existing YAML files must add the new temperature and density parameters for full functionality.
+- All test cases updated to include temperature transport and new density logic.
+
+
 ## [0.7.0] - 2025-12-15
 
 ### Major Changes

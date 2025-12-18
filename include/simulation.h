@@ -46,6 +46,72 @@ using std::ofstream;
 class CSimulation
 {
 public:
+
+        // === Temperatura y balance de energía ===
+        //! ¿Calcular temperatura del agua?
+        bool m_bDoWaterTemperature{};
+
+        //! Nombre del archivo de condición inicial de temperatura (si aplica)
+        std::string m_strInitialTemperatureConditionFilename;
+
+        //! Vector de temperatura por sección transversal (°C)
+        std::vector<double> m_vCrossSectionTemperature;
+
+        //! Término temporal de advección-difusión de temperatura (ASt)
+        std::vector<double> m_vCrossSectionTemperatureASt;
+
+        //! Tipo de condición de frontera aguas arriba para temperatura (0=libre, 1=impuesta, 2=serie temporal)
+        int m_nUpwardTemperatureCondition{};
+
+        //! Tipo de condición de frontera aguas abajo para temperatura
+        int m_nDownwardTemperatureCondition{};
+
+        //! Archivo de condición de frontera aguas arriba (serie temporal)
+        std::string m_strUpwardTemperatureBoundaryConditionFilename;
+
+        //! Vector de tiempos de la condición de frontera aguas arriba
+        std::vector<double> m_vUpwardTemperatureBoundaryConditionTime;
+
+        //! Vector de valores de la condición de frontera aguas arriba
+        std::vector<double> m_vUpwardTemperatureBoundaryConditionValue;
+
+        //! Valor de temperatura aguas arriba (si es constante)
+        double m_dUpwardTemperatureBoundaryValue{};
+
+        //! Archivo de condición de frontera aguas abajo (serie temporal)
+        std::string m_strDownwardTemperatureBoundaryConditionFilename;
+
+        //! Vector de tiempos de la condición de frontera aguas abajo
+        std::vector<double> m_vDownwardTemperatureBoundaryConditionTime;
+
+        //! Vector de valores de la condición de frontera aguas abajo
+        std::vector<double> m_vDownwardTemperatureBoundaryConditionValue;
+
+        //! Valor de temperatura aguas abajo (si es constante)
+        double m_dDownwardTemperatureBoundaryValue{};
+
+        //! Coeficiente de difusión térmica (m²/s)
+        double m_dThermalDispersion{};
+
+        // === Forzamientos de balance de energía superficial ===
+
+
+        //! Archivo único de forzamiento de balance de energía superficial (Tair, humedad relativa, viento)
+        std::string m_strHeatFluxFile;
+
+        //! Coeficiente de transferencia de calor sensible (CS)
+        double m_dHeatFlux_CS{};
+
+        //! Coeficiente de transferencia de calor latente (CL)
+        double m_dHeatFlux_CL{};
+
+        // === Series temporales de forzamiento ===
+
+        //! Tiempos y valores de forzamiento de heat flux (Tair, humedad relativa, viento)
+        std::vector<double> m_vHeatFluxTime;
+        std::vector<double> m_vHeatFluxAirTemp;
+        std::vector<double> m_vHeatFluxRelHumidity;
+        std::vector<double> m_vHeatFluxWind;
     // === Opciones para continuar simulación ===
     bool m_bContinueSimulation = false;
     std::string m_strContinueNetcdfPath;
@@ -142,6 +208,8 @@ public:
 
     //! The beta salinity constant [if compute water salinity]
     double m_dBetaSalinityConstant{};
+    //! The beta temperature constant [if compute water temperature]
+    double m_dBetaTemperatureConstant{};
 
     //! The longitudinal dispersion, kh [if compute water salinity]
     double m_dLongitudinalDispersion{};
@@ -523,6 +591,10 @@ public:
     [[nodiscard]] double dGetBetaSalinityConstant() const;
     //! Method for setting the beta salinity constant
     void dSetBetaSalinityConstant(double salinityConstant);
+    //! Method for getting the beta temperature constant
+    [[nodiscard]] double dGetBetaTemperatureConstant() const { return m_dBetaTemperatureConstant; }
+    //! Method for setting the beta temperature constant
+    void dSetBetaTemperatureConstant(double tempConstant) { m_dBetaTemperatureConstant = tempConstant; }
 
     //! Method for getting the along channel constant elevation
     [[nodiscard]] double dGetLongitudinalDispersionConstant() const;
@@ -662,6 +734,8 @@ public:
     void smoothBathymetry();
     void calculate_salinity_gradient();
     void calculate_salinity();
+    void calculateRadiativeFluxes();
+    void calculate_temperature();
 
     void AnnounceProgress();
 

@@ -306,6 +306,74 @@ void CYAMLReader::parseNumericsSection(const YAML::Node& node, CSimulation* m_pS
 }
 
 void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_pSimulation) {
+
+        // Temperature transport
+        if (node["temperature"]) {
+            const auto& temperature = node["temperature"];
+            if (temperature["enabled"]) {
+                m_pSimulation->m_bDoWaterTemperature = temperature["enabled"].as<bool>();
+            }
+            if (temperature["initial_file"]) {
+                std::string filename = temperature["initial_file"].as<std::string>();
+                if (!filename.empty()) {
+                    m_pSimulation->m_strInitialTemperatureConditionFilename = m_strInputPath + filename;
+                }
+            }
+            if (temperature["dispersion_kh"]) {
+                m_pSimulation->m_dThermalDispersion = temperature["dispersion_kh"].as<double>();
+            }
+            // Leer beta_temperature o betaT si está presente
+            if (temperature["beta"]) {
+                m_pSimulation->dSetBetaTemperatureConstant(temperature["beta_temperature"].as<double>());
+            }
+
+            if (temperature["boundary_conditions"]) {
+                const auto& bc = temperature["boundary_conditions"];
+                // UPSTREAM
+                if (bc["upstream"]) {
+                    const auto& up = bc["upstream"];
+                    if (up["type"]) {
+                        try { m_pSimulation->m_nUpwardTemperatureCondition = up["type"].as<int>(); }
+                        catch (...) {}
+                    }
+                    if (up["file"] && !up["file"].IsNull()) {
+                        std::string filename = up["file"].as<std::string>();
+                        if (!filename.empty()) m_pSimulation->m_strUpwardTemperatureBoundaryConditionFilename = m_strInputPath + filename;
+                    }
+                    if (up["value"] && up["value"].IsScalar()) {
+                        try { m_pSimulation->m_dUpwardTemperatureBoundaryValue = up["value"].as<double>(); } catch (...) {}
+                    }
+                }
+                // DOWNSTREAM
+                if (bc["downstream"]) {
+                    const auto& down = bc["downstream"];
+                    if (down["type"]) {
+                        try { m_pSimulation->m_nDownwardTemperatureCondition = down["type"].as<int>(); }
+                        catch (...) {}
+                    }
+                    if (down["file"] && !down["file"].IsNull()) {
+                        std::string filename = down["file"].as<std::string>();
+                        if (!filename.empty()) m_pSimulation->m_strDownwardTemperatureBoundaryConditionFilename = m_strInputPath + filename;
+                    }
+                    if (down["value"] && down["value"].IsScalar()) {
+                        try { m_pSimulation->m_dDownwardTemperatureBoundaryValue = down["value"].as<double>(); } catch (...) {}
+                    }
+                }
+            }
+            if (temperature["heat_flux"]) {
+                const auto& hf = temperature["heat_flux"];
+                if (hf["heat_flux_file"]) {
+                    std::string filename = hf["heat_flux_file"].as<std::string>();
+                    if (!filename.empty()) m_pSimulation->m_strHeatFluxFile = m_strInputPath + filename;
+                }
+                if (hf["cs"]) {
+                    m_pSimulation->m_dHeatFlux_CS = hf["cs"].as<double>();
+                }
+                if (hf["cl"]) {
+                    m_pSimulation->m_dHeatFlux_CL = hf["cl"].as<double>();
+                }
+            }
+        }
     // Salinity transport
     if (node["salinity"]) {
         const auto& salinity = node["salinity"];

@@ -114,71 +114,54 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 	// size_t nPos;
 	string strRec, strErr;
 
-	while (getline(InStream, strRec)) {
 
+	while (getline(InStream, strRec)) {
 		// Trim off leading and trailing whitespace
 		strRec = strTrim(&strRec);
-
 		// If it is a blank line or a comment then ignore it
 		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
-
 			// Create a new cross-section object and append to estuary
 			m_pSimulation->AddCrossSection();
-
 			// Update section number
 			m_pSimulation->estuary[nCrossSectionNumber].nSetSectionNumber(nCrossSectionNumber);
-
 			// Obtain the new line
 			stringstream strLine(strRec);
-
 			string token;
 			int j = 0;
-
-			// Using get line for splitting the string by commas
+			// Using get line for splitting the string line by commas
 			while (getline(strLine, token, ',')) {
 				double dValue = strtod(token.c_str(), nullptr);
-
 				if (j == 0) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetX(dValue);
 					m_pSimulation->m_vCrossSectionX.push_back(dValue);
 				}
-
 				if (j == 1) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetZ(dValue);
 				}
-
 				if (j == 2) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetManningNumber(dValue);
 				}
-
 				if (j == 3) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetX_UTM(dValue);
 				}
-
 				if (j == 4) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetY_UTM(dValue);
 				}
-
 				if (j == 5) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetRightRBAngle(dValue);
 				}
-
 				if (j == 6) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(dValue);
 				}
-
 				if (j == 7) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetBeta(dValue);
-				}		
+				}
 				// Increment counter
 				j++;
-
 			}
-
 			// Increment counter
 			nCrossSectionNumber++;
 		}
-
 	}
 	m_pSimulation->m_nCrossSectionsNumber = nCrossSectionNumber;
 	if  (m_pSimulation->nGetInitialEstuarineCondition() == 0)
@@ -189,9 +172,70 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 			m_pSimulation->m_vCrossSectionArea.push_back(0.0);
 			m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
 			m_pSimulation->m_vCrossSectionSalinity.push_back(0.0);
+			// Inicializar temperatura si corresponde
+			if (m_pSimulation->m_bDoWaterTemperature) {
+				m_pSimulation->m_vCrossSectionTemperature.push_back(0.0);
+			}
 		}
 	}
+}
 
+//======================================================================================================================
+//! Leer archivo de condición de frontera aguas arriba para temperatura
+//======================================================================================================================
+void CDataReader::bReadUpwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation) {
+
+	ifstream InStream;
+	
+	InStream.open(m_pSimulation->m_strUpwardTemperatureBoundaryConditionFilename.c_str(), ios::in);
+	if (!InStream.is_open()) {
+		cerr << ERR << "cannot open " << m_pSimulation->m_strUpwardTemperatureBoundaryConditionFilename << " for input" << endl;
+		return;
+	}
+	string strRec;
+	while (getline(InStream, strRec)) {
+		strRec = strTrim(&strRec);
+		if ((!strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			stringstream string_line(strRec);
+			string token;
+			int j = 0;
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				if (j == 0) m_pSimulation->m_vUpwardTemperatureBoundaryConditionTime.push_back(dValue);
+				if (j == 1) m_pSimulation->m_vUpwardTemperatureBoundaryConditionValue.push_back(dValue);
+				j++;
+			}
+		}
+	}
+}
+
+//======================================================================================================================
+//! Leer archivo de condición de frontera aguas abajo para temperatura
+//======================================================================================================================
+void CDataReader::bReadDownwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation) {
+	// Create an object
+	ifstream InStream;
+
+	InStream.open(m_pSimulation->m_strDownwardTemperatureBoundaryConditionFilename.c_str(), ios::in);
+	if (!InStream.is_open()) {
+		cerr << ERR << "cannot open " << m_pSimulation->m_strDownwardTemperatureBoundaryConditionFilename << " for input" << endl;
+		return;
+	}
+	string strRec;
+	while (getline(InStream, strRec)) {
+		strRec = strTrim(&strRec);
+		if ((!strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			stringstream string_line(strRec);
+			string token;
+			int j = 0;
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				if (j == 0) m_pSimulation->m_vDownwardTemperatureBoundaryConditionTime.push_back(dValue);
+				if (j == 1) m_pSimulation->m_vDownwardTemperatureBoundaryConditionValue.push_back(dValue);
+				j++;
+			}
+		}
+	}
 }
 
 //======================================================================================================================
@@ -622,6 +666,42 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 				}
 			}
 			m_pSimulation->hydrographs[j].m_nNearestCrossSectionNo = cs_node;
+		}
+	}
+}
+
+//======================================================================================================================
+//! Leer archivo único de forzamiento de heat flux (Tair, humedad relativa, viento)
+//======================================================================================================================
+void CDataReader::bReadHeatFluxFile(CSimulation* m_pSimulation) {
+	if (m_pSimulation->m_strHeatFluxFile.empty()) return;
+	std::ifstream InStream(m_pSimulation->m_strHeatFluxFile.c_str(), std::ios::in);
+	if (!InStream.is_open()) {
+		std::cerr << ERR << "cannot open " << m_pSimulation->m_strHeatFluxFile << " for input" << std::endl;
+		return;
+	}
+	std::string strRec;
+	while (getline(InStream, strRec)) {
+		strRec = strTrim(&strRec);
+		if ((!strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			std::stringstream string_line(strRec);
+			std::string token;
+			int j = 0;
+			double time = 0.0, tair = 0.0, rh = 0.0, wind = 0.0;
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				if (j == 0) time = dValue;
+				if (j == 1) tair = dValue;
+				if (j == 2) rh = dValue;
+				if (j == 3) wind = dValue;
+				j++;
+			}
+			if (j >= 4) {
+				m_pSimulation->m_vHeatFluxTime.push_back(time);
+				m_pSimulation->m_vHeatFluxAirTemp.push_back(tair);
+				m_pSimulation->m_vHeatFluxRelHumidity.push_back(rh);
+				m_pSimulation->m_vHeatFluxWind.push_back(wind);
+			}
 		}
 	}
 }

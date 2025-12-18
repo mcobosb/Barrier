@@ -450,6 +450,19 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     if (m_nDownwardEstuarineCondition > 1) {
         CDataReader::bReadDownwardBoundaryConditionFile(this);
     }
+    // === Temperatura: Condiciones de frontera y forzamiento ===
+    if (m_bDoWaterTemperature) {
+        if (m_nUpwardTemperatureCondition > 1) {
+            CDataReader::bReadUpwardTemperatureBoundaryConditionFile(this);
+        }
+        if (m_nDownwardTemperatureCondition > 1) {
+            CDataReader::bReadDownwardTemperatureBoundaryConditionFile(this);
+        }
+        // Forzamiento: heat_flux_file (Tair, humedad relativa, viento)
+        if (!m_strHeatFluxFile.empty()) {
+            CDataReader::bReadHeatFluxFile(this);
+        }
+    }
     if (m_bDoSedimentTransport) {
         reader.bReadAlongChannelSedimentsFile(this);
     }
@@ -525,6 +538,11 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         //==============================================================================================================
         //! STEP 01: Compute the predictor
+        // === Flujos radiativos y evolución de temperatura ===
+        if (m_bDoWaterTemperature) {
+            calculateRadiativeFluxes();
+            calculate_temperature();
+        }
         //==============================================================================================================
 
         // Compute the sediment transport
@@ -2607,6 +2625,114 @@ void CSimulation::calculate_salinity_gradient()
     }
 }
 
+//======================================================================================================================
+//! Calcular flujos radiativos netos (Qsw, Qlw, Qnet) para cada sección transversal
+//======================================================================================================================
+void CSimulation::calculateRadiativeFluxes() {
+    // Interpolación lineal de forzamientos radiativos y temperatura del aire
+    constexpr double sigma = 5.67e-8; // Constante Stefan-Boltzmann (W/m2/K4)
+    constexpr double alpha = 0.07;     // Albedo típico agua (ajustable)
+    constexpr double emissivity = 0.97; // Emisividad superficial agua
+    constexpr double rho_a = 1.225;    // Densidad aire (kg/m3)
+    constexpr double c_pa = 1005.0;    // Calor específico aire (J/kg/K)
+    constexpr double L_v = 2.45e6;     // Calor latente vaporización (J/kg)
+    for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+        // === Variables meteorológicas ===
+        double Tair = (!m_vHeatFluxTime.empty()) ? linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxAirTemp) : 0.0;
+        double rh = (!m_vHeatFluxTime.empty()) ? linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxRelHumidity) : 0.0;
+        double wind = (!m_vHeatFluxTime.empty()) ? linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxWind) : 0.0;
+        double Twater = m_vCrossSectionTemperature[i];
+
+        // === Qsw: Net Shortwave Radiation ===
+        double Qsw_in = 0.0; // Si tienes radiación SW, implementa aquí
+        double Qsw = Qsw_in * (1.0 - alpha);
+
+        // === Qlw: Net Longwave Radiation ===
+        double Qlw_in = 0.0; // Si tienes radiación LW, implementa aquí
+        double Qlw_incid = Qlw_in;
+        if (Qlw_in == 0.0) {
+            double Tair_K = Tair + 273.15;
+            Qlw_incid = emissivity * sigma * pow(Tair_K, 4);
+        }
+        double Qlw_emit = emissivity * sigma * pow(Twater + 273.15, 4);
+        double Qlw = Qlw_incid - Qlw_emit;
+
+        // === Sensible Heat Flux (Q_S) ===
+        double Qsensible = rho_a * c_pa * m_dHeatFlux_CS * wind * (Twater - Tair);
+
+        // === Latent Heat Flux (Q_L) ===
+        // Usar humedad relativa para q_air
+        double esat_water = 6.112 * exp((17.62 * Twater) / (243.12 + Twater)); // hPa
+        double esat_air = 6.112 * exp((17.62 * Tair) / (243.12 + Tair));
+        double qsat_water = 0.622 * esat_water / 1013.25; // presión atm estándar
+        double q_air = rh * 0.01 * 0.622 * esat_air / 1013.25; // humedad relativa en %
+        double Qlatente = rho_a * L_v * m_dHeatFlux_CL * wind * (qsat_water - q_air);
+
+        // === Qnet ===
+        double Qnet = Qsw + Qlw + Qsensible + Qlatente;
+        // Guardar Qnet para uso en la ecuación de temperatura
+        if (m_vCrossSectionTemperatureASt.size() != m_nCrossSectionsNumber) m_vCrossSectionTemperatureASt.resize(m_nCrossSectionsNumber, 0.0);
+        m_vCrossSectionTemperatureASt[i] = Qnet;
+    }
+}
+
+
+//======================================================================================================================
+//! Evolución de la temperatura: advección-difusión + balance de energía superficial
+//======================================================================================================================
+void CSimulation::calculate_temperature()
+{
+    // Constantes físicas
+    constexpr double rho = 1000.0; // Densidad del agua (kg/m³)
+    constexpr double Cp = 4186.0;   // Calor específico (J/kg/K)
+    const int N = m_nCrossSectionsNumber;
+    std::vector<double> T_new(N, 0.0);
+
+    // Paso explícito simple (puede mejorarse con TVD, etc.)
+    for (int i = 1; i < N-1; ++i) {
+        // Término advectivo (upwind simple)
+        double adv = 0.0;
+        double u = m_vCrossSectionU[i];
+        double dx = m_vCrossSectionDX[i];
+        if (u > 0) {
+            adv = -u * (m_vCrossSectionTemperature[i] - m_vCrossSectionTemperature[i-1]) / dx;
+        } else {
+            adv = -u * (m_vCrossSectionTemperature[i+1] - m_vCrossSectionTemperature[i]) / dx;
+        }
+
+        // Término difusivo (central)
+        double diff = m_dThermalDispersion * (m_vCrossSectionTemperature[i+1] - 2*m_vCrossSectionTemperature[i] + m_vCrossSectionTemperature[i-1]) / (dx*dx);
+
+        // Término fuente radiativo (balance de energía)
+        double Qnet = m_vCrossSectionTemperatureASt[i];
+
+        // Ecuación de evolución explícita
+        double dTdt = adv + diff + Qnet / (rho * Cp * m_vCrossSectionWaterDepth[i]);
+        T_new[i] = m_vCrossSectionTemperature[i] + m_dTimestep * dTdt;
+    }
+
+
+    // === Condición de frontera aguas arriba ===
+    if (m_nUpwardTemperatureCondition == 1) { // Dirichlet (valor fijo)
+        T_new[0] = m_dUpwardTemperatureBoundaryValue;
+    } else if (m_nUpwardTemperatureCondition == 2 && !m_vUpwardTemperatureBoundaryConditionTime.empty()) { // Serie temporal
+        T_new[0] = linearInterpolation1d(m_dCurrentTime, m_vUpwardTemperatureBoundaryConditionTime, m_vUpwardTemperatureBoundaryConditionValue);
+    } else { // Neumann (flujo nulo)
+        T_new[0] = T_new[1];
+    }
+
+    // === Condición de frontera aguas abajo ===
+    if (m_nDownwardTemperatureCondition == 1) { // Dirichlet (valor fijo)
+        T_new[N-1] = m_dDownwardTemperatureBoundaryValue;
+    } else if (m_nDownwardTemperatureCondition == 2 && !m_vDownwardTemperatureBoundaryConditionTime.empty()) { // Serie temporal
+        T_new[N-1] = linearInterpolation1d(m_dCurrentTime, m_vDownwardTemperatureBoundaryConditionTime, m_vDownwardTemperatureBoundaryConditionValue);
+    } else { // Neumann (flujo nulo)
+        T_new[N-1] = T_new[N-2];
+    }
+
+    m_vCrossSectionTemperature = T_new;
+}
+
 
 //===============================================================================================================================
 //! Compute the bedload and suspended sediment transport using the van Rijn equation(van Rijn, 1992)
@@ -2734,12 +2860,20 @@ void CSimulation::calculate_sediment_transport()
 //! Compute the density given the salinity and sediment concentration
 //===============================================================================================================================
 void CSimulation::calculate_density()
-{   
+{
+    // Parámetros betaS y betaT
+    double betaS = dGetBetaSalinityConstant();
+    double betaT = dGetBetaTemperatureConstant();
+    if (bGetDoBetaCoefficient() && m_dBetaTemperatureConstant > 0.0) {
+        betaT = m_dBetaTemperatureConstant;
+    }
     for (int i = 0; i < m_nCrossSectionsNumber; i++)
     {
-        double rhow = 1000 * (1 + dGetBetaSalinityConstant() * m_vCrossSectionSalinity[i]);
+        double S = m_vCrossSectionSalinity[i];
+        double T = m_vCrossSectionTemperature[i];
+        double rhow = 1000.0 * (1.0 + betaS * S - betaT * (T - 4.0));
         if (m_bDoSedimentTransport) {
-            m_vCrossSectionRho[i] = rhow + (1 - rhow/1000/m_vCrossSectionRhos[i])*m_vCrossSectionQt[i]/(m_vCrossSectionArea[i]*m_vCrossSectionDX[i])*m_dTimestep;
+            m_vCrossSectionRho[i] = rhow + (1 - rhow/1000.0/m_vCrossSectionRhos[i])*m_vCrossSectionQt[i]/(m_vCrossSectionArea[i]*m_vCrossSectionDX[i])*m_dTimestep;
         }
         else {
             m_vCrossSectionRho[i] = rhow;
