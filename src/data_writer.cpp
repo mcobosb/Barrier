@@ -102,6 +102,10 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["S"]["longname"] = "salinity";
     m_mVariableDefinitions["S"]["units"] = "psu";
 
+    m_mVariableDefinitions["T"]["description"] = "Cross-sectional averaged water temperature";
+    m_mVariableDefinitions["T"]["longname"] = "water temperature";
+    m_mVariableDefinitions["T"]["units"] = "degC";
+
     m_mVariableDefinitions["Qb"]["description"] = "Bed-load sediment transport";
     m_mVariableDefinitions["Qb"]["longname"] = "bed-load sediment transport";
     m_mVariableDefinitions["Qb"]["units"] = "m3/s";

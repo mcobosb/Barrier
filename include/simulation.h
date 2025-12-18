@@ -1,4 +1,3 @@
-
 /*!
 *
 * \class CSimulation
@@ -53,9 +52,6 @@ public:
 
         //! Nombre del archivo de condición inicial de temperatura (si aplica)
         std::string m_strInitialTemperatureConditionFilename;
-
-        //! Vector de temperatura por sección transversal (°C)
-        std::vector<double> m_vCrossSectionTemperature;
 
         //! Término temporal de advección-difusión de temperatura (ASt)
         std::vector<double> m_vCrossSectionTemperatureASt;
@@ -382,6 +378,9 @@ public:
     //! Cross-section water depth
     vector<double> m_vCrossSectionWaterDepth;
 
+    //! Cross-section water depth (predicted, for corrector/baroclinic coupling)
+    vector<double> m_vPredictedCrossSectionWaterDepth;
+
     //! Cross-section water elevation (over the mean water level)
     vector<double> m_vCrossSectionWaterElevation;
 
@@ -399,8 +398,12 @@ public:
     //! Cross-section DhDx
     vector<double> m_vCrossSectionDhDx;
 
-    //! Cross-section water densities
-    vector<double> m_vCrossSectionRho;
+    //! Cross-section water densities (estado actual)
+    vector<double> m_vCrossSectionDensity;
+    //! Cross-section water densities (predicho, para corrector/baroclínico)
+    vector<double> m_vPredictedCrossSectionDensity;
+    //! Gradiente de densidad dRho/dx (baroclínico)
+    vector<double> m_vCrossSectionDRhoDx;
 
     //! Cross-section left river bank locations
     vector<double> m_vCrossSectionLeftRBLocation;
@@ -426,9 +429,24 @@ public:
     //! Cross-section perturbation water velocities
     vector<double> m_vCrossSectionC;
 
-    //! Cross-section salinity
+    //! Vector de salinidad por sección transversal (g/kg o PSU)
     vector<double> m_vCrossSectionSalinity;
 
+    //! Vector de temperatura por sección transversal (°C)
+    vector<double> m_vCrossSectionTemperature;
+
+    //! Predicted Cross-section salinity
+    vector<double> m_vPredictedCrossSectionS;
+
+    // Corrected Cross-section salinity
+    vector<double> m_vCorrectedCrossSectionS;
+    
+    // Predicted Cross-section temperature
+    vector<double> m_vPredictedCrossSectionT;
+
+    // Corrected Cross-section temperature
+    vector<double> m_vCorrectedCrossSectionT;
+    
     //! Cross-section salinity temporal gradient (ASt term)
     vector<double> m_vCrossSectionSalinityASt;
 
@@ -572,7 +590,12 @@ public:
     //! Method for setting equation of sediment transport
     void dSetSedimentDensity(double sedimentDensity);
 
-    //! Method for getting the compute water  salinity
+    //! Method for getting the compute water temperature
+    [[nodiscard]] bool bGetDoWaterTemperature() const;
+    //! Method for setting the compute water temperature
+    void bSetDoWaterTemperature(bool doWaterTemperature);
+
+    //! Method for getting the compute water salinity
     [[nodiscard]] bool bGetDoWaterSalinity() const;
     //! Method for setting the compute water salinity
     void bSetDoWaterSalinity(bool doWaterSalinity);
@@ -707,7 +730,7 @@ public:
     void initializeVectors();
     void calculateBedSlope();
     void calculateAlongEstuaryInitialConditions();
-    std::string generateOutputFileName() const;
+    string generateOutputFileName() const;
     static double linearInterpolation1d(double dValue, const vector<double> &vX, const vector<double> &vY);
     void calculateHydraulicParameters();
     void calculateRiverBankUTMCoordinates();
@@ -730,12 +753,19 @@ public:
     void updateCorrectorBoundaries();
     void updateBoundaries();
     void mergePredictorCorrector();
+    void mergeTracerPredictorCorrector();
     void smoothSolution();
     void smoothBathymetry();
+    // Predictor-corrector para salinidad y temperatura
+    void calculate_salinity(); // Wrapper legacy (llama a predictor/corrector según m_nPredictor)
+    void calculate_salinity_predictor();
+    void calculate_salinity_corrector();
     void calculate_salinity_gradient();
-    void calculate_salinity();
+
     void calculateRadiativeFluxes();
-    void calculate_temperature();
+    void calculate_temperature(); // Wrapper legacy (llama a predictor/corrector según m_nPredictor)
+    void calculate_temperature_predictor();
+    void calculate_temperature_corrector();
 
     void AnnounceProgress();
 
@@ -779,14 +809,14 @@ public:
     }
 
     //! Get simulation start date and time as formatted string (ISO 8601)
-    std::string getSimulationStartDateTimeString() const {
-        std::ostringstream oss;
-        oss << std::setfill('0') << std::setw(4) << m_nSimStartYear << "-"
-            << std::setw(2) << m_nSimStartMonth << "-"
-            << std::setw(2) << m_nSimStartDay << " "
-            << std::setw(2) << m_nSimStartHour << ":"
-            << std::setw(2) << m_nSimStartMin << ":"
-            << std::setw(2) << m_nSimStartSec;
+    string getSimulationStartDateTimeString() const {
+        ostringstream oss;
+        oss << setfill('0') << setw(4) << m_nSimStartYear << "-"
+            << setw(2) << m_nSimStartMonth << "-"
+            << setw(2) << m_nSimStartDay << " "
+            << setw(2) << m_nSimStartHour << ":"
+            << setw(2) << m_nSimStartMin << ":"
+            << setw(2) << m_nSimStartSec;
         return oss.str();
     }
 

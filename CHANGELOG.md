@@ -1,4 +1,23 @@
-## [0.8.0] - 2025-12-18
+## [0.9.0] - 2025-12-18
+
+### Improvements and Fixes
+- **Salinity transport correction:**
+  - Restored explicit advection and diffusion calculation for salinity in the predictor-corrector scheme.
+  - Salinity now evolves physically with advective-diffusive transport.
+- **Temperature output:**
+  - Added the `temperature` variable as NetCDF output, with full metadata and writer support.
+- **Refactor and robustness:**
+  - Cleaned up redundant vector initializations.
+  - Minor improvements in boundary condition handling and predictor-corrector coupling.
+- **Validation:**
+  - Confirmed correct coupling of S-T-hydrodynamics and output of all relevant variables.
+
+### Notes
+- The model is now fully coupled and correctly exports both salinity and temperature.
+- It is recommended to review the new NetCDF files to validate physical results.
+
+
+## [0.8.0] - 2025-12-17
 
 ### Major Features
 - **Temperature Transport Module:**

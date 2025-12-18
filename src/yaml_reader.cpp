@@ -115,7 +115,7 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimula
             std::string varStr = node["output_variables"].as<std::string>();
             if (varStr == "full") {
                 m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", 
-                                           "eta", "level", "rho", "U", "c", "S", 
+                                           "eta", "level", "rho", "U", "c", "S", "T", 
                                            "Qb", "Qs", "Qt", "xl", "xr", "xl_utm_x", 
                                            "xl_utm_y", "xr_utm_x", "xr_utm_y"};
             }
@@ -324,7 +324,7 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
             }
             // Leer beta_temperature o betaT si está presente
             if (temperature["beta"]) {
-                m_pSimulation->dSetBetaTemperatureConstant(temperature["beta_temperature"].as<double>());
+                m_pSimulation->dSetBetaTemperatureConstant(temperature["beta"].as<double>());
             }
 
             if (temperature["boundary_conditions"]) {

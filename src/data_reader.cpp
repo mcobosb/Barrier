@@ -1091,7 +1091,7 @@ void CDataReader::bRestoreStateFromNetCDF(CSimulation* m_pSimulation, const std:
 	restore_var("U", m_pSimulation->m_vCrossSectionU);
 	restore_var("B", m_pSimulation->m_vCrossSectionWidth);
 	restore_var("Rh", m_pSimulation->m_vCrossSectionHydraulicRadius);
-	restore_var("rho", m_pSimulation->m_vCrossSectionRho);
+	restore_var("rho", m_pSimulation->m_vCrossSectionDensity);
 	restore_var("S", m_pSimulation->m_vCrossSectionSalinity);
 	restore_var("c", m_pSimulation->m_vCrossSectionC);
 	restore_var("Qs", m_pSimulation->m_vCrossSectionQs);
