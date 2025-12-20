@@ -1,3 +1,16 @@
+## [0.10.0] - 2025-12-20
+
+### Added
+- **Manning number as a function of eta:**
+  - The model now supports making the Manning number dependent on eta (water surface elevation), allowing for more flexible hydraulic parameterization per cross-section.
+
+### Changed
+- **Refactor of width gradient threshold calculation:**
+  - Refactored `CCrossSection::calculateEtaMaxWidthGradient` to take and modify a `double&` instead of a `std::vector<double>&`.
+  - Removed the unused `sectionIdx` parameter from the function and all calls.
+  - Corrected initialization of `m_vEtaWidthGradientThreshold` to be a `std::vector<double>` with one value per section.
+  - Simplified the simulation loop call to compute the width gradient threshold per section.
+
 ## [0.9.0] - 2025-12-18
 
 ### Improvements and Fixes

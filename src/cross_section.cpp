@@ -30,6 +30,8 @@ using std::to_string;
 #include <algorithm>
 using std::find;
 
+#include <cmath>
+
 #include <cross_section.h>
 
 //===============================================================================================================================
@@ -259,4 +261,26 @@ void CCrossSection::calculateI1() {
         
         m_vI1[i] = I1;
     }
+}
+
+
+// Calcula la primera eta > maxAstronomicalTide donde dB/deta > threshold
+void CCrossSection::calculateEtaMaxWidthGradient(double maxAstronomicalTide, double threshold, double& etaWidthGradientThreshold) const {
+    double etaMaxWidthGradient = 0.0;
+    if (m_vWaterDepth.size() < 2 || m_vWidth.size() < 2) {
+        etaWidthGradientThreshold = 0.0;
+        return;
+    }
+    for (size_t i = 1; i < m_vWaterDepth.size(); ++i) {
+        double deta = m_vWaterDepth[i] - m_vWaterDepth[i-1];
+        if (std::fabs(deta) < 1e-8) continue;
+        double dB = m_vWidth[i] - m_vWidth[i-1];
+        double grad = dB / deta;
+        double etaMid = 0.5 * (m_vWaterDepth[i] + m_vWaterDepth[i-1]);
+        if (etaMid > maxAstronomicalTide && grad > threshold) {
+            etaMaxWidthGradient = etaMid;
+            break;
+        }
+    }
+    etaWidthGradientThreshold = etaMaxWidthGradient;
 }

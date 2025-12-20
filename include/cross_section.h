@@ -139,5 +139,11 @@ class CCrossSection {
         
         //! Calculate I1 pressure integral for each elevation
         void calculateI1();
+        // Calcula la primera eta > m_dMaxAstronomicalTide donde dB/deta > threshold
+        // Calcula la primera eta > maxAstronomicalTide donde dB/deta > threshold y la guarda en el vector por sección
+        void calculateEtaMaxWidthGradient(double maxAstronomicalTide, double threshold, double& etaWidthGradientThreshold) const;
+
+        // Vector para guardar la elevación de gradiente máximo por sección (opcional, para uso externo)
+        static std::vector<double> vEtaMaxWidthGradient;
 };
 #endif

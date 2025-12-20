@@ -295,13 +295,28 @@ void CYAMLReader::parseNumericsSection(const YAML::Node& node, CSimulation* m_pS
     if (node["beta_coefficient"]) {
         m_pSimulation->bSetDoBetaCoefficient(node["beta_coefficient"].as<bool>());
     }
-    
+
     if (node["dry_bed"]) {
         m_pSimulation->bSetDoDryBed(node["dry_bed"].as<bool>());
     }
-    
+
     if (node["murillo_condition"]) {
         m_pSimulation->bSetDoMurilloCondition(node["murillo_condition"].as<bool>());
+    }
+
+    // Manning dependence on water level
+    if (node["manning_eta"]) {
+        m_pSimulation->bSetManningDependsOnLevel(node["manning_eta"].as<bool>());
+    }
+
+    // Leer manning_db como entero positivo
+    if (node["manning_db"]) {
+        int val = node["manning_db"].as<int>();
+        if (val > 0) {
+            m_nThresholddBdeta = val;
+        } else {
+            std::cerr << "El valor de manning_db debe ser un entero positivo. Se ignora." << std::endl;
+        }
     }
 }
 

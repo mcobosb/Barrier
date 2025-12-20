@@ -41,6 +41,7 @@ CSimulation::CSimulation() {
     m_dCurrentTime = 0.0;
 
     m_bDoWaterTemperature = false;
+    m_bManningDependsOnLevel = false;
 
     m_nPredictor = -1;
     m_nTimeLogId = 0;
@@ -79,7 +80,11 @@ CSimulation::CSimulation() {
     m_dCourantNumber = 0.0;              
     m_nEquationMcCormackLimiterFlux = 0; 
     m_nPsiFormula = 0;                   
-    m_dDeltaValue = 0.0;                 
+    m_dDeltaValue = 0.0;   
+    
+    // Variables miembro para almacenar los valores calculados
+    m_dMaxAstronomicalTide = 0.0;
+    m_vEtaWidthGradientThreshold.clear();
 
     // ✅ FECHA DE INICIO
     m_nSimStartSec = 0;
@@ -445,12 +450,15 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         m_bReturnError = true;
         return;
     }
-    
+
     // Transfer file paths to reader and simulation
     reader.m_strAlongChannelDataFilename = yamlReader.m_strAlongChannelDataFilename;
     reader.m_strCrossSectionsFilename = yamlReader.m_strCrossSectionGeometryFilename;
     reader.m_strSedimentPropertiesFilename = yamlReader.m_strSedimentPropertiesFilename;
     reader.m_strHydroFilename = yamlReader.m_strHydrographsFilename;
+
+    // Transferir el threshold de gradiente desde yamlReader
+    m_nThresholddBdeta = yamlReader.m_nThresholddBdeta;
     
     // Read geometry and forcing files
     CDataReader::bOpenLogFile(this);
@@ -510,6 +518,11 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     //! Calcular UTM de river banks siempre (no sobrescribe estado restaurado)
     calculateRiverBankUTMCoordinates();
+
+    // Calcular m_vEtaWidthGradientThreshold para todas las secciones
+    for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+        estuary[i].calculateEtaMaxWidthGradient(m_dMaxAstronomicalTide, m_nThresholddBdeta, m_vEtaWidthGradientThreshold[i]);
+    }
 
     // ✅ CON esto:
     std::string m_strOutFileName = generateOutputFileName();
@@ -682,7 +695,9 @@ void CSimulation::initializeVectors()
     m_vCrossSectionSalinityASt =
     m_vCrossSectionTemperatureASt = 
     m_vCrossSectionDRhoDx =
-    m_vPredictedCrossSectionDensity= vZeros;
+    m_vPredictedCrossSectionDensity = vZeros;
+
+    m_vEtaWidthGradientThreshold.resize(m_nCrossSectionsNumber, 0.0);
 
     const vector<double> vRhos(static_cast<size_t>(nCrossSectionsNumber), FRESH_WATER_DENSITY);
     m_vCrossSectionDensity = vRhos;
@@ -1378,9 +1393,14 @@ void CSimulation::calculate_GS_A_terms() {
             // gAS0 = g * A * S0 (con pendiente unilateral apropiada)
             m_vCrossSection_gAS0[i] = G * dMeanArea * S0_to_use;
             
-            // ✅ CORRECTO: Pendiente de fricción según Manning
+            // ✅ CORRECTO: Pendiente de fricción según Manning dependiente del nivel
+            double neta = 1.0;
+            if (m_bManningDependsOnLevel) {
+                // Actualizar neta según el nivel actual usando n_eta
+                neta = pow(n_eta(m_vPredictedCrossSectionWaterDepth[i], m_dMaxAstronomicalTide, m_vEtaWidthGradientThreshold[i]), 2.0);
+            }
             if (dMeanArea > DRY_AREA && dMeanHydraulicRadius > 1e-6) {
-                m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * 
+                m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * neta*
                                                  dMeanQ * fabs(dMeanQ) / 
                                                  (dMeanArea * dMeanArea * pow(dMeanHydraulicRadius, 4.0/3.0));
                 m_vCrossSection_gASf[i] = G * dMeanArea * m_vCrossSectionFrictionSlope[i];
@@ -1397,8 +1417,12 @@ void CSimulation::calculate_GS_A_terms() {
             m_vCrossSection_gAS0[i] = G * m_vCrossSectionArea[i] * m_vCrossSectionBedSlope[i];
             
             if (m_nPredictor == 1) {
+                double neta = 1.0;
+                if (m_bManningDependsOnLevel) {
+                    neta = pow(n_eta(m_vPredictedCrossSectionWaterDepth[i], m_dMaxAstronomicalTide, m_vEtaWidthGradientThreshold[i]), 2.0);
+                }
                 if (m_vCrossSectionArea[i] > DRY_AREA && m_vCrossSectionHydraulicRadius[i] > 1e-6) {
-                    m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * 
+                    m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * neta*
                                                      m_vCrossSectionQ[i] * fabs(m_vCrossSectionQ[i]) / 
                                                      (m_vCrossSectionArea[i] * m_vCrossSectionArea[i] * pow(m_vCrossSectionHydraulicRadius[i], 4.0/3.0));
                     m_vCrossSection_gASf[i] = G * m_vCrossSectionArea[i] * m_vCrossSectionFrictionSlope[i];
@@ -1408,8 +1432,12 @@ void CSimulation::calculate_GS_A_terms() {
                 }
             }
             else {
+                double neta = 1.0;
+                if (m_bManningDependsOnLevel) {
+                    neta = pow(n_eta(m_vPredictedCrossSectionWaterDepth[i], m_dMaxAstronomicalTide, m_vEtaWidthGradientThreshold[i]), 2.0);
+                }
                 if (m_vPredictedCrossSectionArea[i] > DRY_AREA && m_vCrossSectionHydraulicRadius[i] > 1e-6) {
-                    m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * 
+                    m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * neta *
                                                      m_vPredictedCrossSectionQ[i] * fabs(m_vPredictedCrossSectionQ[i]) / 
                                                      (m_vPredictedCrossSectionArea[i] * m_vPredictedCrossSectionArea[i] * pow(m_vCrossSectionHydraulicRadius[i], 4.0/3.0));
                     m_vCrossSection_gASf[i] = G * m_vPredictedCrossSectionArea[i] * m_vCrossSectionFrictionSlope[i];
@@ -2496,6 +2524,34 @@ void CSimulation::smoothSolution() {
                                      (m_vCrossSectionArea[i] + 1e-10);
         }
     }
+}
+
+// Calcula n(eta) según reglas de nivel y gradiente de B
+double CSimulation::n_eta(double eta, double maxTide, double etaMaxGrad) {
+    if (eta <= maxTide) return 1.0;
+    if (eta >= etaMaxGrad) return 2.0;
+    if (etaMaxGrad - maxTide < 1e-8) return 2.0;
+    return 1.0 + (eta - maxTide) / (etaMaxGrad - maxTide);
+}
+
+
+// Lee tides.csv y devuelve el nivel máximo de marea astronómica
+double CSimulation::getMaxAstronomicalTide(const std::string& tidesFile) {
+    std::ifstream file(tidesFile);
+    if (!file.is_open()) return 0.0;
+    double maxTide = -1e9;
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        size_t comma = line.find(',');
+        if (comma == std::string::npos) continue;
+        try {
+            double value = std::stod(line.substr(comma + 1));
+            if (value > maxTide) maxTide = value;
+        } catch (...) { continue; }
+    }
+    file.close();
+    return maxTide;
 }
 
 //======================================================================================================================

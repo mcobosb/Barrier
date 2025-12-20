@@ -45,69 +45,75 @@ using std::ofstream;
 class CSimulation
 {
 public:
+    //! If true, Manning is calculated as a function of water level
+    bool m_bManningDependsOnLevel = false;
+    //! Getter for Manning level-dependence
+    [[nodiscard]] bool bGetManningDependsOnLevel() const { return m_bManningDependsOnLevel; }
+    //! Setter for Manning level-dependence
+    void bSetManningDependsOnLevel(bool bValue) { m_bManningDependsOnLevel = bValue; }
 
-        // === Temperatura y balance de energía ===
-        //! ¿Calcular temperatura del agua?
-        bool m_bDoWaterTemperature{};
+    // === Temperatura y balance de energía ===
+    //! ¿Calcular temperatura del agua?
+    bool m_bDoWaterTemperature{};
 
-        //! Nombre del archivo de condición inicial de temperatura (si aplica)
-        std::string m_strInitialTemperatureConditionFilename;
+    //! Nombre del archivo de condición inicial de temperatura (si aplica)
+    std::string m_strInitialTemperatureConditionFilename;
 
-        //! Término temporal de advección-difusión de temperatura (ASt)
-        std::vector<double> m_vCrossSectionTemperatureASt;
+    //! Término temporal de advección-difusión de temperatura (ASt)
+    std::vector<double> m_vCrossSectionTemperatureASt;
 
-        //! Tipo de condición de frontera aguas arriba para temperatura (0=libre, 1=impuesta, 2=serie temporal)
-        int m_nUpwardTemperatureCondition{};
+    //! Tipo de condición de frontera aguas arriba para temperatura (0=libre, 1=impuesta, 2=serie temporal)
+    int m_nUpwardTemperatureCondition{};
 
-        //! Tipo de condición de frontera aguas abajo para temperatura
-        int m_nDownwardTemperatureCondition{};
+    //! Tipo de condición de frontera aguas abajo para temperatura
+    int m_nDownwardTemperatureCondition{};
 
-        //! Archivo de condición de frontera aguas arriba (serie temporal)
-        std::string m_strUpwardTemperatureBoundaryConditionFilename;
+    //! Archivo de condición de frontera aguas arriba (serie temporal)
+    std::string m_strUpwardTemperatureBoundaryConditionFilename;
 
-        //! Vector de tiempos de la condición de frontera aguas arriba
-        std::vector<double> m_vUpwardTemperatureBoundaryConditionTime;
+    //! Vector de tiempos de la condición de frontera aguas arriba
+    std::vector<double> m_vUpwardTemperatureBoundaryConditionTime;
 
-        //! Vector de valores de la condición de frontera aguas arriba
-        std::vector<double> m_vUpwardTemperatureBoundaryConditionValue;
+    //! Vector de valores de la condición de frontera aguas arriba
+    std::vector<double> m_vUpwardTemperatureBoundaryConditionValue;
 
-        //! Valor de temperatura aguas arriba (si es constante)
-        double m_dUpwardTemperatureBoundaryValue{};
+    //! Valor de temperatura aguas arriba (si es constante)
+    double m_dUpwardTemperatureBoundaryValue{};
 
-        //! Archivo de condición de frontera aguas abajo (serie temporal)
-        std::string m_strDownwardTemperatureBoundaryConditionFilename;
+    //! Archivo de condición de frontera aguas abajo (serie temporal)
+    std::string m_strDownwardTemperatureBoundaryConditionFilename;
 
-        //! Vector de tiempos de la condición de frontera aguas abajo
-        std::vector<double> m_vDownwardTemperatureBoundaryConditionTime;
+    //! Vector de tiempos de la condición de frontera aguas abajo
+    std::vector<double> m_vDownwardTemperatureBoundaryConditionTime;
 
-        //! Vector de valores de la condición de frontera aguas abajo
-        std::vector<double> m_vDownwardTemperatureBoundaryConditionValue;
+    //! Vector de valores de la condición de frontera aguas abajo
+    std::vector<double> m_vDownwardTemperatureBoundaryConditionValue;
 
-        //! Valor de temperatura aguas abajo (si es constante)
-        double m_dDownwardTemperatureBoundaryValue{};
+    //! Valor de temperatura aguas abajo (si es constante)
+    double m_dDownwardTemperatureBoundaryValue{};
 
-        //! Coeficiente de difusión térmica (m²/s)
-        double m_dThermalDispersion{};
+    //! Coeficiente de difusión térmica (m²/s)
+    double m_dThermalDispersion{};
 
-        // === Forzamientos de balance de energía superficial ===
+    // === Forzamientos de balance de energía superficial ===
 
 
-        //! Archivo único de forzamiento de balance de energía superficial (Tair, humedad relativa, viento)
-        std::string m_strHeatFluxFile;
+    //! Archivo único de forzamiento de balance de energía superficial (Tair, humedad relativa, viento)
+    std::string m_strHeatFluxFile;
 
-        //! Coeficiente de transferencia de calor sensible (CS)
-        double m_dHeatFlux_CS{};
+    //! Coeficiente de transferencia de calor sensible (CS)
+    double m_dHeatFlux_CS{};
 
-        //! Coeficiente de transferencia de calor latente (CL)
-        double m_dHeatFlux_CL{};
+    //! Coeficiente de transferencia de calor latente (CL)
+    double m_dHeatFlux_CL{};
 
-        // === Series temporales de forzamiento ===
+    // === Series temporales de forzamiento ===
 
-        //! Tiempos y valores de forzamiento de heat flux (Tair, humedad relativa, viento)
-        std::vector<double> m_vHeatFluxTime;
-        std::vector<double> m_vHeatFluxAirTemp;
-        std::vector<double> m_vHeatFluxRelHumidity;
-        std::vector<double> m_vHeatFluxWind;
+    //! Tiempos y valores de forzamiento de heat flux (Tair, humedad relativa, viento)
+    std::vector<double> m_vHeatFluxTime;
+    std::vector<double> m_vHeatFluxAirTemp;
+    std::vector<double> m_vHeatFluxRelHumidity;
+    std::vector<double> m_vHeatFluxWind;
     // === Opciones para continuar simulación ===
     bool m_bContinueSimulation = false;
     std::string m_strContinueNetcdfPath;
@@ -313,6 +319,13 @@ public:
     bool m_bDoSmoothBathymetry{};
     int m_nBathymetrySmoothingPasses{1};
     double m_dBathymetrySmoothingAlpha{0.25};
+
+        //! Nivel máximo de marea astronómica calculado
+    double m_dMaxAstronomicalTide = 0.0;
+
+    int m_nThresholddBdeta = 0;
+    //! Vector de eta donde se supera el threshold de gradiente de B(eta) por sección
+    vector<double> m_vEtaWidthGradientThreshold;
 
     //! Smooth solution (regularization) during simulation?
     bool m_bDoSmoothSolution{};
@@ -766,6 +779,9 @@ public:
     void calculate_temperature(); // Wrapper legacy (llama a predictor/corrector según m_nPredictor)
     void calculate_temperature_predictor();
     void calculate_temperature_corrector();
+
+    static double n_eta(double eta, double maxTide, double etaMaxGrad);
+    static double getMaxAstronomicalTide(const std::string& tidesFile);
 
     void AnnounceProgress();
 
