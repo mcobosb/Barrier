@@ -38,20 +38,8 @@ bool CYAMLReader::loadConfiguration(const std::string& filepath, CSimulation* si
             parseGeometrySection(config["geometry"]);
         }
         
-        if (config["initial_conditions"]) {
-            parseInitialConditionsSection(config["initial_conditions"], simulation);
-        }
-        
-        if (config["boundary_conditions"]) {
-            parseBoundaryConditionsSection(config["boundary_conditions"], simulation);
-        }
-        
-        if (config["forcing"]) {
-            parseForcingSection(config["forcing"], simulation);
-        }
-        
-        if (config["numerics"]) {
-            parseNumericsSection(config["numerics"], simulation);
+        if (config["hydrodynamics"]) {
+            parseHydrodynamicsSection(config["hydrodynamics"], simulation);
         }
         
         if (config["transport"]) {
@@ -149,16 +137,20 @@ void CYAMLReader::parseGeometrySection(const YAML::Node& node) {
     }
 }
 
-void CYAMLReader::parseInitialConditionsSection(const YAML::Node& node, CSimulation* m_pSimulation) {
-    if (node["type"]) {
-        if (node["type"].IsScalar()) {
+
+void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation* m_pSimulation) {
+    
+    const auto& initial_conditions = node["initial_conditions"];
+    // Initial estuarine condition
+    if (initial_conditions["type"]) {
+        if (initial_conditions["type"].IsScalar()) {
             // Try to parse as integer first
             try {
-                int type = node["type"].as<int>();
+                int type = initial_conditions["type"].as<int>();
                 m_pSimulation->nSetInitialEstuarineCondition(type);
             } catch (...) {
                 // Parse as string
-                std::string type = node["type"].as<std::string>();
+                std::string type = initial_conditions["type"].as<std::string>();
                 if (type == "calm") {
                     m_pSimulation->nSetInitialEstuarineCondition(0);
                 } else if (type == "flow") {
@@ -169,13 +161,11 @@ void CYAMLReader::parseInitialConditionsSection(const YAML::Node& node, CSimulat
             }
         }
     }
-}
 
-void CYAMLReader::parseBoundaryConditionsSection(const YAML::Node& node, CSimulation* m_pSimulation) {
     // Upstream BC
-    // Upstream BC
-    if (node["upstream"]) {
-        const auto& upstream = node["upstream"];
+    const auto& boundary_conditions = node["boundary_conditions"];
+    if (boundary_conditions["upstream"]) {
+        const auto& upstream = boundary_conditions["upstream"];
         if (upstream["type"]) {
             if (upstream["type"].IsScalar()) {
                 try {
@@ -203,8 +193,8 @@ void CYAMLReader::parseBoundaryConditionsSection(const YAML::Node& node, CSimula
         }
     }
     // Downstream BC
-    if (node["downstream"]) {
-        const auto& downstream = node["downstream"];
+    if (boundary_conditions["downstream"]) {
+        const auto& downstream = boundary_conditions["downstream"];
         if (downstream["type"]) {
             if (downstream["type"].IsScalar()) {
                 try {
@@ -232,25 +222,21 @@ void CYAMLReader::parseBoundaryConditionsSection(const YAML::Node& node, CSimula
             }
         }
     }
-}
 
-
-void CYAMLReader::parseForcingSection(const YAML::Node& node, CSimulation* m_pSimulation) {
     // Support both "lateral_inflows" and "tributaries_file" field names
+    const auto& forcing = node["forcing"];
     std::string filename;
-    if (node["lateral_inflows"]) {
-        filename = node["lateral_inflows"].as<std::string>();
-    } else if (node["tributaries_file"]) {
-        filename = node["tributaries_file"].as<std::string>();
+    if (forcing["lateral_inflows"]) {
+        filename = forcing["lateral_inflows"].as<std::string>();
+    } else if (forcing["tributaries_file"]) {
+        filename = forcing["tributaries_file"].as<std::string>();
     }
     
     if (!filename.empty()) {
         m_strHydrographsFilename = m_strInputPath + filename;
         m_pSimulation->m_bHydroFile = true;
     }
-}
-
-void CYAMLReader::parseNumericsSection(const YAML::Node& node, CSimulation* m_pSimulation) {
+    
     // Courant number
     if (node["courant_number"]) {
         m_pSimulation->dSetCourantNumber(node["courant_number"].as<double>());

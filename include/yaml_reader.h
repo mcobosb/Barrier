@@ -37,17 +37,8 @@ private:
     //! Parse geometry section  
     void parseGeometrySection(const YAML::Node& node);
     
-    //! Parse initial conditions section
-    void parseInitialConditionsSection(const YAML::Node& node, CSimulation* sim);
-    
-    //! Parse boundary conditions section
-    void parseBoundaryConditionsSection(const YAML::Node& node, CSimulation* sim);
-    
-    //! Parse forcing section
-    void parseForcingSection(const YAML::Node& node, CSimulation* sim);
-    
-    //! Parse numerics section
-    void parseNumericsSection(const YAML::Node& node, CSimulation* sim);
+    //! Parse hydrodynamics section
+    void parseHydrodynamicsSection(const YAML::Node& node, CSimulation* sim);
     
     //! Parse transport section
     void parseTransportSection(const YAML::Node& node, CSimulation* sim);
