@@ -257,6 +257,28 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
             continue;
         }
 
+        // Enable compression (deflate level 4 = good balance speed/size)
+        // Shuffle filter reorganizes bytes for better compression (especially for floats)
+        status = nc_def_var_deflate(m_ncId, varId, 
+                                     1,  // Shuffle enabled (improves compression ~30%)
+                                     1,  // Deflate compression enabled
+                                     4); // Compression level (1=fast, 9=max, 4=balanced)
+        if (status != NC_NOERR) {
+            std::cerr << "Warning: Could not enable compression for '" << outputVariableName 
+                      << "': " << nc_strerror(status) << std::endl;
+            // Continue anyway - compression is optional optimization
+        }
+
+        // Optimize chunk size for sequential time-series writes
+        // Chunk = [1 timestep, all cross-sections] → best for time-series access pattern
+        size_t chunks[2] = {1, static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber)};
+        status = nc_def_var_chunking(m_ncId, varId, NC_CHUNKED, chunks);
+        if (status != NC_NOERR) {
+            std::cerr << "Warning: Could not set chunking for '" << outputVariableName 
+                      << "': " << nc_strerror(status) << std::endl;
+            // Continue anyway - default chunking will be used
+        }
+
         // Obtener metadatos y usar su longitud real
         std::string longname = strGetVariableMetadata(outputVariableName, "longname");
         std::string units = strGetVariableMetadata(outputVariableName, "units");

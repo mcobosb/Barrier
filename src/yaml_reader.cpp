@@ -111,7 +111,8 @@ bool CYAMLReader::loadConfiguration(const std::string& filepath, CSimulation* si
  * - name: Output file basename (generates .nc and .log files)
  * - log_level: Detail level (0=minimal, 1=normal, 2=debug/all timesteps)
  * - start_date: ISO 8601 format "YYYY-MM-DDTHH:MM:SS"
- * - duration: Simulation length (seconds)
+ * - duration: Simulation length in seconds (mutually exclusive with end_date)
+ * - end_date: ISO 8601 format "YYYY-MM-DDTHH:MM:SS" (mutually exclusive with duration)
  * - timestep: dt (seconds)
  * - output_variables: List of variables to save, or "full" for all
  * - continue_simulation: Resume from previous NetCDF (optional)
@@ -120,6 +121,7 @@ bool CYAMLReader::loadConfiguration(const std::string& filepath, CSimulation* si
  * @param node YAML node containing 'run' section
  * @param m_pSimulation Pointer to simulation object
  * 
+ * @note Either 'duration' or 'end_date' must be specified (not both)
  * @note output_variables="full" includes:
  *       A, Ap, Ac, Q, Qp, Qc, Rh, B, eta, level, rho, U, c, S, T,
  *       Qb, Qs, Qt, xl, xr, UTM coordinates
@@ -137,6 +139,9 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimula
     }
     
     // Start date/time parsing: "2007-02-09T00:00:00"
+    std::tm tm_start = {};
+    bool has_start_date = false;
+    
     if (node["start_date"]) {
         std::string dateStr = node["start_date"].as<std::string>();
         int year, month, day, hour, min, sec;
@@ -145,12 +150,75 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimula
         if (sscanf(dateStr.c_str(), "%d-%d-%dT%d:%d:%d", 
                    &year, &month, &day, &hour, &min, &sec) == 6) {
             m_pSimulation->setSimulationStartDateTime(year, month, day, hour, min, sec);
+            
+            // Store for potential end_date calculation
+            tm_start.tm_year = year - 1900;
+            tm_start.tm_mon = month - 1;
+            tm_start.tm_mday = day;
+            tm_start.tm_hour = hour;
+            tm_start.tm_min = min;
+            tm_start.tm_sec = sec;
+            tm_start.tm_isdst = -1;  // Let mktime determine DST
+            has_start_date = true;
         }
     }
     
-    // Duration in seconds
+    // Duration in seconds (option 1: direct specification)
     if (node["duration"]) {
         m_pSimulation->dSetSimulationDuration(node["duration"].as<double>());
+        
+        if (node["end_date"]) {
+            std::cerr << "⚠️ Warning: Both 'duration' and 'end_date' specified. Using 'duration'." << std::endl;
+        }
+    }
+    // End date (option 2: calculate duration from start_date to end_date)
+    else if (node["end_date"]) {
+        if (!has_start_date) {
+            std::cerr << "❌ Error: 'end_date' requires 'start_date' to be specified" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        
+        std::string endDateStr = node["end_date"].as<std::string>();
+        int year, month, day, hour, min, sec;
+        
+        if (sscanf(endDateStr.c_str(), "%d-%d-%dT%d:%d:%d", 
+                   &year, &month, &day, &hour, &min, &sec) == 6) {
+            
+            std::tm tm_end = {};
+            tm_end.tm_year = year - 1900;
+            tm_end.tm_mon = month - 1;
+            tm_end.tm_mday = day;
+            tm_end.tm_hour = hour;
+            tm_end.tm_min = min;
+            tm_end.tm_sec = sec;
+            tm_end.tm_isdst = -1;
+            
+            // Calculate duration in seconds: difftime(end, start)
+            std::time_t t_start = std::mktime(&tm_start);
+            std::time_t t_end = std::mktime(&tm_end);
+            
+            if (t_start == -1 || t_end == -1) {
+                std::cerr << "❌ Error: Invalid date format in start_date or end_date" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            
+            double duration_seconds = std::difftime(t_end, t_start);
+            
+            if (duration_seconds <= 0) {
+                std::cerr << "❌ Error: end_date must be after start_date" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            
+            m_pSimulation->dSetSimulationDuration(duration_seconds);
+            std::cout << "      - Calculated duration: " << duration_seconds 
+                      << " s (" << duration_seconds / 86400.0 << " days)" << std::endl;
+        } else {
+            std::cerr << "❌ Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        std::cerr << "❌ Error: Either 'duration' or 'end_date' must be specified in run section" << std::endl;
+        exit(EXIT_FAILURE);
     }
     
     // Timestep in seconds
