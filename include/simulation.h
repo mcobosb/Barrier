@@ -23,6 +23,8 @@ using std::localtime;
 using std::time;
 using std::time_t;
 
+#include <cmath>    // Para std::cos, std::pow en funciones inline
+
 #include <iomanip>  // Para setfill, setw
 using std::setfill;
 using std::setw;
@@ -42,9 +44,73 @@ using std::ofstream;
 #include "data_reader.h"
 #include "screen_presenter.h"
 
-class CSimulation
-{
+class CSimulation {
 public:
+    // === PHYSICAL CONSTANTS ===
+    // Mathematical constants
+    static constexpr double PI = 3.14159265358979323846;
+    static constexpr double DEG_TO_RAD = PI / 180.0;
+    
+    // Water properties
+    static constexpr double WATER_DENSITY = 1000.0;           // Water density (kg/m³)
+    static constexpr double WATER_SPECIFIC_HEAT = 4186.0;     // Specific heat capacity (J/(kg·°C))
+    static constexpr double WATER_EMISSIVITY = 0.97;          // Water surface emissivity
+    
+    // Air properties (at standard conditions)
+    static constexpr double AIR_SPECIFIC_HEAT = 1005.0;       // Air specific heat at constant pressure (J/(kg·K))
+    static constexpr double AIR_GAS_CONSTANT = 287.05;        // Specific gas constant for dry air (J/(kg·K))
+    static constexpr double ATM_PRESSURE_DEFAULT = 101325.0;  // Standard atmospheric pressure (Pa)
+    
+    // Radiation constants
+    static constexpr double STEFAN_BOLTZMANN = 5.67e-8;       // Stefan-Boltzmann constant (W/(m²·K⁴))
+    static constexpr double SOLAR_CONSTANT = 1367.0;          // Solar constant at top of atmosphere (W/m²)
+    static constexpr double ATM_TRANSMISSIVITY = 0.75;        // Clear-sky atmospheric transmissivity
+    
+    // === INLINE HELPER FUNCTIONS (Efficient for small computations) ===
+    
+    //! Calculate latent heat of vaporization (J/kg) from water temperature (°C)
+    //! Empirical formula: L_v = (2501 - 2.37*T) * 1000 J/kg
+    static inline double calc_Lv(double T_water) {
+        return (2501.0 - 2.37 * T_water) * 1000.0;
+    }
+
+    //! Calculate air density (kg/m³) from temperature (°C) and pressure (Pa)
+    //! Uses ideal gas law: ρ = P / (R * T)
+    static inline double calc_rho_air(double T_air, double Pressure_Pa = ATM_PRESSURE_DEFAULT) {
+        return Pressure_Pa / (AIR_GAS_CONSTANT * (T_air + 273.15));
+    }
+
+    //! Calculate water albedo using Briegleb et al. (1986) model
+    //! Separates direct and diffuse components with cloud-dependent weighting
+    //! zenith_rad: solar zenith angle (0 = overhead, π/2 = horizon)
+    //! cloud_cover: cloud fraction (0.0 = clear, 1.0 = overcast)
+    static inline double calc_albedo_briegleb(double zenith_rad, double cloud_cover = 0.0) {
+        double cos_theta = std::cos(zenith_rad);
+        
+        // Night or sun below horizon
+        if (cos_theta <= 0.0) return 0.06;
+        
+        // Direct beam albedo (Briegleb et al. 1986 formulation)
+        double alpha_dir = 0.026 / (std::pow(cos_theta, 1.7) + 0.065) + 
+                           0.15 * (cos_theta - 0.1) * (cos_theta - 0.5) * (cos_theta - 1.0);
+        
+        // Diffuse albedo (constant for water surfaces)
+        double alpha_dif = 0.06;
+        
+        // Fraction of direct vs diffuse radiation (cloud-dependent)
+        // Clear sky: mostly direct; overcast: mostly diffuse
+        double f_direct = 1.0 - 0.65 * cloud_cover * cloud_cover;
+        double f_diffuse = 1.0 - f_direct;
+        
+        // Total albedo (weighted average of direct and diffuse components)
+        double alpha_total = f_direct * alpha_dir + f_diffuse * alpha_dif;
+        
+        // Physical bounds for water albedo
+        return std::max(0.03, std::min(alpha_total, 0.40));
+    }
+
+
+
     //! If true, Manning is calculated as a function of water level
     bool m_bManningDependsOnLevel = false;
     //! Getter for Manning level-dependence
@@ -80,6 +146,13 @@ public:
     //! Valor de temperatura aguas arriba (si es constante)
     double m_dUpwardTemperatureBoundaryValue{};
 
+
+    //! Coeficientes de forzamiento de balance de energía superficial aguas arriba
+    double m_dUpwardTemperatureOffsetBeta{};
+    double m_dUpwardAtmosphericExchangekA{};
+    double m_dUpwardSurfaceConcentratedHeatkR{};
+    double m_dUpwardInflowWaterEffectkQ{};
+
     //! Archivo de condición de frontera aguas abajo (serie temporal)
     std::string m_strDownwardTemperatureBoundaryConditionFilename;
 
@@ -101,19 +174,26 @@ public:
     //! Archivo único de forzamiento de balance de energía superficial (Tair, humedad relativa, viento)
     std::string m_strHeatFluxFile;
 
-    //! Coeficiente de transferencia de calor sensible (CS)
-    double m_dHeatFlux_CS{};
+    //! Coeficiente de transferencia de calor sensible (CS) - Stanton number
+    double m_dHeatFlux_CS{1.3e-3};
 
-    //! Coeficiente de transferencia de calor latente (CL)
-    double m_dHeatFlux_CL{};
+    //! Coeficiente de transferencia de calor latente (CL) - Dalton number
+    double m_dHeatFlux_CL{1.3e-3};
+    
+    //! Latitud geográfica del sitio (grados decimales, Norte positivo)
+    double m_dHeatFluxLatitude{36.5};
+    
+    //! Cobertura nubosa para cálculo de radiación (0.0 = despejado, 1.0 = cubierto)
+    double m_dHeatFluxCloudCover{0.2};
 
     // === Series temporales de forzamiento ===
 
-    //! Tiempos y valores de forzamiento de heat flux (Tair, humedad relativa, viento)
+    //! Tiempos y valores de forzamiento de heat flux (Tair, humedad relativa, viento, presión)
     std::vector<double> m_vHeatFluxTime;
     std::vector<double> m_vHeatFluxAirTemp;
     std::vector<double> m_vHeatFluxRelHumidity;
     std::vector<double> m_vHeatFluxWind;
+    std::vector<double> m_vHeatFluxAtmosphericPressure;  // Presión atmosférica (Pa)
     // === Opciones para continuar simulación ===
     bool m_bContinueSimulation = false;
     std::string m_strContinueNetcdfPath;
@@ -574,29 +654,29 @@ public:
 
 
     //! Method for getting the simulation duration
-    [[nodiscard]] double dGetSimulationDuration() const;
+    [[nodiscard]] double dGetSimulationDuration() const { return m_dSimDuration; }
     //! Method for setting the simulation duration
-    void dSetSimulationDuration(double simDuration);
+    void dSetSimulationDuration(double simDuration) { m_dSimDuration = simDuration; }
 
     //! Method for getting the simulation timestep
-    [[nodiscard]] double dGetSimulationTimestep() const;
+    [[nodiscard]] double dGetSimulationTimestep() const { return m_dSimTimestep; }
     //! Method for setting the simulation timestep
-    void dSetSimulationTimestep(double simTimestep);
+    void dSetSimulationTimestep(double simTimestep) { m_dSimTimestep = simTimestep; }
 
     //! Method for getting the initial estuarine condition
-    [[nodiscard]] int nGetInitialEstuarineCondition() const;
+    [[nodiscard]] int nGetInitialEstuarineCondition() const { return m_nInitialEstuarineCondition; }
     //! Method for setting the initial estuarine condition
-    void nSetInitialEstuarineCondition(int initialCondition);
+    void nSetInitialEstuarineCondition(int initialCondition) { m_nInitialEstuarineCondition = initialCondition; }
 
     //! Method for getting the compute sediment transport
-    [[nodiscard]] bool bGetDoSedimentTransport() const;
+    [[nodiscard]] bool bGetDoSedimentTransport() const { return m_bDoSedimentTransport; }
     //! Method for setting the compute sediment transport
-    void bSetDoSedimentTransport(bool doSedimentTransport);
+    void bSetDoSedimentTransport(bool doSedimentTransport) { m_bDoSedimentTransport = doSedimentTransport; }
 
     //! Method for getting equation of sediment transport
-    [[nodiscard]] int nGetEquationSedimentTransport() const;
+    [[nodiscard]] int nGetEquationSedimentTransport() const { return m_nEquationSedimentTransport; }
     //! Method for setting equation of sediment transport
-    void nSetEquationSedimentTransport(int equationSedimentTransport);
+    void nSetEquationSedimentTransport(int equationSedimentTransport) { m_nEquationSedimentTransport = equationSedimentTransport; }
 
     //! Method for getting equation of sediment transport
     [[nodiscard]] double dGetSedimentDensity() const;
@@ -604,121 +684,121 @@ public:
     void dSetSedimentDensity(double sedimentDensity);
 
     //! Method for getting the compute water temperature
-    [[nodiscard]] bool bGetDoWaterTemperature() const;
+    [[nodiscard]] bool bGetDoWaterTemperature() const { return m_bDoWaterTemperature; }
     //! Method for setting the compute water temperature
-    void bSetDoWaterTemperature(bool doWaterTemperature);
+    void bSetDoWaterTemperature(bool doWaterTemperature) { m_bDoWaterTemperature = doWaterTemperature; }
 
     //! Method for getting the compute water salinity
-    [[nodiscard]] bool bGetDoWaterSalinity() const;
+    [[nodiscard]] bool bGetDoWaterSalinity() const { return m_bDoWaterSalinity; }
     //! Method for setting the compute water salinity
-    void bSetDoWaterSalinity(bool doWaterSalinity);
+    void bSetDoWaterSalinity(bool doWaterSalinity) { m_bDoWaterSalinity = doWaterSalinity; }
 
     //! Method for getting the compute water salinity
-    [[nodiscard]] int nGetUpwardSalinityCondition() const;
+    [[nodiscard]] int nGetUpwardSalinityCondition() const { return m_nUpwardSalinityCondition; }
     //! Method for setting the compute water salinity
-    void nSetUpwardSalinityCondition(int nUpwardCondition);
+    void nSetUpwardSalinityCondition(int nUpwardCondition) { m_nUpwardSalinityCondition = nUpwardCondition; }
 
     //! Method for getting the compute water salinity
-    [[nodiscard]] int nGetDownwardSalinityCondition() const;
+    [[nodiscard]] int nGetDownwardSalinityCondition() const { return m_nDownwardSalinityCondition; }
     //! Method for setting the compute water salinity
-    void nSetDownwardSalinityCondition(int nDownwardCondition);
+    void nSetDownwardSalinityCondition(int nDownwardCondition) { m_nDownwardSalinityCondition = nDownwardCondition; }
 
     //! Method for getting the beta salinity constant
-    [[nodiscard]] double dGetBetaSalinityConstant() const;
+    [[nodiscard]] double dGetBetaSalinityConstant() const { return m_dBetaSalinityConstant; }
     //! Method for setting the beta salinity constant
-    void dSetBetaSalinityConstant(double salinityConstant);
+    void dSetBetaSalinityConstant(double salinityConstant) { m_dBetaSalinityConstant = salinityConstant; }
     //! Method for getting the beta temperature constant
     [[nodiscard]] double dGetBetaTemperatureConstant() const { return m_dBetaTemperatureConstant; }
     //! Method for setting the beta temperature constant
     void dSetBetaTemperatureConstant(double tempConstant) { m_dBetaTemperatureConstant = tempConstant; }
 
     //! Method for getting the along channel constant elevation
-    [[nodiscard]] double dGetLongitudinalDispersionConstant() const;
+    [[nodiscard]] double dGetLongitudinalDispersionConstant() const { return m_dLongitudinalDispersion; }
     //! Method for setting the along channel constant elevation
-    void dSetLongitudinalDispersionConstant(double longitudinalDispersion);
+    void dSetLongitudinalDispersionConstant(double longitudinalDispersion) { m_dLongitudinalDispersion = longitudinalDispersion; }
 
     //! Method for getting the upward estuarine condition
-    [[nodiscard]] int nGetUpwardEstuarineCondition() const;
+    [[nodiscard]] int nGetUpwardEstuarineCondition() const { return m_nUpwardEstuarineCondition; }
     //! Method for setting the upward estuarine condition
-    void nSetUpwardEstuarineCondition(int upwardEstuarineCondition);
+    void nSetUpwardEstuarineCondition(int upwardEstuarineCondition) { m_nUpwardEstuarineCondition = upwardEstuarineCondition; }
 
     //! Method for getting the downward estuarine condition
-    [[nodiscard]] int nGetDownwardEstuarineCondition() const;
+    [[nodiscard]] int nGetDownwardEstuarineCondition() const { return m_nDownwardEstuarineCondition; }
     //! Method for setting the downward estuarine condition
-    void nSetDownwardEstuarineCondition(int downwardEstuarineCondition);
+    void nSetDownwardEstuarineCondition(int downwardEstuarineCondition) { m_nDownwardEstuarineCondition = downwardEstuarineCondition; }
 
     //! Method for getting the courant number
-    [[nodiscard]] double dGetCourantNumber() const;
+    [[nodiscard]] double dGetCourantNumber() const { return m_dCourantNumber; }
     //! Method for setting the courant number
-    void dSetCourantNumber(double courantNumber);
+    void dSetCourantNumber(double courantNumber) { m_dCourantNumber = courantNumber; }
 
     //! Method for getting if McComarck limiter flux is applied
-    [[nodiscard]] bool bGetDoMcComarckLimiterFlux() const;
+    [[nodiscard]] bool bGetDoMcComarckLimiterFlux() const { return m_bDoMcCormackLimiterFlux; }
     //! Method for setting if McComarck limiter flux is applied
-    void bSetDoMcComarckLimiterFlux(bool doMcComarckLimiterFlux);
+    void bSetDoMcComarckLimiterFlux(bool doMcComarckLimiterFlux) { m_bDoMcCormackLimiterFlux = doMcComarckLimiterFlux; }
 
     //! Method for getting equation limiter flux
-    [[nodiscard]] int nGetEquationLimiterFlux() const;
+    [[nodiscard]] int nGetEquationLimiterFlux() const { return m_nEquationMcCormackLimiterFlux; }
     //! Method for setting equation limiter flux
-    void nSetEquationLimiterFlux(int equationLimiterFlux);
+    void nSetEquationLimiterFlux(int equationLimiterFlux) { m_nEquationMcCormackLimiterFlux = equationLimiterFlux; }
 
     //! Method for getting Psi formula
-    [[nodiscard]] int nGetPsiFormula() const;
+    [[nodiscard]] int nGetPsiFormula() const { return m_nPsiFormula; }
     //! Method for setting Psi formula
-    void nSetPsiFormula(int psiFormula);
+    void nSetPsiFormula(int psiFormula) { m_nPsiFormula = psiFormula; }
 
     //! Method for getting Delta Value
-    [[nodiscard]] double dGetDeltaValue() const;
+    [[nodiscard]] double dGetDeltaValue() const { return m_dDeltaValue; }
     //! Method for setting Delta Value
-    void dSetDeltaValue(double deltaValue);
+    void dSetDeltaValue(double deltaValue) { m_dDeltaValue = deltaValue; }
 
     //! Method for getting if surface gradient method is applied
-    [[nodiscard]] bool bGetDoSurfaceGradientMethod() const;
+    [[nodiscard]] bool bGetDoSurfaceGradientMethod() const { return m_bDoSurfaceGradientMethod; }
     //! Method for setting if surface gradient method is applied
-    void bSetDoSurfaceGradientMethod(bool doSurfaceGradientMethod);
+    void bSetDoSurfaceGradientMethod(bool doSurfaceGradientMethod) { m_bDoSurfaceGradientMethod = doSurfaceGradientMethod; }
 
     //! Method for getting if source term balance is applied
-    [[nodiscard]] bool bGetDoSurfaceTermBalance() const;
+    [[nodiscard]] bool bGetDoSurfaceTermBalance() const { return m_bDoSourceTermBalance; }
     //! Method for setting if source term balance is applied
-    void bSetDoSurfaceTermBalance(bool doSourceTermBalance);
+    void bSetDoSurfaceTermBalance(bool doSourceTermBalance) { m_bDoSourceTermBalance = doSourceTermBalance; }
 
     //! Method for getting if beta coefficient is applied
-    [[nodiscard]] bool bGetDoBetaCoefficient() const;
+    [[nodiscard]] bool bGetDoBetaCoefficient() const { return m_bDoBetaCoefficient; }
     //! Method for setting if beta coefficient is applied
-    void bSetDoBetaCoefficient(bool doBetaCoefficient);
+    void bSetDoBetaCoefficient(bool doBetaCoefficient) { m_bDoBetaCoefficient = doBetaCoefficient; }
 
     //! Method for getting if dry bed is applied
-    [[nodiscard]] bool bGetDoDryBed() const;
+    [[nodiscard]] bool bGetDoDryBed() const { return m_bDoDryBed; }
     //! Method for setting if dry bed is applied
-    void bSetDoDryBed(bool doDryBed);
+    void bSetDoDryBed(bool doDryBed) { m_bDoDryBed = doDryBed; }
 
     //! Method for getting if Murillo condition is applied
-    [[nodiscard]] bool bGetDoMurilloCondition() const;
+    [[nodiscard]] bool bGetDoMurilloCondition() const { return m_bDoMurilloCondition; }
     //! Method for setting if Murillo condition is applied
-    void bSetDoMurilloCondition(bool doMurilloCondition);
+    void bSetDoMurilloCondition(bool doMurilloCondition) { m_bDoMurilloCondition = doMurilloCondition; }
 
     //! Method for getting the compute water density
-    [[nodiscard]] bool bGetDoWaterDensity() const;
+    [[nodiscard]] bool bGetDoWaterDensity() const { return m_bDoWaterDensity; }
     //! Method for setting the compute water density
-    void bSetDoWaterDensity(bool doWaterDensity);
+    void bSetDoWaterDensity(bool doWaterDensity) { m_bDoWaterDensity = doWaterDensity; }
     
     //! Method for getting smooth bathymetry flag
-    [[nodiscard]] bool bGetDoSmoothBathymetry() const;
+    [[nodiscard]] bool bGetDoSmoothBathymetry() const { return m_bDoSmoothBathymetry; }
     //! Method for setting smooth bathymetry flag
-    void bSetDoSmoothBathymetry(bool doSmoothBathymetry);
+    void bSetDoSmoothBathymetry(bool doSmoothBathymetry) { m_bDoSmoothBathymetry = doSmoothBathymetry; }
     
     //! Method for getting smooth solution flag
-    [[nodiscard]] bool bGetDoSmoothSolution() const;
+    [[nodiscard]] bool bGetDoSmoothSolution() const { return m_bDoSmoothSolution; }
     //! Method for setting smooth solution flag
-    void bSetDoSmoothSolution(bool doSmoothSolution);
+    void bSetDoSmoothSolution(bool doSmoothSolution) { m_bDoSmoothSolution = doSmoothSolution; }
 
     //! Method for getting save all timesteps flag
-    [[nodiscard]] bool bGetSaveAllTimesteps() const;
+    [[nodiscard]] bool bGetSaveAllTimesteps() const { return m_bSaveAllTimesteps; }
     //! Method for setting save all timesteps flag
-    void bSetSaveAllTimesteps(bool saveAllTimesteps);
+    void bSetSaveAllTimesteps(bool saveAllTimesteps) { m_bSaveAllTimesteps = saveAllTimesteps; }
 
     //! Add output variable
-    void strAddOutputVariable(const string& strItem);
+    void strAddOutputVariable(const string& strItem) { m_vOutputVariables.push_back(strItem); }
 
     //! Read hydrograph input?
     bool m_bHydroFile;
@@ -727,9 +807,9 @@ public:
     vector<CHydrograph> hydrographs;
 
     //! Method for getting the number of hydrographs
-    [[nodiscard]] int nGetHydrographsNumber() const;
+    [[nodiscard]] int nGetHydrographsNumber() const { return m_nHydrographsNumber; }
     //! Method for setting the number of hydrographs
-    void nSetHydrographsNumber(int nValue);
+    void nSetHydrographsNumber(int nValue) { m_nHydrographsNumber = nValue; }
 
     //! Get the vector of a variable
     vector<double> vGetVariable(const string& strVariableName) const;
@@ -764,23 +844,30 @@ public:
     void calculateCorrector();
     void updatePredictorBoundaries();
     void updateCorrectorBoundaries();
-    void updateBoundaries();
     void mergePredictorCorrector();
     void mergeTracerPredictorCorrector();
     void smoothSolution();
     void smoothBathymetry();
     // Predictor-corrector para salinidad y temperatura
-    void calculate_salinity(); // Wrapper legacy (llama a predictor/corrector según m_nPredictor)
     void calculate_salinity_predictor();
     void calculate_salinity_corrector();
-    void calculate_salinity_gradient();
 
     void calculateRadiativeFluxes();
     void calculate_temperature(); // Wrapper legacy (llama a predictor/corrector según m_nPredictor)
     void calculate_temperature_predictor();
     void calculate_temperature_corrector();
 
-    static double n_eta(double eta, double maxTide, double etaMaxGrad);
+    void updateReservoirTemperature0D();
+
+    //! Calculate adaptive Manning's n coefficient based on water level
+    //! Returns n(η) varying linearly between 1.0 (submerged) and 2.0 (emergent)
+    static inline double n_eta(double eta, double maxTide, double etaMaxGrad) {
+        if (eta <= maxTide) return 1.0;
+        if (eta >= etaMaxGrad) return 2.0;
+        if (etaMaxGrad - maxTide < 1e-8) return 2.0;
+        return 1.0 + (eta - maxTide) / (etaMaxGrad - maxTide);
+    }
+    
     static double getMaxAstronomicalTide(const std::string& tidesFile);
 
     void AnnounceProgress();

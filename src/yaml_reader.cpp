@@ -1,6 +1,14 @@
-/*!
- * \file yaml_reader.cpp
- * \brief Implementation of CYAMLReader class
+/*!\n * \file yaml_reader.cpp
+ * \brief YAML configuration file parser for Barrier simulation
+ * \details Reads YAML config files and populates CSimulation object with:
+ *          - Run parameters (timestep, duration, output variables)
+ *          - Geometry file paths
+ *          - Hydrodynamic settings (BC, TVD, Courant number)
+ *          - Transport modules (salinity, temperature, sediment)
+ *          - Smoothing options (bathymetry, solution regularization)
+ * \author Manuel Cobos Budia
+ * \date 2026
+ * \copyright GNU General Public License
  */
 
 #include "yaml_reader.h"
@@ -11,12 +19,45 @@
 
 namespace fs = std::filesystem;
 
+/**
+ * @brief Construct CYAMLReader object
+ * 
+ * Initializes error message string to empty.
+ */
 CYAMLReader::CYAMLReader() : m_strErrorMessage("") {
 }
 
+/**
+ * @brief Destructor (default implementation)
+ */
 CYAMLReader::~CYAMLReader() {
 }
 
+/**
+ * @brief Load and parse YAML configuration file
+ * 
+ * Workflow:
+ * 1. Load YAML file using yaml-cpp library
+ * 2. Extract configuration directory path for relative file references
+ * 3. Parse sections in sequence:
+ *    - run: Simulation parameters, output settings
+ *    - geometry: File paths for bathymetry and cross-sections
+ *    - hydrodynamics: Initial/boundary conditions, numerical methods
+ *    - transport: Salinity, temperature, sediment modules
+ *    - smoothing: Bathymetry and solution regularization
+ * 4. Populate CSimulation object via setter methods
+ * 
+ * @param filepath Absolute or relative path to YAML config file
+ * @param simulation Pointer to CSimulation object to configure
+ * @return true if successful, false if YAML parsing fails
+ * 
+ * @note Error handling:
+ * - YAML::Exception: Syntax errors, missing required fields
+ * - std::exception: File not found, I/O errors
+ * - Error message stored in m_strErrorMessage
+ * 
+ * @see Example config: docs/config_example.yaml
+ */
 bool CYAMLReader::loadConfiguration(const std::string& filepath, CSimulation* simulation) {
     try {
         // Load YAML file
@@ -63,6 +104,26 @@ bool CYAMLReader::loadConfiguration(const std::string& filepath, CSimulation* si
     }
 }
 
+/**
+ * @brief Parse 'run' section of YAML config
+ * 
+ * Fields:
+ * - name: Output file basename (generates .nc and .log files)
+ * - log_level: Detail level (0=minimal, 1=normal, 2=debug/all timesteps)
+ * - start_date: ISO 8601 format "YYYY-MM-DDTHH:MM:SS"
+ * - duration: Simulation length (seconds)
+ * - timestep: dt (seconds)
+ * - output_variables: List of variables to save, or "full" for all
+ * - continue_simulation: Resume from previous NetCDF (optional)
+ * - continue_netcdf_path: Path to restart file (if continue=true)
+ * 
+ * @param node YAML node containing 'run' section
+ * @param m_pSimulation Pointer to simulation object
+ * 
+ * @note output_variables="full" includes:
+ *       A, Ap, Ac, Q, Qp, Qc, Rh, B, eta, level, rho, U, c, S, T,
+ *       Qb, Qs, Qt, xl, xr, UTM coordinates
+ */
 void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimulation) {
     // Output file names
     if (node["name"]) {
@@ -127,6 +188,18 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimula
     }
 }
 
+/**
+ * @brief Parse 'geometry' section of YAML config
+ * 
+ * Fields:
+ * - along_channel_file: CSV with x, Z, Manning's n (main channel axis data)
+ * - cross_sections_file: CSV with hydraulic properties vs elevation
+ * 
+ * @param node YAML node containing 'geometry' section
+ * 
+ * @note Filenames are relative to config file directory
+ * @see CDataReader for CSV parsing details
+ */
 void CYAMLReader::parseGeometrySection(const YAML::Node& node) {
     if (node["along_channel_file"]) {
         m_strAlongChannelDataFilename = m_strInputPath + node["along_channel_file"].as<std::string>();
@@ -138,6 +211,37 @@ void CYAMLReader::parseGeometrySection(const YAML::Node& node) {
 }
 
 
+/**
+ * @brief Parse 'hydrodynamics' section of YAML config
+ * 
+ * Subsections:
+ * 
+ * 1. initial_conditions:
+ *    - type: 0=calm, 1=flow, 2=elevation
+ * 
+ * 2. boundary_conditions:
+ *    - upstream: {type: 0=free/1=reflective, file: Q(t) or h(t), value: constant}
+ *    - downstream: {type: 0=free/1=reflective/2=elevation, file: data, value: constant}
+ * 
+ * 3. forcing:
+ *    - lateral_inflows: CSV with tributary discharge time series
+ * 
+ * 4. Numerical parameters:
+ *    - courant_number: CFL condition (typically 0.15-0.5)
+ *    - tvd_limiter: {enabled, method: minmod/roe/vanleer/vanalbada, psi_formula, delta}
+ *    - surface_gradient_method: Use improved gradient calculation
+ *    - source_term_balance: Balance source terms with flux gradients
+ *    - beta_coefficient: Use momentum correction factor β
+ *    - dry_bed: Enable dry bed treatment
+ *    - murillo_condition: Use Murillo wetting/drying condition
+ *    - manning_eta: Manning's n depends on water level
+ *    - manning_db: Threshold for width gradient detection
+ * 
+ * @param node YAML node containing 'hydrodynamics' section
+ * @param m_pSimulation Pointer to simulation object
+ * 
+ * @note BC type can be specified as int or string for readability
+ */
 void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation* m_pSimulation) {
     
     const auto& initial_conditions = node["initial_conditions"];
@@ -306,6 +410,44 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
     }
 }
 
+/**
+ * @brief Parse 'transport' section of YAML config
+ * 
+ * Subsections:
+ * 
+ * 1. temperature:
+ *    - enabled: Activate temperature transport
+ *    - initial_file: Initial T(x) distribution CSV
+ *    - dispersion_kh: Thermal diffusivity (m²/s)
+ *    - beta: Thermal expansion coefficient (1/°C, ~0.0002)
+ *    - boundary_conditions:
+ *      * upstream: {type: 0=free/1=constant/2=timeseries/3=0D_model, value/file}
+ *      * downstream: {type, value/file}
+ *    - heat_flux: {heat_flux_file: meteorological forcing, cs/cl: bulk transfer coefficients}
+ * 
+ * 2. salinity:
+ *    - enabled: Activate salinity transport
+ *    - initial_file: Initial S(x) distribution CSV
+ *    - dispersion_kh: Salt diffusivity (m²/s)
+ *    - beta: Haline contraction coefficient (1/psu, ~0.00078)
+ *    - boundary_conditions:
+ *      * upstream: {type: 0=free/1=null/2=ocean, value/file}
+ *      * downstream: {type, value/file}
+ * 
+ * 3. sediment:
+ *    - enabled: Activate sediment transport
+ *    - properties_file: D50, rho_s, sigma per cross-section
+ *    - equation: Transport formula (0=van Rijn)
+ * 
+ * 4. density:
+ *    - enabled: Include baroclinic pressure gradient
+ * 
+ * @param node YAML node containing 'transport' section
+ * @param m_pSimulation Pointer to simulation object
+ * 
+ * @note 0D temperature model (type=3 upstream) uses reservoir energy balance:
+ *       dT/dt = kA·(T_air - T) + kQ·(T_inflow - T)
+ */
 void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_pSimulation) {
 
         // Temperature transport
@@ -337,12 +479,29 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
                         try { m_pSimulation->m_nUpwardTemperatureCondition = up["type"].as<int>(); }
                         catch (...) {}
                     }
-                    if (up["file"] && !up["file"].IsNull()) {
-                        std::string filename = up["file"].as<std::string>();
-                        if (!filename.empty()) m_pSimulation->m_strUpwardTemperatureBoundaryConditionFilename = m_strInputPath + filename;
+                    if (m_pSimulation->m_nUpwardTemperatureCondition == 1) {
+                        if (up["value"] && up["value"].IsScalar()) {
+                            try { m_pSimulation->m_dUpwardTemperatureBoundaryValue = up["value"].as<double>(); } catch (...) {}
+                        }
                     }
-                    if (up["value"] && up["value"].IsScalar()) {
-                        try { m_pSimulation->m_dUpwardTemperatureBoundaryValue = up["value"].as<double>(); } catch (...) {}
+                    if (m_pSimulation->m_nUpwardTemperatureCondition == 2) {
+                        // Series temporal
+                        if (up["file"] && !up["file"].IsNull()) {
+                            std::string filename = up["file"].as<std::string>();
+                            if (!filename.empty()) m_pSimulation->m_strUpwardTemperatureBoundaryConditionFilename = m_strInputPath + filename;
+                        }
+                    }
+                    if (m_pSimulation->m_nUpwardTemperatureCondition == 3) {
+                        // Model 0D a reservoir
+                        if (up["offset_beta"] && up["offset_beta"].IsScalar()) {
+                            try { m_pSimulation->m_dUpwardTemperatureOffsetBeta = up["offset_beta"].as<double>(); } catch (...) {}
+                        }
+                        if (up["atmospheric_exchange_kA"] && up["atmospheric_exchange_kA"].IsScalar()) {
+                            try { m_pSimulation->m_dUpwardAtmosphericExchangekA = up["atmospheric_exchange_kA"].as<double>(); } catch (...) {}
+                        }
+                        if (up["inflow_water_effect_kQ"] && up["inflow_water_effect_kQ"].IsScalar()) {
+                            try { m_pSimulation->m_dUpwardInflowWaterEffectkQ = up["inflow_water_effect_kQ"].as<double>(); } catch (...) {}
+                        }
                     }
                 }
                 // DOWNSTREAM
@@ -367,11 +526,19 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
                     std::string filename = hf["heat_flux_file"].as<std::string>();
                     if (!filename.empty()) m_pSimulation->m_strHeatFluxFile = m_strInputPath + filename;
                 }
+                // Bulk transfer coefficients
                 if (hf["cs"]) {
                     m_pSimulation->m_dHeatFlux_CS = hf["cs"].as<double>();
                 }
                 if (hf["cl"]) {
                     m_pSimulation->m_dHeatFlux_CL = hf["cl"].as<double>();
+                }
+                // Calibration parameters for radiative flux calculations
+                if (hf["latitude"]) {
+                    m_pSimulation->m_dHeatFluxLatitude = hf["latitude"].as<double>();
+                }
+                if (hf["cloud_cover"]) {
+                    m_pSimulation->m_dHeatFluxCloudCover = hf["cloud_cover"].as<double>();
                 }
             }
         }
@@ -462,6 +629,35 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
     }
 }
 
+/**
+ * @brief Parse 'smoothing' section of YAML config
+ * 
+ * Subsections:
+ * 
+ * 1. bathymetry:
+ *    - enabled: Apply pre-simulation smoothing to bed elevation
+ *    - num_passes: Number of diffusion iterations (typically 1-5)
+ *    - alpha: Diffusion coefficient (0.1-0.5, larger = more smoothing)
+ * 
+ * 2. regularization:
+ *    - enabled: Apply runtime solution smoothing
+ *    - num_passes: Passes per timestep (typically 1-2)
+ *    - alpha: Smoothing strength (0.05-0.2)
+ * 
+ * Purpose:
+ * - Bathymetry smoothing: Remove survey noise, prevent numerical oscillations
+ * - Solution regularization: Stabilize at sharp geometry transitions
+ * 
+ * @param node YAML node containing 'smoothing' section
+ * @param m_pSimulation Pointer to simulation object
+ * 
+ * @warning Excessive smoothing can:
+ * - Remove important morphological features
+ * - Introduce artificial diffusion
+ * - Violate conservation laws
+ * 
+ * @note Default: Both disabled (alpha=0, num_passes=0)
+ */
 void CYAMLReader::parseSmoothingSection(const YAML::Node& node, CSimulation* m_pSimulation) {
     if (node["bathymetry"]) {
         const auto& bathy = node["bathymetry"];

@@ -48,15 +48,18 @@ using std::find;
 #include "error_handling.h"
 #include "utils.h"
 
-//===============================================================================================================================
-//! The CDataReader constructor
-//===============================================================================================================================
+/**
+ * @brief Construct CDataReader object
+ * 
+ * Initializes:
+ * - Iteration counter (m_ulIter = 0)
+ * - Date/time members to 0
+ * - Duration units multiplier to 0.0
+ */
 CDataReader::CDataReader() {
-	// CEstuary m_pEstuary;
-	// m_pSimulation = new CSimulation;
 	m_ulIter = 0;
 
-	//! Date properties
+	// Date properties
 	m_nSimStartSec =
 	m_nSimStartMin =
 	m_nSimStartHour =
@@ -65,20 +68,28 @@ CDataReader::CDataReader() {
 	m_nSimStartYear = 0;
 
 	m_dDurationUnitsMultiplier = 0.0;
-
-
-
 }
 
-//======================================================================================================================
-//! The CDataReader destructor
-//======================================================================================================================
+/**
+ * @brief Destructor (default implementation)
+ */
 CDataReader::~CDataReader() = default;
 
 
-//===============================================================================================================================
-//! Opens the log file
-//===============================================================================================================================
+/**
+ * @brief Open log file for simulation output
+ * 
+ * Behavior:
+ * - If log_level = 0: Redirect to /dev/null (no logging)
+ * - Otherwise: Create log file with truncation (overwrites existing)
+ * 
+ * @param m_pSimulation Pointer to simulation (contains log filename and detail level)
+ * 
+ * @note Log file contains:
+ * - Initialization messages
+ * - Runtime warnings/errors
+ * - Progress updates (if detail > 0)
+ */
 void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 {
 	if (m_pSimulation->m_nLogFileDetail == 0)
@@ -91,9 +102,34 @@ void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 }
 
 
-//======================================================================================================================
-//!	Read Along Channel geometry file
-//======================================================================================================================
+/**
+ * @brief Read along-channel geometry CSV file
+ * 
+ * CSV format (no header):
+ *   X, Z, Manning_n, UTM_X, UTM_Y, RightAngle, LeftAngle, Beta
+ * 
+ * Columns:
+ * 1. X: Along-channel coordinate (m, must be monotonic increasing)
+ * 2. Z: Bed elevation (m, vertical datum)
+ * 3. Manning_n: Roughness coefficient (s/m^{1/3})
+ * 4. UTM_X: UTM easting (m)
+ * 5. UTM_Y: UTM northing (m)
+ * 6. RightAngle: Right bank azimuth (degrees from north)
+ * 7. LeftAngle: Left bank azimuth (degrees from north)
+ * 8. Beta: Momentum correction coefficient (typically 1.0-1.1)
+ * 
+ * Actions:
+ * - Creates CCrossSection objects (one per row)
+ * - Populates m_vCrossSectionX vector
+ * - Sets m_nCrossSectionsNumber
+ * - Initializes state vectors (Q, A, eta, S, T) to zero if IC type = 0 (calm)
+ * 
+ * @param m_pSimulation Pointer to simulation object
+ * 
+ * @note Comments start with # or '
+ * @warning File must exist and have consistent columns per row
+ * @see bReadCrossSectionGeometryFile() for cross-section hydraulics
+ */
 void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 	// Create an object
 	ifstream InStream;
@@ -180,9 +216,17 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 	}
 }
 
-//======================================================================================================================
-//! Leer archivo de condición de frontera aguas arriba para temperatura
-//======================================================================================================================
+/**
+ * @brief Read upstream temperature boundary condition CSV file
+ * 
+ * CSV format (no header): time, temperature
+ * - time: Seconds since simulation start
+ * - temperature: Water temperature (°C)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Used when upstream BC type = 2 (time-varying)
+ */
 void CDataReader::bReadUpwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation) {
 
 	ifstream InStream;
@@ -209,9 +253,17 @@ void CDataReader::bReadUpwardTemperatureBoundaryConditionFile(CSimulation* m_pSi
 	}
 }
 
-//======================================================================================================================
-//! Leer archivo de condición de frontera aguas abajo para temperatura
-//======================================================================================================================
+/**
+ * @brief Read downstream temperature boundary condition CSV file
+ * 
+ * CSV format (no header): time, temperature
+ * - time: Seconds since simulation start
+ * - temperature: Ocean/downstream water temperature (°C)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Used when downstream BC type = 2 (time-varying)
+ */
 void CDataReader::bReadDownwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation) {
 	// Create an object
 	ifstream InStream;
@@ -238,9 +290,38 @@ void CDataReader::bReadDownwardTemperatureBoundaryConditionFile(CSimulation* m_p
 	}
 }
 
-//======================================================================================================================
-//!	Read Cross-Section geometry file
-//======================================================================================================================
+/**
+ * @brief Read cross-section hydraulic properties CSV file
+ * 
+ * CSV format (no header, multiple rows per cross-section):
+ *   SectionID, not_used, elevation, width, area, perimeter, Rh, sigma, left_y, right_y
+ * 
+ * Structure:
+ * - Each cross-section has N rows (one per elevation level)
+ * - SectionID matches X coordinate from along-channel file
+ * - Rows grouped by SectionID (must be consecutive)
+ * 
+ * Columns:
+ * 1. SectionID: X coordinate identifier
+ * 2. (unused)
+ * 3. elevation: Water depth from bed (m), must be monotonic
+ * 4. width: Channel width at this elevation (m)
+ * 5. area: Cross-sectional area (m²)
+ * 6. perimeter: Wetted perimeter (m)
+ * 7. Rh: Hydraulic radius = A/P (m)
+ * 8. sigma: Width function (m)
+ * 9. left_y: Left bank distance from thalweg (m)
+ * 10. right_y: Right bank distance from thalweg (m)
+ * 
+ * Post-processing:
+ * - Calls calculateI1() for each cross-section (pressure integral)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Typically generated from survey data using GIS tools or HEC-RAS
+ * @warning Elevations must be strictly increasing within each cross-section
+ * @see CCrossSection::calculateI1() for pressure integral computation
+ */
 void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const {
 	// Create an object
 	ifstream InStream;
@@ -349,9 +430,19 @@ void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 }
 
 
-//======================================================================================================================
-//!	Read Upward Boundary Condition file
-//======================================================================================================================
+/**
+ * @brief Read upstream hydraulic boundary condition CSV file
+ * 
+ * CSV format (no header): time, value
+ * - time: Seconds since simulation start
+ * - value: Discharge Q (m³/s) or elevation h (m), depending on BC type
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note BC type set in config:
+ * - Type 1: value = constant discharge
+ * - Type 2: value = water elevation time series
+ */
 void CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
 	// Create an object
@@ -408,9 +499,18 @@ void CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 }
 
 
-//======================================================================================================================
-//!	Read Downward Boundary Condition file
-//======================================================================================================================
+/**
+ * @brief Read downstream hydraulic boundary condition CSV file
+ * 
+ * CSV format (no header): time, value
+ * - time: Seconds since simulation start
+ * - value: Water elevation h (m) - typically tidal time series
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Only reads if downstream BC type != 0 (not free)
+ * @note Common use: Astronomical tide predictions from harmonic analysis
+ */
 void CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
 	if (m_pSimulation->nGetDownwardEstuarineCondition() != 0)
@@ -470,9 +570,26 @@ void CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 }
 
 
-//======================================================================================================================
-//!	Read Along Channel Sediment properties file
-//======================================================================================================================
+/**
+ * @brief Read sediment properties CSV file
+ * 
+ * CSV format (no header):
+ *   SectionID, D_avg, D90, D50, sigma, rho_s, thickness
+ * 
+ * Columns:
+ * 1. SectionID: Cross-section identifier
+ * 2. D_avg: Average sediment diameter (m)
+ * 3. D90: 90th percentile grain size (m)
+ * 4. D50: Median grain size (m)
+ * 5. sigma: Sediment gradation coefficient (D84/D50)
+ * 6. rho_s: Sediment relative density (typically 2.65 for quartz)
+ * 7. thickness: Active layer thickness (m)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Required if sediment transport enabled
+ * @see calculate_sediment_transport() for usage in van Rijn formula
+ */
 void CDataReader::bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) const {
 	// Create an object
 	ifstream InStream;
@@ -547,9 +664,37 @@ void CDataReader::bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) con
 	}
 }
 
-//======================================================================================================================
-//! Read Hydro input file
-//======================================================================================================================
+/**
+ * @brief Read lateral inflow hydrographs CSV file
+ * 
+ * File structure:
+ * 1. First line: N (number of tributaries)
+ * 2. For each tributary:
+ *    - Blank line (separator)
+ *    - Location line: UTM_X, UTM_Y
+ *    - Data lines: time, discharge
+ * 
+ * Example:
+ *   3
+ *   
+ *   450000, 4050000
+ *   0, 10.5
+ *   3600, 12.3
+ *   ...
+ *   
+ *   451000, 4051000
+ *   0, 5.2
+ *   ...
+ * 
+ * Post-processing:
+ * - Finds nearest cross-section for each tributary (Euclidean distance)
+ * - Stores in m_nNearestCrossSectionNo
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Discharge linearly interpolated during simulation
+ * @warning UTM coordinates must match projection of main channel
+ */
 void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 	if (m_pSimulation->m_bHydroFile) {
 		// Create an object
@@ -670,9 +815,25 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 	}
 }
 
-//======================================================================================================================
-//! Leer archivo único de forzamiento de heat flux (Tair, humedad relativa, viento)
-//======================================================================================================================
+/**
+ * @brief Read meteorological forcing CSV file for heat flux calculations
+ * 
+ * CSV format (no header): time, T_air, RH, wind, pressure
+ * - time: Seconds since simulation start
+ * - T_air: Air temperature (°C)
+ * - RH: Relative humidity (%)
+ * - wind: Wind speed (m/s)
+ * - pressure: Atmospheric pressure (Pa)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Used in calculateRadiativeFluxes() for:
+ * - Sensible heat flux: Q_S = ρ_a·c_p·C_H·U·(T_water - T_air)
+ * - Latent heat flux: Q_L = ρ_a·L_v·C_E·U·(q_sat - q_air)
+ * - Longwave radiation (if not measured directly)
+ * 
+ * @see calculateRadiativeFluxes() in simulation.cpp
+ */
 void CDataReader::bReadHeatFluxFile(CSimulation* m_pSimulation) {
 	if (m_pSimulation->m_strHeatFluxFile.empty()) return;
 	std::ifstream InStream(m_pSimulation->m_strHeatFluxFile.c_str(), std::ios::in);
@@ -687,29 +848,43 @@ void CDataReader::bReadHeatFluxFile(CSimulation* m_pSimulation) {
 			std::stringstream string_line(strRec);
 			std::string token;
 			int j = 0;
-			double time = 0.0, tair = 0.0, rh = 0.0, wind = 0.0;
+			double time = 0.0, tair = 0.0, rh = 0.0, wind = 0.0, pressure = 0.0;
 			while (getline(string_line, token, ',')) {
 				double dValue = strtod(token.c_str(), nullptr);
 				if (j == 0) time = dValue;
 				if (j == 1) tair = dValue;
 				if (j == 2) rh = dValue;
 				if (j == 3) wind = dValue;
+				if (j == 4) pressure = dValue;
 				j++;
 			}
-			if (j >= 4) {
+			if (j >= 5) {
 				m_pSimulation->m_vHeatFluxTime.push_back(time);
 				m_pSimulation->m_vHeatFluxAirTemp.push_back(tair);
 				m_pSimulation->m_vHeatFluxRelHumidity.push_back(rh);
 				m_pSimulation->m_vHeatFluxWind.push_back(wind);
+				m_pSimulation->m_vHeatFluxAtmosphericPressure.push_back(pressure);
 			}
 		}
 	}
 }
 
 
-//===============================================================================================================================
-//! Given a string containing time units, this returns the appropriate multiplier
-//===============================================================================================================================
+/**
+ * @brief Get time multiplier to convert specified units to seconds
+ * 
+ * Supported units (case-insensitive substring match):
+ * - "second" → 1
+ * - "hour" → 3600
+ * - "day" → 86400
+ * - "month" → 2628000 (assumes 30.416667 days)
+ * - "year" → 31557600 (assumes 365.25 days)
+ * 
+ * @param strIn String containing time unit (e.g., "hours", "days")
+ * @return Multiplier to convert to seconds, or TIME_UNKNOWN if not recognized
+ * 
+ * @note Used for converting boundary condition time series
+ */
 double CDataReader::dGetTimeMultiplier(string const *strIn)
 {
 	// Then return the correct multiplier, since m_dTimeStep is in hours
@@ -736,9 +911,18 @@ double CDataReader::dGetTimeMultiplier(string const *strIn)
 }
 
 
-//===============================================================================================================================
-//! Given a string containing time units, this sets up the appropriate multiplier and display units for the simulation
-//===============================================================================================================================
+/**
+ * @brief Set simulation duration units and multiplier
+ * 
+ * Sets:
+ * - m_dDurationUnitsMultiplier: Conversion factor to hours
+ * - m_strDurationUnits: Display string ("seconds", "hours", "days", etc.)
+ * 
+ * @param strIn String containing time unit
+ * @return RTN_OK on success, RTN_ERR_TIMEUNITS if unit not recognized
+ * 
+ * @note Called during config file parsing
+ */
 int CDataReader::nSimulationTimeMultiplier(string const *strIn)
 {
     // Next set up the correct multiplier, since m_dTimeStep is in hours
@@ -775,9 +959,12 @@ int CDataReader::nSimulationTimeMultiplier(string const *strIn)
     return RTN_OK;
 }
 
-//===============================================================================================================================
-//! This finds time units in a string
-//===============================================================================================================================
+/**
+ * @brief Identify time unit from string
+ * 
+ * @param strIn String to search (case-insensitive)
+ * @return TIME_SECONDS, TIME_HOURS, TIME_DAYS, TIME_MONTHS, TIME_YEARS, or TIME_UNKNOWN
+ */
 int CDataReader::nDoTimeUnits(string const *strIn)
 {
 	if (strIn->find("second") != string::npos)
@@ -795,9 +982,11 @@ int CDataReader::nDoTimeUnits(string const *strIn)
 }
 
 
-//===============================================================================================================================
-//! Trims whitespace from the left side of a string, does not change the original string
-//===============================================================================================================================
+/**
+ * @brief Trim leading whitespace from string (does not modify original)
+ * @param strIn Input string
+ * @return Trimmed copy
+ */
 string CDataReader::strTrimLeft(string const *strIn)
 {
    // Trim leading spaces
@@ -807,9 +996,18 @@ string CDataReader::strTrimLeft(string const *strIn)
       return strIn->substr(nStartPosition);
 }
 
-//===============================================================================================================================
-//! Trims whitespace from the right side of a string, does not change the original string
-//===============================================================================================================================
+/**
+ * @brief Trim trailing whitespace and carriage returns (does not modify original)
+ * 
+ * Removes:
+ * - Trailing spaces and tabs
+ * - Windows carriage returns (\r)
+ * 
+ * @param strIn Input string
+ * @return Trimmed copy
+ * 
+ * @note Handles files edited in Windows and transferred to Linux
+ */
 string CDataReader::strTrimRight(string const *strIn)
 {
    string strTmp(*strIn);
@@ -824,9 +1022,16 @@ string CDataReader::strTrimRight(string const *strIn)
       return strTmp.substr(0, nEndPos + 1);
 }
 
-//===============================================================================================================================
-//! Trims whitespace from both sides of a string, does not change the original string
-//===============================================================================================================================
+/**
+ * @brief Trim leading and trailing whitespace (does not modify original)
+ * 
+ * Combines strTrimLeft() and strTrimRight().
+ * 
+ * @param strIn Input string
+ * @return Trimmed copy
+ * 
+ * @note Most commonly used trim function in CSV parsing
+ */
 string CDataReader::strTrim(string const *strIn)
 {
    string strTmp = *strIn;
@@ -850,9 +1055,26 @@ string CDataReader::strTrim(string const *strIn)
 }
 
 
-//===============================================================================================================================
-//! Parses a date string into days, months, and years, and checks each of them
-//===============================================================================================================================
+/**
+ * @brief Parse date string into day, month, year components
+ * 
+ * Expected format: DD/MM/YYYY (or DD-MM-YYYY, platform-dependent)
+ * 
+ * Validation:
+ * - Day: 1-31
+ * - Month: 1-12
+ * - Year: > 0
+ * - All components must be valid integers
+ * 
+ * @param strDate Input date string
+ * @param nDay Output: day (1-31)
+ * @param nMonth Output: month (1-12)
+ * @param nYear Output: year (>0)
+ * @return true if valid, false if parsing/validation fails
+ * 
+ * @note Does NOT validate day-month combinations (e.g., allows 31/02)
+ * @warning Separator is platform-dependent (SLASH macro)
+ */
 bool CDataReader::bParseDate(string const *strDate, int &nDay, int &nMonth, int &nYear)
 {
 #ifdef _WIN32
@@ -916,9 +1138,25 @@ bool CDataReader::bParseDate(string const *strDate, int &nDay, int &nMonth, int 
    return true;
 }
 
-//===============================================================================================================================
-//! Parses a time string into hours, minutes, and seconds, and checks each of them
-//===============================================================================================================================
+/**
+ * @brief Parse time string into hour, minute, second components
+ * 
+ * Expected format: HH-MM-SS (dash-separated)
+ * 
+ * Validation:
+ * - Hour: 0-23
+ * - Minute: 0-59
+ * - Second: 0-59
+ * - All components must be valid integers
+ * 
+ * @param strTime Input time string
+ * @param nHour Output: hour (0-23)
+ * @param nMin Output: minute (0-59)
+ * @param nSec Output: second (0-59)
+ * @return true if valid, false if parsing/validation fails
+ * 
+ * @note Uses DASH separator (defined in header)
+ */
 bool CDataReader::bParseTime(string const *strTime, int &nHour, int &nMin, int &nSec)
 {
    vector<string> vStrTmp = VstrSplit(strTime, DASH);
@@ -977,9 +1215,26 @@ bool CDataReader::bParseTime(string const *strTime, int &nHour, int &nMin, int &
    return true;
 }
 
-//======================================================================================================================
-//! Read .ini file to get input and output paths
-//======================================================================================================================
+/**
+ * @brief Read .ini file for input/output directory paths
+ * 
+ * .ini format:
+ *   input_path = "/path/to/input/data"
+ *   output_path = "/path/to/output/results"
+ * 
+ * Features:
+ * - Ignores comments (lines starting with # or ;)
+ * - Strips quotes from values
+ * - Case-insensitive keys (INPUT_PATH also works)
+ * 
+ * @return true if both paths found, false if .ini missing or incomplete
+ * 
+ * @note Sets:
+ * - m_strInputPath: Base directory for CSV files
+ * - m_strOutputBasePath: Base directory for NetCDF output
+ * 
+ * @see YAML config for relative path resolution
+ */
 bool CDataReader::bReadConfigurationPaths() {
     std::ifstream configFile(".ini");
     
@@ -1049,19 +1304,45 @@ bool CDataReader::bReadConfigurationPaths() {
     return true;
 }
 
-// Lee el último estado de un NetCDF y lo carga en la simulación
-#include <netcdf.h>
-#include <cstring>
-
+/**
+ * @brief Restore simulation state from NetCDF restart file
+ * 
+ * Purpose: Enable warm-start simulations (continue from previous run)
+ * 
+ * Procedure:
+ * 1. Open NetCDF file in read-only mode
+ * 2. Read dimensions (x, time)
+ * 3. Extract last timestep (index = time_len - 1)
+ * 4. Restore all state variables:
+ *    - Hydraulics: Q, A, eta, U, B, Rh, c
+ *    - Transport: S (salinity), rho (density)
+ *    - Sediment: Qb, Qs, Qt
+ *    - Derived: level (water depth)
+ * 5. Close file
+ * 
+ * @param m_pSimulation Pointer to simulation object
+ * @param netcdfPath Path to NetCDF restart file
+ * 
+ * @note Variables not found are skipped (no error)
+ * @warning Assumes spatial discretization matches (same number of cross-sections)
+ * @warning Time not restored (commented out) - simulation starts at t=0 by default
+ * 
+ * Usage:
+ *   config.yaml:
+ *     continue_simulation: true
+ *     continue_netcdf_path: "previous_run.nc"
+ * 
+ * @see nDefineNetCDFFile() in data_writer.cpp for output format
+ */
 void CDataReader::bRestoreStateFromNetCDF(CSimulation* m_pSimulation, const std::string& netcdfPath) const {
     int ncid;
     int retval = nc_open(netcdfPath.c_str(), NC_NOWRITE, &ncid);
     if (retval != NC_NOERR) {
-        std::cerr << "Error abriendo NetCDF para restaurar estado: " << nc_strerror(retval) << std::endl;
+        std::cerr << "Error opening NetCDF for state restoration: " << nc_strerror(retval) << std::endl;
         return;
     }
 
-	// Leer dimensiones
+	// Read dimensions
 	size_t len_x = 0, len_time = 0;
 	int dimid_x, dimid_time;
 	nc_inq_dimid(ncid, "x", &dimid_x);

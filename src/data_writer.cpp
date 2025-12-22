@@ -52,9 +52,25 @@ using std::setw;
 #include "main.h"
 
 
-//======================================================================================================================
-//! Class constructor
-//======================================================================================================================
+/**
+ * @brief Construct CDataWriter and initialize variable metadata dictionary
+ * 
+ * Creates metadata map (m_mVariableDefinitions) with CF-compliant attributes:
+ * - description: Long description of variable
+ * - longname: Short display name
+ * - units: Physical units (m, m/s, m², psu, °C, kg/m³, etc.)
+ * 
+ * Variables defined:
+ * - Hydraulics: A (area), Q (discharge), U (velocity), Rh (hydraulic radius)
+ * - Water surface: level (depth), eta (elevation)
+ * - Transport: S (salinity), T (temperature), rho (density)
+ * - Sediment: Qb (bedload), Qs (suspended), Qt (total)
+ * - Geometry: xl/xr (bank distances), UTM coordinates
+ * - Coefficients: beta (momentum correction), I1/I2 (pressure integrals)
+ * 
+ * @note CF conventions: www.cfconventions.org
+ * @see nDefineNetCDFFile() for writing metadata to file
+ */
 CDataWriter::CDataWriter() {
 
     // Creating the attributes of the main variables
@@ -147,17 +163,42 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["xr_utm_y"]["units"] = "m";
 }
 
-//======================================================================================================================
-//! Class destructor
-//======================================================================================================================
+/**
+ * @brief Destructor (default implementation)
+ */
 CDataWriter::~CDataWriter() {}
 
 
-//======================================================================================================================
-//! The definition of NetCDF file
-//======================================================================================================================
+/**
+ * @brief Create and define NetCDF output file structure
+ * 
+ * Execution flow:
+ * 1. Create NetCDF4 file with NC_CLOBBER (overwrite if exists)
+ * 2. Define dimensions:
+ *    - x: Along-channel coordinate (size = nCrossSections)
+ *    - time: Temporal dimension (unlimited or fixed)
+ * 3. Define variables: 2D arrays [time, x]
+ * 4. Add CF-compliant attributes (long_name, units, description)
+ * 5. Add global attributes (program name, author, version, run timestamp)
+ * 6. End definition mode (nc_enddef)
+ * 7. Write coordinate vectors (x, time)
+ * 
+ * NetCDF4 features used:
+ * - Compression: Enabled by default (reduces file size 3-10x)
+ * - Chunking: Automatic for unlimited dimension
+ * - Parallel I/O: Not used (serial writes)
+ * 
+ * @param m_pSimulation Pointer to simulation (provides dimensions, metadata)
+ * 
+ * @note Time dimension behavior:
+ * - Unlimited (NC_UNLIMITED): If detail==2 or saveAllTimesteps==true
+ * - Fixed size: Otherwise, uses m_vOutputTimes.size()
+ * 
+ * @warning Error handling: Prints to cerr but continues execution
+ * @see nSetOutputData() for writing actual data
+ */
 void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
-    //! Create a new NetCDF file
+    // Create a new NetCDF4 file (overwrite if exists)
     int status = nc_create(m_pSimulation->m_strOutFile.c_str(), NC_NETCDF4 | NC_CLOBBER, &m_ncId);
     if (status != NC_NOERR) {
         std::cerr << "Error creating NetCDF file: " << nc_strerror(status) << std::endl;
@@ -293,15 +334,46 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
 }
 
 
-//======================================================================================================================
-//! Get variable metadata
-//======================================================================================================================
+/**
+ * @brief Retrieve metadata for a specific variable
+ * 
+ * Accessor for m_mVariableDefinitions map.
+ * 
+ * @param strVariable Variable name (e.g., "A", "Q", "S")
+ * @param strField Metadata field ("longname", "units", "description")
+ * @return Metadata string, or empty string if not found
+ * 
+ * @note No error checking - returns empty string for missing entries
+ */
 string CDataWriter::strGetVariableMetadata(const string& strVariable, const string& strField) {
     return m_mVariableDefinitions[strVariable][strField];
 }
-//======================================================================================================================
-//! Set data of variables at a given timestep to the NetCDF file
-//======================================================================================================================
+/**
+ * @brief Write simulation data to NetCDF file at current timestep
+ * 
+ * Procedure:
+ * 1. Determine time index based on save mode:
+ *    - All timesteps (detail==2 or saveAllTimesteps): Use m_nTimeLogId, increment after write
+ *    - Selected times: Use m_nTimeId (pre-computed index)
+ * 2. Write current_time value if using unlimited dimension
+ * 3. Loop over output variables:
+ *    - Get data from simulation via vGetVariable()
+ *    - Write 1D slice [time=current, x=0:N] to NetCDF
+ * 4. Report errors to cerr
+ * 
+ * NetCDF write call:
+ *   nc_put_vara_double(ncId, varId, start={time_idx, 0}, count={1, nCrossSections}, data)
+ * 
+ * @param m_pSimulation Pointer to simulation (provides data)
+ * 
+ * @note Performance:
+ * - Each variable written separately (not efficient for many variables)
+ * - No buffering (writes directly to disk)
+ * - For large outputs, consider chunking/buffering strategies
+ * 
+ * @warning Does not sync/flush - relies on automatic NetCDF buffering
+ * @see nCloseNetCDFFile() for final sync
+ */
 void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
 
     int status = 0;
@@ -362,12 +434,28 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
 
 
 
-//======================================================================================================================
-//! Close the NetCDF file
-//======================================================================================================================
+/**
+ * @brief Close NetCDF output file and flush buffers
+ * 
+ * Operations:
+ * 1. Check if file is open (m_ncId >= 0)
+ * 2. Call nc_close() to:
+ *    - Flush all pending writes
+ *    - Write final metadata
+ *    - Close file descriptor
+ * 3. Set m_ncId = -1 to prevent double-close
+ * 
+ * @note nc_close() is idempotent-safe due to check
+ * @warning File may be corrupted if not closed properly (power failure, kill -9)
+ * 
+ * Best practices:
+ * - Always call in destructor or finally block
+ * - Check disk space before long simulations
+ * - Use nc_sync() periodically for crash recovery
+ */
 void CDataWriter::nCloseNetCDFFile()
 {
-    // Verificar que el archivo esté abierto antes de cerrarlo
+    // Verify file is open before closing
     if (m_ncId < 0) {
         std::cout << "NetCDF file already closed or never opened" << std::endl;
         return;

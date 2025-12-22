@@ -34,9 +34,18 @@ using std::find;
 
 #include <cross_section.h>
 
-//===============================================================================================================================
-//! The CCrossSection constructor
-//===============================================================================================================================
+/**
+ * @brief Construct a new CCrossSection object for channel geometry
+ * 
+ * Initializes all scalar members to 0:
+ * - Section numbers (ID, elevation count)
+ * - Position (X, Z, UTM coordinates)
+ * - Hydraulic properties (Manning's n, β coefficient)
+ * - Bank angles (left/right)
+ * 
+ * @note Vector members (width, area, hydraulic radius tables) are empty
+ * @see dAppend2Vector() for populating tabulated hydraulic data
+ */
 CCrossSection::CCrossSection(){
     m_nSectionNumber =
     m_nElevationSectionNumber = 0;
@@ -52,15 +61,31 @@ CCrossSection::CCrossSection(){
     m_dBeta =  0.0;
 }
 
-//===============================================================================================================================
-//! The CCrossSection destructor
-//===============================================================================================================================
+/**
+ * @brief Destructor (default implementation)
+ */
 CCrossSection::~CCrossSection() = default;
 
 
-//===============================================================================================================================
-//! Append a cross-section object to the estuary object
-//===============================================================================================================================
+/**
+ * @brief Append hydraulic data to tabulated vectors
+ * 
+ * Recognized items (case-sensitive):
+ * - "elevation": Water depth (m) relative to bed
+ * - "width": Channel width (m) at this elevation
+ * - "area": Cross-sectional area (m²)
+ * - "perimeter": Wetted perimeter (m)
+ * - "hydraulic radius": Rh = A/P (m)
+ * - "sigma": Width function σ(η)
+ * - "left/right river bank location": Bank positions
+ * - "I1", "I2": Pressure integral coefficients
+ * 
+ * @param strItem Column name from CSV file
+ * @param dValue Numerical value to append
+ * 
+ * @note Called during CSV parsing (data_reader.cpp)
+ * @see calculateI1() for computing I1 from geometry
+ */
 void CCrossSection::dAppend2Vector(const string& strItem, double dValue){
     if (strItem == "elevation")
         m_vWaterDepth.push_back(dValue);
@@ -84,9 +109,17 @@ void CCrossSection::dAppend2Vector(const string& strItem, double dValue){
         m_vI2.push_back(dValue);
 }
 
-//===============================================================================================================================
-//! The CCrossSection Setters
-//===============================================================================================================================
+/**
+ * @brief Setters for scalar cross-section properties
+ * 
+ * Simple assignment functions for:
+ * - Section ID, elevation count
+ * - Position (X, Z, UTM X/Y)
+ * - Manning's n roughness coefficient
+ * - Bank angles (degrees from north)
+ * - β: Momentum correction coefficient
+ * - Water depth (current simulation value)
+ */
 void CCrossSection::nSetSectionNumber(const int nValue){
     m_nSectionNumber = nValue;
 }
@@ -123,9 +156,16 @@ void CCrossSection::nSetElevationSectionsNumber(const int nValue) {
     m_nElevationSectionNumber = nValue;
 }
 
-//===============================================================================================================================
-//! The CCrossSection Getters
-//===============================================================================================================================
+/**
+ * @brief Getters for scalar and indexed vector properties
+ * 
+ * Two types:
+ * 1. Scalar getters: Return single values (X, Z, Manning's n, etc.)
+ * 2. Indexed getters: Return value at specific elevation index
+ *    e.g., dGetArea(5) returns area at 5th elevation level
+ * 
+ * @note Indexed getters have no bounds checking - caller must validate
+ */
 int CCrossSection::nGetSectionNumber() const{
   return m_nSectionNumber;
 }
@@ -187,7 +227,17 @@ double CCrossSection::dGetI2(const int nValue) const {
     return m_vI2[nValue];
 }
 
-//! Getter for vector variables
+/**
+ * @brief Getters for complete hydraulic tables (returns copies)
+ * 
+ * Returns entire tabulated vectors:
+ * - Area(elevation), Width(elevation), Hydraulic Radius(elevation)
+ * - Water depth levels, Bank locations
+ * - I1, I2 pressure integral coefficients
+ * 
+ * @note Returns by value (copy) - use carefully in tight loops
+ * @see precomputeEstuaryData() in simulation.cpp for cached access
+ */
 vector<double> CCrossSection::vGetArea() {
     return m_vArea;
 }
@@ -213,12 +263,32 @@ vector<double> CCrossSection::vGetI2() {
     return m_vI2;
 }
 
-//===============================================================================================================================
-//! Calculate I1 pressure integral for each elevation
-//! I1 = ∫₀ʰ (h-η)·σ(x,η)·dη where σ is width, η is elevation from bed, h is water depth
-//! This integral represents the first moment of the pressure distribution about the water surface
-//! For trapezoidal channels: I1 ≈ 0.4·A·h (compared to rectangular: I1 = 0.5·A·h)
-//===============================================================================================================================
+/**
+ * @brief Calculate I1 pressure integral for all elevation levels
+ * 
+ * Computes the first moment of pressure distribution:
+ *   I1(h) = ∫₀ʰ (h-η)·σ(η)·dη
+ * 
+ * where:
+ * - h: Total water depth (m)
+ * - η: Elevation from bed (m, 0 ≤ η ≤ h)
+ * - σ(η): Channel width at elevation η (m)
+ * - (h-η): Pressure head at elevation η (m)
+ * 
+ * Physical interpretation:
+ * - I1 represents the hydrostatic pressure moment about the water surface
+ * - Used in momentum equation for non-prismatic channels
+ * - For rectangular channel: I1 = 0.5·A·h
+ * - For trapezoidal channel: I1 ≈ 0.4·A·h (wider at top)
+ * 
+ * Numerical method:
+ * - Trapezoidal rule integration over tabulated σ(η)
+ * - Loops over all elevation levels i = 0 to N-1
+ * - For each level, integrates from bed (j=0) to current depth (j=i)
+ * 
+ * @note Called once during initialization (data_reader.cpp)
+ * @see Chaudhry (2008): Open-Channel Flow, Section 4.3
+ */
 void CCrossSection::calculateI1() {
     // Clear any existing I1 values
     m_vI1.clear();
@@ -264,7 +334,27 @@ void CCrossSection::calculateI1() {
 }
 
 
-// Calcula la primera eta > maxAstronomicalTide donde dB/deta > threshold
+/**
+ * @brief Find elevation where channel width gradient exceeds threshold
+ * 
+ * Searches for first elevation η > maxAstronomicalTide where dB/dη > threshold.
+ * 
+ * Purpose:
+ * - Detect transition from main channel to floodplain
+ * - Identify vegetation emergence zones (salt marshes)
+ * - Adjust Manning's n dynamically based on inundation
+ * 
+ * Algorithm:
+ * 1. Compute width gradient dB/dη at each elevation
+ * 2. Find first η > maxTide where gradient exceeds threshold
+ * 3. Return midpoint elevation of that segment
+ * 
+ * @param maxAstronomicalTide Maximum tide level from tidal analysis (m)
+ * @param threshold Minimum gradient to detect (m/m, e.g., 0.5 = 50% slope)
+ * @param etaWidthGradientThreshold Output: elevation where gradient exceeds threshold (m)
+ * 
+ * @note Returns 0.0 if no gradient exceeds threshold or insufficient data
+ */
 void CCrossSection::calculateEtaMaxWidthGradient(double maxAstronomicalTide, double threshold, double& etaWidthGradientThreshold) const {
     double etaMaxWidthGradient = 0.0;
     if (m_vWaterDepth.size() < 2 || m_vWidth.size() < 2) {
