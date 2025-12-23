@@ -818,14 +818,23 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 /**
  * @brief Read meteorological forcing CSV file for heat flux calculations
  * 
- * CSV format (no header): time, T_air, RH, wind, pressure
+ * CSV format (no header):
+ * - 5 columns: time, T_air, RH, wind, pressure (when RH data available)
+ * - 4 columns: time, T_air, wind, pressure (when calculate_rh_from_temperature enabled)
+ * 
+ * Columns:
  * - time: Seconds since simulation start
  * - T_air: Air temperature (°C)
- * - RH: Relative humidity (%)
+ * - RH: Relative humidity (%) [optional if calculating from temperature]
  * - wind: Wind speed (m/s)
  * - pressure: Atmospheric pressure (Pa)
  * 
  * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Flexible format:
+ * - If calculate_rh_from_temperature = true: expects 4 columns (no RH)
+ * - If calculate_rh_from_temperature = false: expects 5 columns (with RH)
+ * - Can also handle 5 columns when calculate_rh_from_temperature = true (RH data ignored)
  * 
  * @note Used in calculateRadiativeFluxes() for:
  * - Sensible heat flux: Q_S = ρ_a·c_p·C_H·U·(T_water - T_air)
@@ -833,6 +842,7 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
  * - Longwave radiation (if not measured directly)
  * 
  * @see calculateRadiativeFluxes() in simulation.cpp
+ * @see calculateDailyMinTemperatures() for RH estimation preprocessing
  */
 void CDataReader::bReadHeatFluxFile(CSimulation* m_pSimulation) {
 	if (m_pSimulation->m_strHeatFluxFile.empty()) return;
@@ -841,6 +851,10 @@ void CDataReader::bReadHeatFluxFile(CSimulation* m_pSimulation) {
 		std::cerr << ERR << "cannot open " << m_pSimulation->m_strHeatFluxFile << " for input" << std::endl;
 		return;
 	}
+	
+	bool calculate_rh = m_pSimulation->m_bCalculateRHFromTemperature;
+	int expected_cols = calculate_rh ? 4 : 5;
+	
 	std::string strRec;
 	while (getline(InStream, strRec)) {
 		strRec = strTrim(&strRec);
@@ -849,23 +863,50 @@ void CDataReader::bReadHeatFluxFile(CSimulation* m_pSimulation) {
 			std::string token;
 			int j = 0;
 			double time = 0.0, tair = 0.0, rh = 0.0, wind = 0.0, pressure = 0.0;
+			
 			while (getline(string_line, token, ',')) {
 				double dValue = strtod(token.c_str(), nullptr);
-				if (j == 0) time = dValue;
-				if (j == 1) tair = dValue;
-				if (j == 2) rh = dValue;
-				if (j == 3) wind = dValue;
-				if (j == 4) pressure = dValue;
+				
+				if (calculate_rh) {
+					// Format: time, T_air, wind, pressure (4 columns)
+					if (j == 0) time = dValue;
+					if (j == 1) tair = dValue;
+					if (j == 2) wind = dValue;
+					if (j == 3) pressure = dValue;
+				} else {
+					// Format: time, T_air, RH, wind, pressure (5 columns)
+					if (j == 0) time = dValue;
+					if (j == 1) tair = dValue;
+					if (j == 2) rh = dValue;
+					if (j == 3) wind = dValue;
+					if (j == 4) pressure = dValue;
+				}
 				j++;
 			}
-			if (j >= 5) {
+			
+			// Validate column count
+			if ((calculate_rh && j >= 4) || (!calculate_rh && j >= 5)) {
 				m_pSimulation->m_vHeatFluxTime.push_back(time);
 				m_pSimulation->m_vHeatFluxAirTemp.push_back(tair);
-				m_pSimulation->m_vHeatFluxRelHumidity.push_back(rh);
+				if (!calculate_rh) {
+					m_pSimulation->m_vHeatFluxRelHumidity.push_back(rh);
+				}
 				m_pSimulation->m_vHeatFluxWind.push_back(wind);
 				m_pSimulation->m_vHeatFluxAtmosphericPressure.push_back(pressure);
+			} else {
+				std::cerr << "Warning: Skipping line with " << j << " columns (expected " 
+				          << expected_cols << ")" << std::endl;
 			}
 		}
+	}
+	
+	// Log information about data reading
+	if (calculate_rh && m_pSimulation->m_nLogFileDetail >= 1) {
+		std::cout << "      Heat flux file read: " << m_pSimulation->m_vHeatFluxTime.size() 
+		          << " records (RH will be calculated from temperature)" << std::endl;
+	} else if (m_pSimulation->m_nLogFileDetail >= 1) {
+		std::cout << "      Heat flux file read: " << m_pSimulation->m_vHeatFluxTime.size() 
+		          << " records (RH from data)" << std::endl;
 	}
 }
 

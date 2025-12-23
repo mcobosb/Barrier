@@ -570,6 +570,11 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
                         if (up["inflow_water_effect_kQ"] && up["inflow_water_effect_kQ"].IsScalar()) {
                             try { m_pSimulation->m_dUpwardInflowWaterEffectkQ = up["inflow_water_effect_kQ"].as<double>(); } catch (...) {}
                         }
+                        // Series temporal
+                        if (up["file"] && !up["file"].IsNull()) {
+                            std::string filename = up["file"].as<std::string>();
+                            if (!filename.empty()) m_pSimulation->m_strUpwardTemperatureBoundaryConditionFilename = m_strInputPath + filename;
+                        }
                     }
                 }
                 // DOWNSTREAM
@@ -607,6 +612,10 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
                 }
                 if (hf["cloud_cover"]) {
                     m_pSimulation->m_dHeatFluxCloudCover = hf["cloud_cover"].as<double>();
+                }
+                // Option to calculate RH from temperature using FAO-56 method
+                if (hf["calculate_rh_from_temperature"]) {
+                    m_pSimulation->m_bCalculateRHFromTemperature = hf["calculate_rh_from_temperature"].as<bool>();
                 }
             }
         }

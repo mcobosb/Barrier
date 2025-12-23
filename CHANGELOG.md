@@ -7,6 +7,7 @@
   - Dynamic solar geometry with zenith-angle dependent albedo (Briegleb et al. 1986).
   - Turbulent fluxes using bulk aerodynamic formulas with calibratable coefficients (Stanton and Dalton numbers).
   - Meteorological forcing input: air temperature, relative humidity, wind speed, atmospheric pressure.
+  - **NEW: Relative humidity estimation from temperature using FAO-56 method** - when RH data is unavailable, it can be calculated from air temperature and daily minimum temperature using the Magnus-Tetens equation.
 
 - **Upstream 0D Reservoir Temperature Model:**
   - Boundary condition type 3: well-mixed tank energy balance model for upstream inflows.
@@ -19,10 +20,14 @@
 - Extended YAML configuration with `transport.temperature` section for all temperature parameters.
 - New CSV reader for meteorological forcing data.
 - Temperature variable added to NetCDF output with CF-compliant metadata.
+- **NEW: `calc_rh_from_temp()` function** - implements FAO-56 method for relative humidity estimation.
+- **NEW: `calculateDailyMinTemperatures()` function** - pre-computes daily minimum temperatures outside main loop for efficiency.
+- **NEW: YAML option `calculate_rh_from_temperature`** - enables/disables RH calculation from temperature data.
 
 ### Notes
 - Temperature calibration pending (requires site-specific tuning of cs, cl, cloud_cover coefficients).
 - Backward compatibility: existing YAML files need `transport.temperature` section to enable temperature simulation.
+- RH estimation assumes T_min ≈ T_dew (valid in most climates, may need adjustment in arid regions).
 
 ---
 

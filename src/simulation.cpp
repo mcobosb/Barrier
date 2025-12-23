@@ -219,7 +219,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     }
     // === Temperatura: Condiciones de frontera y forzamiento ===
     if (m_bDoWaterTemperature) {
-        if (m_nUpwardTemperatureCondition > 1) {
+        if (m_nUpwardTemperatureCondition == 2 || m_bCalculateRHFromTemperature == false) {
             CDataReader::bReadUpwardTemperatureBoundaryConditionFile(this);
         }
         if (m_nDownwardTemperatureCondition > 1) {
@@ -234,6 +234,10 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         }
         if (!m_strHeatFluxFile.empty()) {
             CDataReader::bReadHeatFluxFile(this);
+            if (m_bCalculateRHFromTemperature == true) {
+                // Calculate daily minimum temperatures if RH needs to be estimated
+                calculateDailyMinTemperatures();
+            }
         }
     }
     if (m_bDoSedimentTransport) {
@@ -497,6 +501,56 @@ void CSimulation::initializeVectors() {
     for (int i = 0; i < nTimestepsNumber; i++) {
         m_vOutputTimesIds[i] = i;
         m_vOutputTimes[i] = static_cast<double>(i) * m_dSimTimestep;
+    }
+}
+
+//======================================================================================================================
+//! Calculate daily minimum temperatures from air temperature time series
+//! This function pre-computes the minimum temperature for each day (00:00-24:00)
+//! to be used later for estimating relative humidity using the FAO-56 method
+//! 
+//! @note Called once after reading meteorological data (bReadHeatFluxFile)
+//! @note The vector m_vDailyMinTemperature is indexed by day number (0, 1, 2, ...)
+//! @note Only calculates if m_bCalculateRHFromTemperature == true
+//======================================================================================================================
+void CSimulation::calculateDailyMinTemperatures() {
+    // Only calculate if we need to derive RH from temperature
+    if (!m_bCalculateRHFromTemperature || m_vHeatFluxTime.empty() || m_vHeatFluxAirTemp.empty()) {
+        return;
+    }
+    
+    // Determine number of days in simulation
+    double total_time = m_vHeatFluxTime.back();  // Last time value (seconds)
+    int num_days = static_cast<int>(std::ceil(total_time / 86400.0)) + 1;  // 86400 s/day
+    
+    // Initialize daily min temperature vector with very high values
+    m_vDailyMinTemperature.assign(num_days, 1000.0);
+    
+    // Find minimum temperature for each day
+    for (size_t i = 0; i < m_vHeatFluxTime.size(); ++i) {
+        double time_hours = m_vHeatFluxTime[i] / 3600.0;
+        int day_index = static_cast<int>(time_hours / 24.0);
+        
+        if (day_index >= 0 && day_index < num_days) {
+            double temp = m_vHeatFluxAirTemp[i];
+            if (temp < m_vDailyMinTemperature[day_index]) {
+                m_vDailyMinTemperature[day_index] = temp;
+            }
+        }
+    }
+    
+    // Fill any days that might not have data with the overall minimum
+    double overall_min = *std::min_element(m_vHeatFluxAirTemp.begin(), m_vHeatFluxAirTemp.end());
+    for (int d = 0; d < num_days; ++d) {
+        if (m_vDailyMinTemperature[d] > 999.0) {  // Still uninitialized
+            m_vDailyMinTemperature[d] = overall_min;
+        }
+    }
+    
+    if (m_nLogFileDetail >= 2) {
+        LogStream << "--- Calculated daily minimum temperatures for RH estimation ---" << std::endl;
+        LogStream << "Number of days: " << num_days << std::endl;
+        LogStream << "Overall minimum temperature: " << overall_min << " °C" << std::endl;
     }
 }
 
@@ -2976,8 +3030,30 @@ void CSimulation::calculateRadiativeFluxes() {
         // Meteorological forcing from input data (with defaults if unavailable)
         double Tair = (!m_vHeatFluxTime.empty()) ? 
             linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxAirTemp) : 15.0;
-        double rh = (!m_vHeatFluxTime.empty()) ? 
-            linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxRelHumidity) : 70.0;
+        
+        // Relative humidity: either from data or calculated from temperature
+        double rh = 70.0;  // Default value
+        if (!m_vHeatFluxTime.empty()) {
+            if (m_bCalculateRHFromTemperature && !m_vDailyMinTemperature.empty()) {
+                // Calculate RH using FAO-56 method from current T_air and daily T_min
+                double sim_time_hours = m_dCurrentTime / 3600.0;
+                int day_index = static_cast<int>(sim_time_hours / 24.0);
+                
+                // Ensure day_index is within bounds
+                if (day_index >= 0 && day_index < static_cast<int>(m_vDailyMinTemperature.size())) {
+                    double T_min_daily = m_vDailyMinTemperature[day_index];
+                    rh = calc_rh_from_temp(Tair, T_min_daily);
+                } else {
+                    // Fallback: use interpolated value if available, otherwise default
+                    rh = (!m_vHeatFluxRelHumidity.empty()) ?
+                        linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxRelHumidity) : 70.0;
+                }
+            } else {
+                // Use interpolated RH from data file
+                rh = linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxRelHumidity);
+            }
+        }
+        
         double wind = (!m_vHeatFluxTime.empty()) ? 
             linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxWind) : 1.0;
         double pressure = (!m_vHeatFluxAtmosphericPressure.empty()) ?

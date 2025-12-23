@@ -109,6 +109,26 @@ public:
         return std::max(0.03, std::min(alpha_total, 0.40));
     }
 
+    //! Calculate relative humidity from current air temperature and daily minimum temperature
+    //! Uses FAO-56 method: assumes T_min approximates dew point temperature
+    //! T_air_current: Current air temperature (°C)
+    //! T_min_daily: Daily minimum air temperature (°C)
+    //! Returns: Relative humidity (0-100%)
+    static inline double calc_rh_from_temp(double T_air_current, double T_min_daily) {
+        // 1. Saturation vapor pressure (es) at current temperature using Magnus-Tetens formula
+        double es = 0.6108 * std::exp((17.27 * T_air_current) / (T_air_current + 237.3));
+        
+        // 2. Actual vapor pressure (ea) using T_min as proxy for dew point
+        // Assumption: T_dew ≈ T_min (air saturates at coolest moment of the day)
+        double ea = 0.6108 * std::exp((17.27 * T_min_daily) / (T_min_daily + 237.3));
+        
+        // 3. Calculate relative humidity
+        double rh = 100.0 * (ea / es);
+        
+        // Limit to 100% for numerical safety
+        return std::min(rh, 100.0);
+    }
+
 
 
     //! If true, Manning is calculated as a function of water level
@@ -198,6 +218,14 @@ public:
     std::vector<double> m_vHeatFluxRelHumidity;
     std::vector<double> m_vHeatFluxWind;
     std::vector<double> m_vHeatFluxAtmosphericPressure;  // Presión atmosférica (Pa)
+    
+    //! Vector de temperaturas mínimas diarias calculado fuera del bucle principal
+    //! Índice = día desde inicio de simulación (0, 1, 2, ...)
+    std::vector<double> m_vDailyMinTemperature;
+    
+    //! Flag para calcular HR a partir de Tair y Tmin (cuando no se tiene serie de HR)
+    bool m_bCalculateRHFromTemperature{false};
+    
     // === Opciones para continuar simulación ===
     bool m_bContinueSimulation = false;
     std::string m_strContinueNetcdfPath;
@@ -814,6 +842,7 @@ public:
     //! Runs the simulation
     void bDoSimulation(int, char const* []);
     void initializeVectors();
+    void calculateDailyMinTemperatures();
     void calculateBedSlope();
     void calculateAlongEstuaryInitialConditions();
     string generateOutputFileName() const;

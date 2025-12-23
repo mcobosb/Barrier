@@ -13,6 +13,7 @@
 - [X] Add baroclinic transport terms
 - [X] Add the dependence of n(eta) with the tidal range
 - [X] Add the threshold for jumping to inundation flats
+- [X] Add the calculus of relative humidity from air temperature file 
 - [ ] Implement suspended sediment transport (affects density) and bedload transport
 - [X] Include density calculation in the model
 - [X] Smooth considering distante between cross-sections (non-uniform 1D Laplacian)
