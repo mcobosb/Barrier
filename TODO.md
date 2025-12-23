@@ -21,6 +21,7 @@
 - [ ] Add LAPE (Longitudinal Anomaly of Potential Energy) calculation
 - [X] Test salinity initial condition input file
 - [ ] Write log files with key information
+- [X] Add upstream 0D model for well-mixed tanks inflows temperature 
 
 🧩 Data Input
 - [X] Adapt code to allow specifying a NetCDF file path for reading parameters and continue the simulation

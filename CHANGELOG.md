@@ -1,3 +1,31 @@
+## [0.11.0] - 2025-12-23
+
+### Major Features
+- **Water Temperature Transport Module:**
+  - Full advection-diffusion-heating equation with McCormack predictor-corrector scheme.
+  - Comprehensive surface energy balance: shortwave radiation (Q_SW), longwave radiation (Q_LW), sensible heat (Q_H), and latent heat (Q_E).
+  - Dynamic solar geometry with zenith-angle dependent albedo (Briegleb et al. 1986).
+  - Turbulent fluxes using bulk aerodynamic formulas with calibratable coefficients (Stanton and Dalton numbers).
+  - Meteorological forcing input: air temperature, relative humidity, wind speed, atmospheric pressure.
+
+- **Upstream 0D Reservoir Temperature Model:**
+  - Boundary condition type 3: well-mixed tank energy balance model for upstream inflows.
+  - Configurable parameters: temperature offset, atmospheric exchange, and inflow water effect.
+  - Uses same radiative physics as main 1D model.
+
+### Technical Improvements
+- Added physical constants library (water, air, radiation properties) and inline helper functions.
+- Enhanced density coupling: ρ = ρ₀·(1 + β_S·S - β_T·T) with configurable thermal expansion coefficient.
+- Extended YAML configuration with `transport.temperature` section for all temperature parameters.
+- New CSV reader for meteorological forcing data.
+- Temperature variable added to NetCDF output with CF-compliant metadata.
+
+### Notes
+- Temperature calibration pending (requires site-specific tuning of cs, cl, cloud_cover coefficients).
+- Backward compatibility: existing YAML files need `transport.temperature` section to enable temperature simulation.
+
+---
+
 ## [0.10.0] - 2025-12-20
 
 ### Added
