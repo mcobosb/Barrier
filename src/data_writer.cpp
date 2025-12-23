@@ -90,10 +90,6 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["Rh"]["longname"] = "hydraulic radius";
     m_mVariableDefinitions["Rh"]["units"] = "m";
 
-    m_mVariableDefinitions["I1"]["description"] = "Integral I1 = int(B dh) for source term balance";
-    m_mVariableDefinitions["I1"]["longname"] = "I1";
-    m_mVariableDefinitions["I1"]["units"] = "";
-
     m_mVariableDefinitions["level"]["description"] = "Water depth";
     m_mVariableDefinitions["level"]["longname"] = "water depth";
     m_mVariableDefinitions["level"]["units"] = "m";
@@ -250,7 +246,7 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
         const char *outputVariableName = m_vOutputVariable.c_str();
         int varId;  // Variable local para cada variable
         
-        status = nc_def_var(m_ncId, outputVariableName, NC_DOUBLE, 2, n_DimensionsIds, &varId);
+        status = nc_def_var(m_ncId, outputVariableName, NC_FLOAT, 2, n_DimensionsIds, &varId);
         if (status != NC_NOERR) {
             std::cerr << "Error defining variable '" << outputVariableName 
                       << "': " << nc_strerror(status) << std::endl;
@@ -262,7 +258,7 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
         status = nc_def_var_deflate(m_ncId, varId, 
                                      1,  // Shuffle enabled (improves compression ~30%)
                                      1,  // Deflate compression enabled
-                                     4); // Compression level (1=fast, 9=max, 4=balanced)
+                                     5); // Compression level (1=fast, 9=max, 4=balanced)
         if (status != NC_NOERR) {
             std::cerr << "Warning: Could not enable compression for '" << outputVariableName 
                       << "': " << nc_strerror(status) << std::endl;
@@ -432,12 +428,18 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
             continue;
         }
 
-        status = nc_put_vara_double(
+        // Convert double to float for 50% size reduction
+        vector<float> data_float(data.size());
+        for (size_t i = 0; i < data.size(); ++i) {
+            data_float[i] = static_cast<float>(data[i]);
+        }
+
+        status = nc_put_vara_float(
             m_ncId,
             m_mVariableIds.at(strOutputVariable),
             start,
             count,
-            data.data()
+            data_float.data()
         );
 
         if (status != NC_NOERR) {

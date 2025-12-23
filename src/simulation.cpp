@@ -195,6 +195,9 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         return;
     }
 
+    // Display simulation start date
+    std::cout << "      - Simulation start date: " << getSimulationStartDateTimeString() << std::endl;
+
     // Transfer file paths to reader and simulation
     reader.m_strAlongChannelDataFilename = yamlReader.m_strAlongChannelDataFilename;
     reader.m_strCrossSectionsFilename = yamlReader.m_strCrossSectionGeometryFilename;
@@ -2351,8 +2354,6 @@ void CSimulation::mergePredictorCorrector() {
         auto& alfa2_med = m_vTVD_alfa2_med;
         auto& psi1_med = m_vTVD_psi1_med;
         auto& psi2_med = m_vTVD_psi2_med;
-        auto& r1_med = m_vTVD_r1_med;
-        auto& r2_med = m_vTVD_r2_med;
         auto& fi1_med = m_vTVD_fi1_med;
         auto& fi2_med = m_vTVD_fi2_med;
         auto& vFactor1 = m_vTVD_Factor1;

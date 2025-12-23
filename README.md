@@ -776,9 +776,9 @@ If you use BARRIER in your research, please cite:
 ```bibtex
 @software{barrier2026,
   title = {{BARRIER}: 1D Estuarine Hydrodynamic Model},
-  author = {Cobos, Manuel and Baquerizo, Asunción and Díez-Minguito, Manuel and Millares, Agustín},
+  author = {Cobos, Manuel},
   year = {2026},
-  version = {0.7.0},
+  version = {0.11.0},
   url = {https://github.com/mcobosb/Barrier},
   note = {Building Analysis capacity to improve the Resilience of the Guadalquivir river estuary}
 }
@@ -788,4 +788,4 @@ If you use BARRIER in your research, please cite:
 
 *For technical support, scientific collaboration, or general inquiries, please contact the development team.*
 
-**Last updated**: December 2025 | **Version**: 0.7.0
+**Last updated**: December 2025 | **Version**: 0.11.0
