@@ -254,6 +254,10 @@ public:
 
     //! Sytem loop-start-simulation time
     time_t m_tSysStartLoopTime{};
+    
+    // Diagnostic tracking variables
+    double m_dLastLogTime{0.0};      // Last time statistics were written
+    int m_nWarningCount{0};          // Counter for anomalous value warnings
 
     ofstream LogStream;
 
@@ -896,6 +900,8 @@ public:
     static double getMaxAstronomicalTide(const std::string& tidesFile);
 
     void AnnounceProgress();
+    void checkAnomalousValues();
+    void writePeriodicStatistics();
 
     //! Carries out end-of-simulation tidying (error messages etc.)
     void bDoSimulationEnd();
