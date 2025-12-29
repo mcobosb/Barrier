@@ -209,6 +209,9 @@ public:
     
     //! Cobertura nubosa para cálculo de radiación (0.0 = despejado, 1.0 = cubierto)
     double m_dHeatFluxCloudCover{0.2};
+    
+    //! Profundidad efectiva del reservorio para modelo 0D de temperatura (m)
+    double m_dReservoirEffectiveDepth{5.0};
 
     // === Series temporales de forzamiento ===
 

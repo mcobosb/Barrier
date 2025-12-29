@@ -2372,8 +2372,9 @@ void CSimulation::updateReservoirTemperature0D() {
         
         // === TEMPERATURE TENDENCY ===
         // Surface heat flux term: Q_net / (ρ·Cp·h_eff)
-        // Inflow term: (Q_in/V) * (T_in - T_water)
-        double h_effective = 1.0;  // Effective depth for 0D model (can be calibrated)
+        // Use configured reservoir effective depth
+        double h_effective = m_dReservoirEffectiveDepth;
+        
         double heat_flux_term = Qnet / (WATER_DENSITY * WATER_SPECIFIC_HEAT * h_effective);
         double inflow_term = (i < m_vCrossSectionQ.size()) ? 
             m_dUpwardInflowWaterEffectkQ * m_vCrossSectionQ[i] * (Tin - Twater) : 0.0;
@@ -2381,12 +2382,16 @@ void CSimulation::updateReservoirTemperature0D() {
         double dTdt = heat_flux_term + inflow_term;
         
         // Update temperature
+        double T_new;
         if (i == 0) {
-            m_vUpwardTemperatureBoundaryConditionValue[i] += dt * dTdt;
+            T_new = m_vUpwardTemperatureBoundaryConditionValue[i] + dt * dTdt;
         } else {
-            m_vUpwardTemperatureBoundaryConditionValue[i] = 
-                m_vUpwardTemperatureBoundaryConditionValue[i-1] + dt * dTdt;
+            T_new = m_vUpwardTemperatureBoundaryConditionValue[i-1] + dt * dTdt;
         }
+        
+        // Apply physical limits to prevent unrealistic values
+        T_new = std::max(-5.0, std::min(40.0, T_new));
+        m_vUpwardTemperatureBoundaryConditionValue[i] = T_new;
     }
 }
 

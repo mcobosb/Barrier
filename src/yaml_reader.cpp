@@ -613,6 +613,10 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
                 if (hf["cloud_cover"]) {
                     m_pSimulation->m_dHeatFluxCloudCover = hf["cloud_cover"].as<double>();
                 }
+                // Effective depth for 0D reservoir temperature model
+                if (hf["reservoir_depth"]) {
+                    m_pSimulation->m_dReservoirEffectiveDepth = hf["reservoir_depth"].as<double>();
+                }
                 // Option to calculate RH from temperature using FAO-56 method
                 if (hf["calculate_rh_from_temperature"]) {
                     m_pSimulation->m_bCalculateRHFromTemperature = hf["calculate_rh_from_temperature"].as<bool>();
