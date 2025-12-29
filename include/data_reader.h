@@ -127,7 +127,7 @@ public:
     //! Read every cross-section geometry
     void bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const;
 
-    //! Read time-series with upward and downward boundary conditions (hidráulico)
+    //! Read time-series with upward and downward boundary conditions (hydraulic)
     static void bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation);
     static void bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation);
 
@@ -135,7 +135,7 @@ public:
     static void bReadUpwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation);
     static void bReadDownwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation);
 
-    //! Leer archivo único de forzamiento de heat flux (Tair, humedad relativa, viento)
+    //! Read single heat flux forcing file (Tair, relative humidity, wind)
     static void bReadHeatFluxFile(CSimulation* m_pSimulation);
 
     //! Read along channel sediments file
@@ -156,7 +156,7 @@ public:
     //! Get output base path
     string getOutputBasePath() const { return m_strOutputBasePath; }
 
-    //! Leer el último estado de un NetCDF para continuar la simulación
+    //! Read last state from NetCDF to continue simulation
     void bRestoreStateFromNetCDF(CSimulation* m_pSimulation, const std::string& netcdfPath) const;
 };
 #endif // DATA_READER_H

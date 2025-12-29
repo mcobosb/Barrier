@@ -64,7 +64,7 @@ public:
     std::string m_strHydrographsFilename;
     std::string m_strSalinityFilename;
 
-    //! Valor de manning_db leído del YAML
+    //! manning_db value read from YAML
     int m_nThresholddBdeta = 0;
 };
 

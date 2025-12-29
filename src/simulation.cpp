@@ -217,7 +217,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     if (m_nDownwardEstuarineCondition > 1) {
         CDataReader::bReadDownwardBoundaryConditionFile(this);
     }
-    // === Temperatura: Condiciones de frontera y forzamiento ===
+    // === Temperature: Boundary conditions and forcing ===
     if (m_bDoWaterTemperature) {
         if (m_nUpwardTemperatureCondition == 2 || m_bCalculateRHFromTemperature == false) {
             CDataReader::bReadUpwardTemperatureBoundaryConditionFile(this);
@@ -2475,7 +2475,7 @@ void CSimulation::mergePredictorCorrector() {
     //! Applies TVD flux limiters to maintain monotonicity and avoid spurious oscillations
     if (bGetDoMcComarckLimiterFlux())
     {
-        //! Include TVD-McComarck? - Usar vectores pre-alocados (miembros de clase)
+        //! Include TVD-McComarck? - Use pre-allocated vectors (class members)
         // Note: Vectors don't need zeroing - overwritten in loops below
         
         // References to maintain compatibility with existing code
@@ -2649,8 +2649,8 @@ void CSimulation::mergePredictorCorrector() {
             m_vCrossSectionQ[i] = 0.5*(m_vPredictedCrossSectionQ[i] + m_vCorrectedCrossSectionQ[i]) +m_dLambda*(m_vCrossSectionD2Factor[i+1] - m_vCrossSectionD2Factor[i]);
         }
         
-        //! ✅ Aplicar BC finales después del merge
-        //! Las fronteras deben usar los valores corrected, no el promedio
+        //! Apply final boundary conditions after merge
+        //! Boundaries must use corrected values, not averaged predictor-corrector
         m_vCrossSectionArea[0] = m_vCorrectedCrossSectionArea[0];
         m_vCrossSectionQ[0] = m_vCorrectedCrossSectionQ[0];
         m_vCrossSectionArea[m_nCrossSectionsNumber-1] = m_vCorrectedCrossSectionArea[m_nCrossSectionsNumber-1];
@@ -2998,7 +2998,7 @@ void CSimulation::AnnounceProgress() {
     sdToGo = (sdElapsed * m_dSimDuration / m_dCurrentTime) - sdElapsed;
 
 
-    // Calcular t_start solo una vez (static)
+    // Calculate t_start only once (static)
     static time_t t_start = 0;
     if (t_start == 0) {
         std::tm tm_start = {};
@@ -3758,7 +3758,7 @@ void CSimulation::calculate_sediment_transport()
 void CSimulation::calculate_density()
 {
     // ⚡ OPTIMIZATION: Precalculate constants outside loop (checked once per timestep)
-    // Parámetros betaS y betaT
+    // Baroclinic coefficients betaS (salinity) and betaT (temperature)
     double betaS = bGetDoWaterSalinity() ? dGetBetaSalinityConstant() : 0.0;
     double betaT = bGetDoWaterTemperature() ? 
                    (bGetDoBetaCoefficient() && m_dBetaTemperatureConstant > 0.0 ? 
@@ -3830,7 +3830,7 @@ void CSimulation::bDoSimulationEnd(){
  */
 void CSimulation::precomputeEstuaryData() {
     
-    // Pre-calcular datos escalares básicos
+    // Preallocate scalar data arrays for geometry properties
     m_vElevationSectionsCount.resize(m_nCrossSectionsNumber);
     m_vBedZ.resize(m_nCrossSectionsNumber);
     m_vManningN.resize(m_nCrossSectionsNumber);
@@ -3840,8 +3840,8 @@ void CSimulation::precomputeEstuaryData() {
     // Initialize binary search cache (speeds up calculateHydraulicParameters ~30%)
     m_vLastInterpolationIndex.assign(m_nCrossSectionsNumber, 0);
     
-    // ✅ MEJOR: Inicializar con dimensiones conocidas
-    m_vWidth.assign(m_nCrossSectionsNumber, vector<double>());        // Vector vacío inicial       
+    // Initialize with known dimensions
+    m_vWidth.assign(m_nCrossSectionsNumber, vector<double>());        // Initialize empty vectors       
     m_vLeftY.assign(m_nCrossSectionsNumber, vector<double>());        
     m_vRightY.assign(m_nCrossSectionsNumber, vector<double>());       
     m_vEstuaryAreas.assign(m_nCrossSectionsNumber, vector<double>());
@@ -3851,14 +3851,14 @@ void CSimulation::precomputeEstuaryData() {
 
     
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-        // Datos escalares básicos
+        // Extract basic scalar properties from cross-section geometry
         m_vBedZ[i] = estuary[i].dGetZ();
         m_vManningN[i] = estuary[i].dGetManningNumber();
         m_vPositionX[i] = estuary[i].dGetX();
         m_vElevationSectionsCount[i] = estuary[i].nGetElevationSectionsNumber();
         m_vBeta[i] = estuary[i].dGetBeta();
         
-        // Vectores de datos hidráulicos
+        // Extract hydraulic lookup tables (area, depth, width, hydraulic radius)
         m_vWidth[i] = estuary[i].vGetWidth();   
         m_vEstuaryAreas[i] = estuary[i].vGetArea();
         m_vEstuaryHydraulicRadius[i] = estuary[i].vGetHydraulicRadius();
@@ -3906,20 +3906,20 @@ void CSimulation::precomputeEstuaryData() {
 std::string CSimulation::generateOutputFileName() const {
     std::ostringstream filename;
     
-    // ✅ FECHA Y HORA actual
+    // Current date and time
     auto now = std::time(nullptr);
     auto tm = *std::localtime(&now);
     
-    // ✅ NOMBRE BASE del proyecto
+    // BASE PROJECT NAME
     filename << "barrier_sim";
     
-    // ✅ FECHA: YYYYMMDD_HHMM
+    // Date and time: YYYYMMDD_HHMM
     filename << "_" << std::put_time(&tm, "%Y%m%d_%H%M");
     
-    // ✅ NÚMERO DE SECCIONES
+    // Number of cross-sections (e.g., CS806)
     filename << "_CS" << std::setfill('0') << std::setw(3) << m_nCrossSectionsNumber;
     
-    // ✅ DURACIÓN DE SIMULACIÓN (en horas)
+    // Simulation duration (convert seconds to human-readable format)
     double hours = m_dSimDuration / 3600.0;
     if (hours < 1.0) {
         filename << "_T" << std::setfill('0') << std::setw(2) << static_cast<int>(m_dSimDuration / 60.0) << "min";
@@ -3929,22 +3929,22 @@ std::string CSimulation::generateOutputFileName() const {
         filename << "_T" << static_cast<int>(hours / 24.0) << "d";
     }
     
-    // ✅ TIMESTEP (en segundos)
+    // TIMESTEP (en segundos)
     filename << "_dt" << std::setfill('0') << std::setw(3) << static_cast<int>(m_dSimTimestep);
     
-    // ✅ CONDICIONES DE FRONTERA
+    // BOUNDARY CONDITIONS
     filename << "_BC" << m_nUpwardEstuarineCondition << m_nDownwardEstuarineCondition;
     
-    // ✅ OPCIONES ESPECIALES
+    // SPECIAL OPTIONS
     if (m_bDoSedimentTransport) filename << "_SED";
     if (m_bDoWaterSalinity) filename << "_SAL";
     if (m_bDoMcCormackLimiterFlux) filename << "_TVD";
     if (m_bDoDryBed) filename << "_DRY";
     
-    // ✅ COURANT NUMBER
+    // COURANT NUMBER
     filename << "_CFL" << std::setfill('0') << std::setw(2) << static_cast<int>(m_dCourantNumber * 100);
     
-    // ✅ EXTENSIÓN
+    // FILE EXTENSION
     filename << ".nc";
     
     return filename.str();

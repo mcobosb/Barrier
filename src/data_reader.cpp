@@ -208,7 +208,7 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 			m_pSimulation->m_vCrossSectionArea.push_back(0.0);
 			m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
 			m_pSimulation->m_vCrossSectionSalinity.push_back(0.0);
-			// Inicializar temperatura si corresponde
+			// Initialize temperature if applicable
 			if (m_pSimulation->m_bDoWaterTemperature) {
 				m_pSimulation->m_vCrossSectionTemperature.push_back(0.0);
 			}
@@ -550,7 +550,6 @@ void CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 				while (getline(string_line, token, ',')) {
 					double dValue = strtod(token.c_str(), nullptr);
 					if (j == 0) {
-						//! TODO 010: Setter and getter
 						m_pSimulation->m_vDownwardBoundaryConditionTime.push_back(dValue);
 					}
 
@@ -1391,10 +1390,10 @@ void CDataReader::bRestoreStateFromNetCDF(CSimulation* m_pSimulation, const std:
 	nc_inq_dimid(ncid, "time", &dimid_time);
 	nc_inq_dimlen(ncid, dimid_time, &len_time);
 
-	// Leer el último índice temporal
+	// Read the last temporal index from saved state
 	size_t last_idx = len_time > 0 ? len_time - 1 : 0;
 
-	// Mapear variables NetCDF a los vectores de la simulación
+	// Map NetCDF variables to simulation vectors
 	auto restore_var = [&](const char* varname, std::vector<double>& target) {
 		int varid;
 		if (nc_inq_varid(ncid, varname, &varid) == NC_NOERR) {
@@ -1421,7 +1420,7 @@ void CDataReader::bRestoreStateFromNetCDF(CSimulation* m_pSimulation, const std:
 	restore_var("Qt", m_pSimulation->m_vCrossSectionQt);
 	restore_var("level", m_pSimulation->m_vCrossSectionWaterDepth);
 
-	// Leer el tiempo actual
+	// Read current time
 	// int time_varid;
 	// if (nc_inq_varid(ncid, "time", &time_varid) == NC_NOERR) {
 	// 	double t;

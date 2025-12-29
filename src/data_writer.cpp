@@ -206,7 +206,7 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     nc_def_dim(m_ncId, "x", static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber), &n_XId);
     nc_def_var(m_ncId, "x", NC_DOUBLE, 1, &n_XId, &n_VariableId);
 
-    // Usar strlen() para obtener la longitud real de las cadenas
+    // Use strlen() to get actual string length
     const char* x_long_name = "along estuary coordinate";
     const char* x_units = "m";
     nc_put_att_text(m_ncId, n_VariableId, "long_name", strlen(x_long_name), x_long_name);
@@ -216,7 +216,7 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
         size_t time_len = NC_UNLIMITED;  // Unlimited time
         nc_def_dim(m_ncId, "time", time_len, &n_TId);
         
-        // También definir la variable tiempo con NC_UNLIMITED
+        // Define time variable with NC_UNLIMITED dimension
         nc_def_var(m_ncId, "time", NC_DOUBLE, 1, &n_TId, &n_VariableId);
         const char* time_long_name = "time";
         const char* time_units = "s";
@@ -227,7 +227,7 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
         nc_def_dim(m_ncId, "time", static_cast<size_t>(m_pSimulation->m_vOutputTimes.size()), &n_TId);
         nc_def_var(m_ncId, "time", NC_DOUBLE, 1, &n_TId, &n_VariableId);
         
-        // Usar strlen() para la variable tiempo también
+        // Use strlen() for time variable attributes
         const char* time_long_name = "time";
         const char* time_units = "s";
         nc_put_att_text(m_ncId, n_VariableId, "long_name", strlen(time_long_name), time_long_name);
@@ -275,12 +275,12 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
             // Continue anyway - default chunking will be used
         }
 
-        // Obtener metadatos y usar su longitud real
+        // Get metadata and use actual length
         std::string longname = strGetVariableMetadata(outputVariableName, "longname");
         std::string units = strGetVariableMetadata(outputVariableName, "units");
         std::string description = strGetVariableMetadata(outputVariableName, "description");
 
-        // Usar la longitud real de cada cadena
+        // Use actual length for each string
         if (!longname.empty()) {
             nc_put_att_text(m_ncId, varId, "long_name", longname.length(), longname.c_str());
         }
@@ -293,11 +293,11 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
             nc_put_att_text(m_ncId, varId, "description", description.length(), description.c_str());
         }
 
-        //! Guardar el ID específico de cada variable
+        //! Store the specific ID for each variable
         m_mVariableIds[outputVariableName] = varId;
     }
 
-    //! Include global attributes - usar longitud real
+    //! Include global attributes - use actual length
     const char* program_name = NAME;
     const char* author_name = AUTHOR;
     const char* version_name = VERSION;
@@ -316,7 +316,7 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     const string formatted_time = oss.str();
     nc_put_att_text(m_ncId, NC_GLOBAL, "Running on", formatted_time.length(), formatted_time.c_str());
 
-    // Obtener fecha de inicio de CDataReader (debe pasarse a CSimulation)
+    // Get start date from CDataReader (must be passed to CSimulation)
     ostringstream time_offset_oss;
     time_offset_oss << setfill('0') << setw(4) << m_pSimulation->nGetSimStartYear() << "-"
                     << setw(2) << m_pSimulation->nGetSimStartMonth() << "-"
@@ -328,15 +328,15 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     const string time_offset = time_offset_oss.str();
     nc_put_att_text(m_ncId, NC_GLOBAL, "time_offset", time_offset.length(), time_offset.c_str());
 
-    //! ✅ AÑADIR: Descripción del time_offset
+    //! Time_offset description
     const char* time_offset_description = "Simulation start time used as time offset for all time variables";
     nc_put_att_text(m_ncId, NC_GLOBAL, "time_offset_description", strlen(time_offset_description), time_offset_description);
 
-    //! ✅ AÑADIR: Unidades de tiempo relativo
+    //! Relative time units
     const char* time_units = "seconds since simulation start";
     nc_put_att_text(m_ncId, NC_GLOBAL, "time_units", strlen(time_units), time_units);
 
-    // End the definition of NetCDF file
+    //! End the definition of NetCDF file
     status = nc_enddef(m_ncId);
     if (status != NC_NOERR) {
         std::cerr << "Error ending NetCDF definition: " << nc_strerror(status) << std::endl;
@@ -345,7 +345,7 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
 
     //! Write coordinates and times
     nc_put_var_double(m_ncId, n_XId, m_pSimulation->m_vCrossSectionX.data());
-    // Solo escribir todos los tiempos si NO se usa modo unlimited (detail != 2 y no saveAllTimesteps)
+    //! Only write all times if NOT using unlimited mode (detail != 2 and not saveAllTimesteps)
     if (m_pSimulation->m_nLogFileDetail != 2 && !m_pSimulation->bGetSaveAllTimesteps()) {
         nc_put_var_double(m_ncId, n_TId, m_pSimulation->m_vOutputTimes.data());
     }
@@ -400,7 +400,7 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
     if (m_pSimulation->m_nLogFileDetail == 2 || m_pSimulation->bGetSaveAllTimesteps()) {
         start[0] = static_cast<size_t>(m_pSimulation->m_nTimeLogId);
         
-        // Escribir el valor del tiempo actual en la dimensión unlimited
+        // Write current time value to unlimited time dimension
         size_t time_start = static_cast<size_t>(m_pSimulation->m_nTimeLogId);
         size_t time_count = 1;
         double current_time = m_pSimulation->m_dCurrentTime;
@@ -491,6 +491,6 @@ void CDataWriter::nCloseNetCDFFile()
     if (status != NC_NOERR) {
         std::cerr << "Error closing NetCDF file: " << nc_strerror(status) << std::endl;
     }
-    // Marcar como cerrado independientemente del resultado
+    // Mark as closed regardless of result
     m_ncId = -1;
 }

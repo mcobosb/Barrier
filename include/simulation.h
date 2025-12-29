@@ -142,60 +142,60 @@ public:
     //! Stores last interpolation index for each cross-section (speeds up ~30%)
     mutable std::vector<int> m_vLastInterpolationIndex;
 
-    // === Temperatura y balance de energía ===
-    //! ¿Calcular temperatura del agua?
+    // === Temperature and energy balance ===
+    //! Calculate water temperature?
     bool m_bDoWaterTemperature{};
 
-    //! Nombre del archivo de condición inicial de temperatura (si aplica)
+    //! Initial temperature condition filename (if applicable)
     std::string m_strInitialTemperatureConditionFilename;
 
-    //! Término temporal de advección-difusión de temperatura (ASt)
+    //! Temperature advection-diffusion temporal term (ASt)
     std::vector<double> m_vCrossSectionTemperatureASt;
 
-    //! Tipo de condición de frontera aguas arriba para temperatura (0=libre, 1=impuesta, 2=serie temporal)
+    //! Upstream temperature boundary condition type (0=free, 1=imposed, 2=time series)
     int m_nUpwardTemperatureCondition{};
 
-    //! Tipo de condición de frontera aguas abajo para temperatura
+    //! Downstream temperature boundary condition type
     int m_nDownwardTemperatureCondition{};
 
-    //! Archivo de condición de frontera aguas arriba (serie temporal)
+    //! Upstream boundary condition file (time series)
     std::string m_strUpwardTemperatureBoundaryConditionFilename;
 
-    //! Vector de tiempos de la condición de frontera aguas arriba
+    //! Upstream boundary condition time vector
     std::vector<double> m_vUpwardTemperatureBoundaryConditionTime;
 
-    //! Vector de valores de la condición de frontera aguas arriba
+    //! Upstream boundary condition value vector
     std::vector<double> m_vUpwardTemperatureBoundaryConditionValue;
 
-    //! Valor de temperatura aguas arriba (si es constante)
+    //! Upstream temperature value (if constant)
     double m_dUpwardTemperatureBoundaryValue{};
 
 
-    //! Coeficientes de forzamiento de balance de energía superficial aguas arriba
+    //! Upstream surface energy balance forcing coefficients
     double m_dUpwardTemperatureOffsetBeta{};
     double m_dUpwardAtmosphericExchangekA{};
     double m_dUpwardSurfaceConcentratedHeatkR{};
     double m_dUpwardInflowWaterEffectkQ{};
 
-    //! Archivo de condición de frontera aguas abajo (serie temporal)
+    //! Downstream boundary condition file (time series)
     std::string m_strDownwardTemperatureBoundaryConditionFilename;
 
-    //! Vector de tiempos de la condición de frontera aguas abajo
+    //! Downstream boundary condition time vector
     std::vector<double> m_vDownwardTemperatureBoundaryConditionTime;
 
-    //! Vector de valores de la condición de frontera aguas abajo
+    //! Downstream boundary condition value vector
     std::vector<double> m_vDownwardTemperatureBoundaryConditionValue;
 
-    //! Valor de temperatura aguas abajo (si es constante)
+    //! Downstream temperature value (if constant)
     double m_dDownwardTemperatureBoundaryValue{};
 
-    //! Coeficiente de difusión térmica (m²/s)
+    //! Thermal diffusion coefficient (m²/s)
     double m_dThermalDispersion{};
 
-    // === Forzamientos de balance de energía superficial ===
+    // === Surface energy balance forcing ===
 
 
-    //! Archivo único de forzamiento de balance de energía superficial (Tair, humedad relativa, viento)
+    //! Single surface energy balance forcing file (Tair, relative humidity, wind)
     std::string m_strHeatFluxFile;
 
     //! Coeficiente de transferencia de calor sensible (CS) - Stanton number
@@ -204,32 +204,32 @@ public:
     //! Coeficiente de transferencia de calor latente (CL) - Dalton number
     double m_dHeatFlux_CL{1.3e-3};
     
-    //! Latitud geográfica del sitio (grados decimales, Norte positivo)
+    //! Site geographic latitude (decimal degrees, North positive)
     double m_dHeatFluxLatitude{36.5};
     
-    //! Cobertura nubosa para cálculo de radiación (0.0 = despejado, 1.0 = cubierto)
+    //! Cloud cover for radiation calculation (0.0 = clear sky, 1.0 = overcast)
     double m_dHeatFluxCloudCover{0.2};
     
-    //! Profundidad efectiva del reservorio para modelo 0D de temperatura (m)
+    //! Effective reservoir depth for 0D temperature model (m)
     double m_dReservoirEffectiveDepth{5.0};
 
-    // === Series temporales de forzamiento ===
+    // === Forcing time series ===
 
-    //! Tiempos y valores de forzamiento de heat flux (Tair, humedad relativa, viento, presión)
+    //! Heat flux forcing times and values (Tair, relative humidity, wind, pressure)
     std::vector<double> m_vHeatFluxTime;
     std::vector<double> m_vHeatFluxAirTemp;
     std::vector<double> m_vHeatFluxRelHumidity;
     std::vector<double> m_vHeatFluxWind;
-    std::vector<double> m_vHeatFluxAtmosphericPressure;  // Presión atmosférica (Pa)
+    std::vector<double> m_vHeatFluxAtmosphericPressure;  // Atmospheric pressure (Pa)
     
-    //! Vector de temperaturas mínimas diarias calculado fuera del bucle principal
-    //! Índice = día desde inicio de simulación (0, 1, 2, ...)
+    //! Daily minimum temperature vector calculated outside main loop
+    //! Index = day from simulation start (0, 1, 2, ...)
     std::vector<double> m_vDailyMinTemperature;
     
-    //! Flag para calcular HR a partir de Tair y Tmin (cuando no se tiene serie de HR)
+    //! Flag to calculate RH from Tair and Tmin (when RH time series is not available)
     bool m_bCalculateRHFromTemperature{false};
     
-    // === Opciones para continuar simulación ===
+    // === Simulation continuation options ===
     bool m_bContinueSimulation = false;
     std::string m_strContinueNetcdfPath;
     // friend class CHydrograph;
@@ -439,11 +439,11 @@ public:
     int m_nBathymetrySmoothingPasses{1};
     double m_dBathymetrySmoothingAlpha{0.25};
 
-        //! Nivel máximo de marea astronómica calculado
+        //! Maximum astronomical tide level calculated
     double m_dMaxAstronomicalTide = 0.0;
 
     int m_nThresholddBdeta = 0;
-    //! Vector de eta donde se supera el threshold de gradiente de B(eta) por sección
+    //! Vector of eta where the gradient threshold of B(eta) per section is exceeded
     vector<double> m_vEtaWidthGradientThreshold;
 
     //! Smooth solution (regularization) during simulation?
@@ -469,10 +469,10 @@ public:
     //! Cross-section Bed slope
     vector<double> m_vCrossSectionBedSlope;
 
-    //! Cross-section Bed slope for predictor (forward difference) - balance de términos fuente
+    //! Cross-section Bed slope for predictor (forward difference) - source term balance
     vector<double> m_vCrossSectionBedSlopePredictor;
 
-    //! Cross-section Bed slope for corrector (backward difference) - balance de términos fuente
+    //! Cross-section Bed slope for corrector (backward difference) - source term balance
     vector<double> m_vCrossSectionBedSlopeCorrector;
 
     //! Cross-section Bed slope Direction +/- ve, 1/-1
@@ -521,9 +521,9 @@ public:
 
     //! Cross-section water densities (estado actual)
     vector<double> m_vCrossSectionDensity;
-    //! Cross-section water densities (predicho, para corrector/baroclínico)
+    //! Cross-section water densities (predicted, for corrector/baroclinic)
     vector<double> m_vPredictedCrossSectionDensity;
-    //! Gradiente de densidad dRho/dx (baroclínico)
+    //! Density gradient dRho/dx (baroclinic)
     vector<double> m_vCrossSectionDRhoDx;
 
     //! Cross-section left river bank locations
@@ -550,10 +550,10 @@ public:
     //! Cross-section perturbation water velocities
     vector<double> m_vCrossSectionC;
 
-    //! Vector de salinidad por sección transversal (g/kg o PSU)
+    //! Cross-section salinity vector (g/kg or PSU)
     vector<double> m_vCrossSectionSalinity;
 
-    //! Vector de temperatura por sección transversal (°C)
+    //! Cross-section temperature vector (°C)
     vector<double> m_vCrossSectionTemperature;
 
     //! Predicted Cross-section salinity
@@ -618,11 +618,11 @@ public:
     vector<double> m_vSalinity_AUS_diff;
 
     // ⚡ Precalculated constants (computed once at initialization)
-    vector<double> m_vManningNumberSquared;      // Manning² (usado en fricción ~4000 veces/día)
-    vector<double> m_vInvDX;                     // 1/ΔX (usado en gradientes ~8000 veces/día)
-    vector<double> m_vDxSum;                     // ΔX[i] + ΔX[i+1] (diferencias centradas)
+    vector<double> m_vManningNumberSquared;      // Manning² (used in friction ~4000 times/day)
+    vector<double> m_vInvDX;                     // 1/ΔX (used in gradients ~8000 times/day)
+    vector<double> m_vDxSum;                     // ΔX[i] + ΔX[i+1] (centered differences)
     vector<double> m_vInvDxSum;                  // 1/(ΔX[i] + ΔX[i+1])
-    vector<double> m_vGtimesDX;                  // g*ΔX (término constante)
+    vector<double> m_vGtimesDX;                  // g*ΔX (constant term)
 
     //! D1 terms
     vector<double> m_vCrossSectionD1Factor;
@@ -877,12 +877,12 @@ public:
     void mergeTracerPredictorCorrector();
     void smoothSolution();
     void smoothBathymetry();
-    // Predictor-corrector para salinidad y temperatura
+    // Predictor-corrector for salinity and temperature
     void calculate_salinity_predictor();
     void calculate_salinity_corrector();
 
     void calculateRadiativeFluxes();
-    void calculate_temperature(); // Wrapper legacy (llama a predictor/corrector según m_nPredictor)
+    void calculate_temperature(); // Legacy wrapper (calls predictor/corrector based on m_nPredictor)
     void calculate_temperature_predictor();
     void calculate_temperature_corrector();
 
@@ -907,7 +907,7 @@ public:
     void bDoSimulationEnd();
 
     private:
-    // ✅ AÑADIR: Propiedades de fecha (que vendrán de CDataReader)
+    // Simulation start date properties (from CDataReader)
     int m_nSimStartSec;
     int m_nSimStartMin;
     int m_nSimStartHour;
@@ -916,7 +916,7 @@ public:
     int m_nSimStartYear;
 
     public:
-    // ✅ AÑADIR: Getters para fecha de inicio
+    // Simulation start date getters
     int nGetSimStartSec() const { return m_nSimStartSec; }
     int nGetSimStartMin() const { return m_nSimStartMin; }
     int nGetSimStartHour() const { return m_nSimStartHour; }
@@ -924,7 +924,7 @@ public:
     int nGetSimStartMonth() const { return m_nSimStartMonth; }
     int nGetSimStartYear() const { return m_nSimStartYear; }
 
-    // ✅ AÑADIR: Setters para fecha de inicio
+    // Simulation start date setters
     void nSetSimStartSec(int sec) { m_nSimStartSec = sec; }
     void nSetSimStartMin(int min) { m_nSimStartMin = min; }
     void nSetSimStartHour(int hour) { m_nSimStartHour = hour; }
@@ -980,13 +980,13 @@ public:
     }
 
     private:
-    // ✅ CORREGIR: Estas deben ser vector<vector<double>>
+    // FIX: These must be vector<vector<double>>
     vector<double> m_vBedZ;
     vector<double> m_vManningN;
     vector<double> m_vPositionX;
-    vector<double> m_vBeta;  // ✅ ELIMINADO de vector<double> a vector<vector<double>>
+    vector<double> m_vBeta;  // FIX: Changed from vector<double> to vector<vector<double>>
     
-    // ✅ CAMBIAR de vector<double> a vector<vector<double>>
+    // CHANGE from vector<double> to vector<vector<double>>
     vector<vector<double>> m_vWidth;      // ✅ CORREGIDO
     vector<vector<double>> m_vLeftY;      // ✅ CORREGIDO
     vector<vector<double>> m_vRightY;     // ✅ CORREGIDO
@@ -998,7 +998,7 @@ public:
     vector<int> m_vElevationSectionsCount;
 
     public:
-    // ✅ Solo método de optimización simple
+    // Simple optimization method
     void precomputeEstuaryData();
 };
 #endif // SIMULATION_H

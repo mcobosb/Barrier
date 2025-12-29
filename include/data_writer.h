@@ -30,14 +30,14 @@ public:
     CDataWriter();
     ~CDataWriter();
     
-    // Prevenir copia para evitar problemas con el ID del NetCDF
+    // Prevent copy to avoid issues with NetCDF ID
     CDataWriter(const CDataWriter&) = delete;
     CDataWriter& operator=(const CDataWriter&) = delete;
     CDataWriter(CDataWriter&&) = delete;
     CDataWriter& operator=(CDataWriter&&) = delete;
     
 private:
-    mutable int m_ncId = -1;  // Hacer m_ncId mutable para poder modificarlo en métodos const
+    mutable int m_ncId = -1;  // Make m_ncId mutable to allow modification in const methods
 
     //! Ids for x and t and NetCDF file
     int n_XId, n_TId;

@@ -243,7 +243,7 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimula
         }
     }
 
-    // Leer opciones de continuación de simulación
+    // Read simulation continuation options
     if (node["continue_simulation"]) {
         m_pSimulation->m_bContinueSimulation = node["continue_simulation"].as<bool>();
     } else {
@@ -467,7 +467,7 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
         m_pSimulation->bSetManningDependsOnLevel(node["manning_eta"].as<bool>());
     }
 
-    // Leer manning_db como entero positivo
+    // Read manning_db as positive integer
     if (node["manning_db"]) {
         int val = node["manning_db"].as<int>();
         if (val > 0) {
@@ -533,7 +533,7 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
             if (temperature["dispersion_kh"]) {
                 m_pSimulation->m_dThermalDispersion = temperature["dispersion_kh"].as<double>();
             }
-            // Leer beta_temperature o betaT si está presente
+            // Read beta_temperature or betaT if present
             if (temperature["beta"]) {
                 m_pSimulation->dSetBetaTemperatureConstant(temperature["beta"].as<double>());
             }

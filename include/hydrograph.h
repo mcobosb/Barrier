@@ -53,7 +53,7 @@ public:
     void dSetHydrographYLocation(double dHydroYLocation);
     void dAppend2Vector(const string& strItem, double dValue);
 
-    //! Vector getter - devolver referencias constantes para evitar copias
+    //! Vector getter - return const references to avoid copies
     [[nodiscard]] const vector<double>& vGetTime() const;
     [[nodiscard]] const vector<double>& vGetQ() const;
 

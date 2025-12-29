@@ -15,8 +15,8 @@
 
 ==============================================================================================================================*/
 #include <string>
-#include <iostream>  // Para std::cerr y std::endl
-#include <vector>    // Para std::vector (buena práctica incluirlo explícitamente)
+#include <iostream>  // For std::cerr and std::endl
+#include <vector>    // For std::vector (best practice to include explicitly)
 
 using std::to_string;
 using std::string;

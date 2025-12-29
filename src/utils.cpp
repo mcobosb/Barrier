@@ -143,8 +143,8 @@ bool bIsStringValidInt(string& str)
  */
 double dMinVectorValue(const vector<double>& vec) {
     // if (vec.empty()) {
-    //     std::cerr << "El vector está vacío." << std::endl;
-    //     return std::numeric_limits<int>::max(); // Retorna el mayor valor posible de int
+    //     std::cerr << "Vector is empty." << std::endl;
+    //     return std::numeric_limits<int>::max(); // Return maximum possible int value
     // }
 
     double minValue = vec[0]; // Starting value
@@ -171,8 +171,8 @@ double dMinVectorValue(const vector<double>& vec) {
  */
 double dMaxVectorValue(const vector<double>& vec) {
     // if (vec.empty()) {
-    //     std::cerr << "El vector está vacío." << std::endl;
-    //     return std::numeric_limits<int>::max(); // Retorna el mayor valor posible de int
+    //     std::cerr << "Vector is empty." << std::endl;
+    //     return std::numeric_limits<int>::max(); // Return maximum possible int value
     // }
 
     double maxValue = vec[0]; // Starting value
