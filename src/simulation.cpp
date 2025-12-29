@@ -3874,7 +3874,7 @@ void CSimulation::precomputeEstuaryData() {
             m_vPrecalculatedSecondTerm[i][j] = areas[j] * pow(hydraulicRadius[j], 2.0/3.0);
         }
     }
-    }
+}
 
 /**
  * @brief Generate descriptive NetCDF output filename from simulation parameters
