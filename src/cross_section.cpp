@@ -57,8 +57,8 @@ CCrossSection::CCrossSection(){
     m_dX_UTM =
     m_dY_UTM =
     m_dRightRBAngle =
-    m_dLeftRBAngle =
-    m_dBeta =  0.0;
+    m_dLeftRBAngle = 
+    m_dBeta = 0.0;
 }
 
 /**
@@ -78,7 +78,6 @@ CCrossSection::~CCrossSection() = default;
  * - "hydraulic radius": Rh = A/P (m)
  * - "sigma": Width function σ(η)
  * - "left/right river bank location": Bank positions
- * - "I1", "I2": Pressure integral coefficients
  * 
  * @param strItem Column name from CSV file
  * @param dValue Numerical value to append
@@ -103,10 +102,10 @@ void CCrossSection::dAppend2Vector(const string& strItem, double dValue){
         m_vLeftRBLocation.push_back(dValue);
     else if (strItem == "right river bank location")
         m_vRightRBLocation.push_back(dValue);
-    else if (strItem == "I1")
-        m_vI1.push_back(dValue);
-    else if (strItem == "I2")
-        m_vI2.push_back(dValue);
+    // else if (strItem == "I1")
+    //     m_vI1.push_back(dValue);
+    // else if (strItem == "I2")
+    //     m_vI2.push_back(dValue);
 }
 
 /**
@@ -220,12 +219,12 @@ double CCrossSection::dGetLeftY(const int nValue) const {
 double CCrossSection::dGetRightY(const int nValue) const {
   return m_vRightRBLocation[nValue];
 }
-double CCrossSection::dGetI1(const int nValue) const {
-    return m_vI1[nValue];
-}
-double CCrossSection::dGetI2(const int nValue) const {
-    return m_vI2[nValue];
-}
+// double CCrossSection::dGetI1(const int nValue) const {
+//     return m_vI1[nValue];
+// }
+// double CCrossSection::dGetI2(const int nValue) const {
+//     return m_vI2[nValue];
+// }
 
 /**
  * @brief Getters for complete hydraulic tables (returns copies)
@@ -256,12 +255,12 @@ vector<double> CCrossSection::vGetLeftRBLocation() {
 vector<double> CCrossSection::vGetRightRBLocation() {
     return m_vRightRBLocation;
 }
-vector<double> CCrossSection::vGetI1() {
-    return m_vI1;
-}
-vector<double> CCrossSection::vGetI2() {
-    return m_vI2;
-}
+// vector<double> CCrossSection::vGetI1() {
+//     return m_vI1;
+// }
+// vector<double> CCrossSection::vGetI2() {
+//     return m_vI2;
+// }
 
 /**
  * @brief Calculate I1 pressure integral for all elevation levels
@@ -289,49 +288,49 @@ vector<double> CCrossSection::vGetI2() {
  * @note Called once during initialization (data_reader.cpp)
  * @see Chaudhry (2008): Open-Channel Flow, Section 4.3
  */
-void CCrossSection::calculateI1() {
-    // Clear any existing I1 values
-    m_vI1.clear();
-    m_vI1.resize(m_vWaterDepth.size(), 0.0);
+// void CCrossSection::calculateI1() {
+//     // Clear any existing I1 values
+//     m_vI1.clear();
+//     m_vI1.resize(m_vWaterDepth.size(), 0.0);
     
-    // For each elevation level (water depth h)
-    for (size_t i = 0; i < m_vWaterDepth.size(); i++) {
-        if (i == 0 || m_vArea[i] < 1e-6) {
-            m_vI1[i] = 0.0;
-            continue;
-        }
+//     // For each elevation level (water depth h)
+//     for (size_t i = 0; i < m_vWaterDepth.size(); i++) {
+//         if (i == 0 || m_vArea[i] < 1e-6) {
+//             m_vI1[i] = 0.0;
+//             continue;
+//         }
         
-        double h = m_vWaterDepth[i];  // Total water depth at this level
-        double I1 = 0.0;
+//         double h = m_vWaterDepth[i];  // Total water depth at this level
+//         double I1 = 0.0;
         
-        // Integrate I1 = ∫₀ʰ (h-η)·σ(η)·dη using trapezoidal rule
-        // Integrate from bottom (j=0) to current water level (j=i-1)
-        for (size_t j = 0; j < i; j++) {
-            double eta_j = m_vWaterDepth[j];
-            double eta_j1 = (j+1 < m_vWaterDepth.size()) ? m_vWaterDepth[j+1] : h;
-            double sigma_j = m_vWidth[j];
-            double sigma_j1 = (j+1 < m_vWidth.size()) ? m_vWidth[j+1] : m_vWidth[j];
+//         // Integrate I1 = ∫₀ʰ (h-η)·σ(η)·dη using trapezoidal rule
+//         // Integrate from bottom (j=0) to current water level (j=i-1)
+//         for (size_t j = 0; j < i; j++) {
+//             double eta_j = m_vWaterDepth[j];
+//             double eta_j1 = (j+1 < m_vWaterDepth.size()) ? m_vWaterDepth[j+1] : h;
+//             double sigma_j = m_vWidth[j];
+//             double sigma_j1 = (j+1 < m_vWidth.size()) ? m_vWidth[j+1] : m_vWidth[j];
             
-            // For the last segment, use current level
-            if (j + 1 >= i) {
-                eta_j1 = h;
-                sigma_j1 = m_vWidth[i];
-            }
+//             // For the last segment, use current level
+//             if (j + 1 >= i) {
+//                 eta_j1 = h;
+//                 sigma_j1 = m_vWidth[i];
+//             }
             
-            // Integrand: (h-η)·σ(η)
-            double f_j = (h - eta_j) * sigma_j;
-            double f_j1 = (h - eta_j1) * sigma_j1;
+//             // Integrand: (h-η)·σ(η)
+//             double f_j = (h - eta_j) * sigma_j;
+//             double f_j1 = (h - eta_j1) * sigma_j1;
             
-            // Trapezoidal rule: Δη/2 · (f_j + f_j+1)
-            double deta = eta_j1 - eta_j;
-            if (deta > 1e-10) {
-                I1 += 0.5 * deta * (f_j + f_j1);
-            }
-        }
+//             // Trapezoidal rule: Δη/2 · (f_j + f_j+1)
+//             double deta = eta_j1 - eta_j;
+//             if (deta > 1e-10) {
+//                 I1 += 0.5 * deta * (f_j + f_j1);
+//             }
+//         }
         
-        m_vI1[i] = I1;
-    }
-}
+//         m_vI1[i] = I1;
+//     }
+// }
 
 
 /**

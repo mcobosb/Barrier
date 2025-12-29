@@ -412,6 +412,11 @@ void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 					string strItem = "right river bank location";
 					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
 				}
+
+				if (j == 10) {
+					string strItem = "beta";
+					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
+				}
 				// Increase counter
 				j++;
 
@@ -422,10 +427,10 @@ void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 	// Number of elevation sections for the last Cross-Section
 	m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine + 1);
 
-	// Calculate I1 pressure integral for all cross-sections after reading geometry
-	for (int i = 0; i <= nCrossSectionNumber; i++) {
-		m_pSimulation->estuary[i].calculateI1();
-	}
+	// // Calculate I1 pressure integral for all cross-sections after reading geometry
+	// for (int i = 0; i <= nCrossSectionNumber; i++) {
+	// 	m_pSimulation->estuary[i].calculateI1();
+	// }
 
 }
 

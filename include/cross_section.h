@@ -124,8 +124,8 @@ class CCrossSection {
         [[nodiscard]] double dGetSigma(int nValue) const;
         [[nodiscard]] double dGetLeftY(int nValue) const;
         [[nodiscard]] double dGetRightY(int nValue) const;
-        [[nodiscard]] double dGetI1(int nValue) const;
-        [[nodiscard]] double dGetI2(int nValue) const;
+        // [[nodiscard]] double dGetI1(int nValue) const;
+        // [[nodiscard]] double dGetI2(int nValue) const;
 
         //! Vector getter
         vector<double> vGetArea();
@@ -134,11 +134,11 @@ class CCrossSection {
         vector<double> vGetWidth();
         vector<double> vGetRightRBLocation();
         vector<double> vGetLeftRBLocation();
-        vector<double> vGetI1();
-        vector<double> vGetI2();
+        // vector<double> vGetBeta();
+        // vector<double> vGetI2();
         
         //! Calculate I1 pressure integral for each elevation
-        void calculateI1();
+        // void calculateI1();
         // Calcula la primera eta > m_dMaxAstronomicalTide donde dB/deta > threshold
         // Calcula la primera eta > maxAstronomicalTide donde dB/deta > threshold y la guarda en el vector por sección
         void calculateEtaMaxWidthGradient(double maxAstronomicalTide, double threshold, double& etaWidthGradientThreshold) const;
