@@ -412,8 +412,6 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
         m_pSimulation->m_nTimeLogId++;
     }
 
-    const size_t count[2] = {1, static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber)};
-
     //! Write variable data
     for (const auto& strOutputVariable : m_pSimulation->m_vOutputVariables) {
         if (m_mVariableIds.find(strOutputVariable) == m_mVariableIds.end()) {
@@ -427,6 +425,10 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
             std::cerr << "No data available for variable '" << strOutputVariable << "'." << std::endl;
             continue;
         }
+
+        // ✅ FIX: Use actual data size, not m_nCrossSectionsNumber
+        // Some variables (e.g., D1Factor, D2Factor) have size n+1 for interfaces
+        const size_t count[2] = {1, data.size()};
 
         // Convert double to float for 50% size reduction
         vector<float> data_float(data.size());

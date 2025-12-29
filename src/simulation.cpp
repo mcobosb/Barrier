@@ -252,7 +252,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     precomputeEstuaryData();
 
     // For reservoir temperature mode (type 3), initialize upstream temperature
-    if (m_nUpwardTemperatureCondition == 3) {
+    if (m_bDoWaterTemperature && m_nUpwardTemperatureCondition == 3) {
         // Initialize temperature vector with initial condition if empty or wrong size
         if (m_vUpwardTemperatureBoundaryConditionValue.empty() || 
             m_vUpwardTemperatureBoundaryConditionValue.size() != m_vHeatFluxTime.size()) {
@@ -467,6 +467,8 @@ void CSimulation::initializeVectors() {
     const vector<double> vZeros(static_cast<size_t>(nCrossSectionsNumber), 0.0);
 
     // Hydrodynamic state variables (predictor-corrector scheme)
+    m_vCrossSectionArea =
+    m_vCrossSectionQ =
     m_vPredictedCrossSectionArea =
     m_vCorrectedCrossSectionArea =
     m_vPredictedCrossSectionQ =
