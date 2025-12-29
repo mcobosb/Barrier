@@ -253,6 +253,19 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     // For reservoir temperature mode (type 3), initialize upstream temperature
     if (m_nUpwardTemperatureCondition == 3) {
+        // Initialize temperature vector with initial condition if empty or wrong size
+        if (m_vUpwardTemperatureBoundaryConditionValue.empty() || 
+            m_vUpwardTemperatureBoundaryConditionValue.size() != m_vHeatFluxTime.size()) {
+            
+            // Determine initial temperature (use air temperature if available, otherwise default 15°C)
+            double T_initial = (!m_vHeatFluxAirTemp.empty()) ? m_vHeatFluxAirTemp[0] : 15.0;
+            
+            // Initialize entire vector with initial temperature
+            m_vUpwardTemperatureBoundaryConditionValue.resize(m_vHeatFluxTime.size(), T_initial);
+            
+            std::cout << "      - Initialized reservoir temperature to " << T_initial << "°C" << std::endl;
+        }
+        
         updateReservoirTemperature0D();
     }
 
@@ -308,12 +321,12 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     // Write diagnostic log table header
     if (LogStream.is_open() && m_nLogFileDetail >= 1) {
-        LogStream << "\n" << std::string(140, '=') << "\n";
+        LogStream << "\n" << std::string(160, '=') << "\n";
         LogStream << "SIMULATION DIAGNOSTICS - PERIODIC STATISTICS\n";
-        LogStream << std::string(140, '=') << "\n";
-        LogStream << std::setw(10) << "Time(s)" 
-                  << std::setw(10) << "Step"
-                  << std::setw(10) << "dt(s)" 
+        LogStream << std::string(160, '=') << "\n";
+        LogStream << std::setw(20) << "Date" 
+                  << std::setw(10) << "Time(s)"
+                  << std::setw(8) << "dt(s)" 
                   << std::setw(8) << "CFL_max"
                   << std::setw(10) << "Q_min" 
                   << std::setw(10) << "Q_max" 
@@ -329,7 +342,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             LogStream << std::setw(10) << "S_min"
                       << std::setw(10) << "S_max";
         }
-        LogStream << "\n" << std::string(140, '-') << "\n";
+        LogStream << "\n" << std::string(160, '-') << "\n";
         LogStream.flush();
     }
 
@@ -337,15 +350,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     //! MAIN TIME-STEPPING LOOP: McCormack predictor-corrector scheme with TVD flux limiter
     //======================================================================================================================
     while (m_dCurrentTime <= m_dSimDuration) {
-        // Update reservoir temperature for upstream boundary condition type 3 (0D tank model)
-        if (m_nUpwardTemperatureCondition == 3) {
-            // TODO: Integrate solar radiation calculation when input data is available
-            // double current_hour = get_simulation_hour();
-            // int current_day = get_day_of_year();
-            // double dynamic_albedo = calc_dynamic_albedo(36.5, current_day, current_hour);
-            // double H_sn = solar_radiation_input * (1.0 - dynamic_albedo);
-            updateReservoirTemperature0D();
-        }
+        // Note: Reservoir temperature (type 3) already pre-computed before loop
+        // Current time value obtained by interpolation in boundary condition functions
         
         // Update boundary conditions and calculate adaptive timestep
         calculateBoundaryConditions();
@@ -2344,23 +2350,49 @@ void CSimulation::updateReservoirTemperature0D() {
     double C_h = m_dHeatFlux_CS;
     double C_e = m_dHeatFlux_CL;
     
-    for (size_t i = 0; i < m_vUpwardTemperatureBoundaryConditionValue.size(); ++i) {   
-        double dt = ((i == 0) ? 0.0 : m_vUpwardTemperatureBoundaryConditionTime[i] - m_vUpwardTemperatureBoundaryConditionTime[i-1]);
+    for (size_t i = 0; i < m_vHeatFluxTime.size(); ++i) {   
+        double dt = ((i == 0) ? 0.0 : m_vHeatFluxTime[i] - m_vHeatFluxTime[i-1]);
         
         // === METEOROLOGICAL FORCING ===
         double Tair = (i < m_vHeatFluxAirTemp.size()) ? m_vHeatFluxAirTemp[i] : 15.0;
-        double rh = (i < m_vHeatFluxRelHumidity.size()) ? m_vHeatFluxRelHumidity[i] : 70.0;
         double wind = (i < m_vHeatFluxWind.size()) ? m_vHeatFluxWind[i] : 1.0;
         double pressure = (i < m_vHeatFluxAtmosphericPressure.size()) ? 
             m_vHeatFluxAtmosphericPressure[i] : ATM_PRESSURE_DEFAULT;
         
         if (wind < 0.1) wind = 0.1;  // Prevent stagnation
+
+        // Relative humidity: either from data or calculated from temperature
+        double rh = 70.0;  // Default value
+        if (!m_vHeatFluxTime.empty()) {
+            if (m_bCalculateRHFromTemperature && !m_vDailyMinTemperature.empty()) {
+                // Calculate RH using FAO-56 method from current T_air and daily T_min
+                double sim_time_hours = m_dCurrentTime / 3600.0;
+                int day_index = static_cast<int>(sim_time_hours / 24.0);
+                
+                // Ensure day_index is within bounds
+                if (day_index >= 0 && day_index < static_cast<int>(m_vDailyMinTemperature.size())) {
+                    double T_min_daily = m_vDailyMinTemperature[day_index];
+                    rh = calc_rh_from_temp(Tair, T_min_daily);
+                } else {
+                    // Fallback: use interpolated value if available, otherwise default
+                    rh = (!m_vHeatFluxRelHumidity.empty()) ?
+                        linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxRelHumidity) : 70.0;
+                }
+            } else {
+                // Use interpolated RH from data file
+                rh = linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vHeatFluxRelHumidity);
+            }
+        }
         
-        double Twater = m_vUpwardTemperatureBoundaryConditionValue[i];
+        // === WATER TEMPERATURE ===
+        // For i=0: use initial condition (already in vector)
+        // For i>0: use temperature from previous timestep (forward integration)
+        double Twater = (i == 0) ? m_vUpwardTemperatureBoundaryConditionValue[i] 
+                                 : m_vUpwardTemperatureBoundaryConditionValue[i-1];
         double Tin = Tair + m_dUpwardTemperatureOffsetBeta;  // Inflow temperature
         
         // === SOLAR GEOMETRY ===
-        double sim_time_hours = m_vUpwardTemperatureBoundaryConditionTime[i] / 3600.0;
+        double sim_time_hours = m_vHeatFluxTime[i] / 3600.0;
         double hour_of_day = std::fmod(sim_time_hours, 24.0);
         int day_of_year = 1 + static_cast<int>(sim_time_hours / 24.0);
         
@@ -3168,12 +3200,31 @@ void CSimulation::writePeriodicStatistics() {
         }
     }
     
+    // Calculate current date/time
+    static time_t t_start = 0;
+    if (t_start == 0) {
+        std::tm tm_start = {};
+        tm_start.tm_year = m_nSimStartYear - 1900;
+        tm_start.tm_mon = m_nSimStartMonth - 1;
+        tm_start.tm_mday = m_nSimStartDay;
+        tm_start.tm_hour = m_nSimStartHour;
+        tm_start.tm_min = m_nSimStartMin;
+        tm_start.tm_sec = m_nSimStartSec;
+        tm_start.tm_isdst = -1;
+        t_start = std::mktime(&tm_start);
+    }
+    time_t t_current = t_start + static_cast<time_t>(m_dCurrentTime);
+    std::tm* tm_current = std::localtime(&t_current);
+    
+    char datetime_buf[32];
+    std::strftime(datetime_buf, sizeof(datetime_buf), "%Y-%m-%d %H:%M:%S", tm_current);
+    
     // Write basic statistics
-    LogStream << std::fixed << std::setprecision(1)
+    LogStream << std::setw(20) << datetime_buf
+              << std::fixed << std::setprecision(1)
               << std::setw(10) << m_dCurrentTime
-              << std::setw(10) << static_cast<int>(m_dCurrentTime / m_dTimestep)
               << std::setprecision(3)
-              << std::setw(10) << m_dTimestep
+              << std::setw(8) << m_dTimestep
               << std::setprecision(2)
               << std::setw(8) << CFL_max
               << std::setprecision(1)
