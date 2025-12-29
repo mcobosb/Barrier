@@ -902,10 +902,10 @@ void CDataReader::bReadHeatFluxFile(CSimulation* m_pSimulation) {
 	
 	// Log information about data reading
 	if (calculate_rh && m_pSimulation->m_nLogFileDetail >= 1) {
-		std::cout << "      Heat flux file read: " << m_pSimulation->m_vHeatFluxTime.size() 
+		std::cout << "      - Heat flux file read: " << m_pSimulation->m_vHeatFluxTime.size() 
 		          << " records (RH will be calculated from temperature)" << std::endl;
 	} else if (m_pSimulation->m_nLogFileDetail >= 1) {
-		std::cout << "      Heat flux file read: " << m_pSimulation->m_vHeatFluxTime.size() 
+		std::cout << "      - Heat flux file read: " << m_pSimulation->m_vHeatFluxTime.size() 
 		          << " records (RH from data)" << std::endl;
 	}
 }

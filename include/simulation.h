@@ -954,6 +954,31 @@ public:
         return oss.str();
     }
 
+    //! Get simulation end date and time as formatted string (ISO 8601)
+    string getSimulationEndDateTimeString() const {
+        // Calculate end time by adding simulation duration to start time
+        std::tm start_tm = {};
+        start_tm.tm_year = m_nSimStartYear - 1900;
+        start_tm.tm_mon = m_nSimStartMonth - 1;
+        start_tm.tm_mday = m_nSimStartDay;
+        start_tm.tm_hour = m_nSimStartHour;
+        start_tm.tm_min = m_nSimStartMin;
+        start_tm.tm_sec = m_nSimStartSec;
+        
+        std::time_t start_time = std::mktime(&start_tm);
+        std::time_t end_time = start_time + static_cast<std::time_t>(m_dSimDuration);
+        std::tm* end_tm = std::localtime(&end_time);
+        
+        ostringstream oss;
+        oss << setfill('0') << setw(4) << (end_tm->tm_year + 1900) << "-"
+            << setw(2) << (end_tm->tm_mon + 1) << "-"
+            << setw(2) << end_tm->tm_mday << " "
+            << setw(2) << end_tm->tm_hour << ":"
+            << setw(2) << end_tm->tm_min << ":"
+            << setw(2) << end_tm->tm_sec;
+        return oss.str();
+    }
+
     private:
     // ✅ CORREGIR: Estas deben ser vector<vector<double>>
     vector<double> m_vBedZ;

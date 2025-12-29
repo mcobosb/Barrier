@@ -197,6 +197,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     // Display simulation start date
     std::cout << "      - Simulation start date: " << getSimulationStartDateTimeString() << std::endl;
+    std::cout << "      - Simulation end date: " << getSimulationEndDateTimeString() << std::endl;
 
     // Transfer file paths to reader and simulation
     reader.m_strAlongChannelDataFilename = yamlReader.m_strAlongChannelDataFilename;
