@@ -50,6 +50,7 @@ public:
     // Mathematical constants
     static constexpr double PI = 3.14159265358979323846;
     static constexpr double DEG_TO_RAD = PI / 180.0;
+    static constexpr double RAD_TO_DEG = 180.0 / PI;
     
     // Water properties
     static constexpr double WATER_DENSITY = 1000.0;           // Water density (kg/m³)

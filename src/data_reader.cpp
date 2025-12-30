@@ -1389,9 +1389,62 @@ void CDataReader::bRestoreStateFromNetCDF(CSimulation* m_pSimulation, const std:
 	nc_inq_dimlen(ncid, dimid_x, &len_x);
 	nc_inq_dimid(ncid, "time", &dimid_time);
 	nc_inq_dimlen(ncid, dimid_time, &len_time);
+	
+	// VALIDATION: Check spatial discretization consistency
+	if (len_x != static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber)) {
+		std::cerr << "\n" << std::string(80, '=') << "\n";
+		std::cerr << "ERROR: Spatial discretization mismatch!\n";
+		std::cerr << "NetCDF file has " << len_x << " cross-sections\n";
+		std::cerr << "Current geometry has " << m_pSimulation->m_nCrossSectionsNumber << " cross-sections\n";
+		std::cerr << "\nPossible causes:\n";
+		std::cerr << "  1. NetCDF file from different simulation setup\n";
+		std::cerr << "  2. Geometry files (along_channel_data.csv) changed since NetCDF creation\n";
+		std::cerr << "  3. Wrong NetCDF file specified in continue_netcdf_path\n";
+		std::cerr << "\nSolution: Use NetCDF file with " << m_pSimulation->m_nCrossSectionsNumber 
+		          << " cross-sections or update geometry files\n";
+		std::cerr << std::string(80, '=') << "\n";
+		nc_close(ncid);
+		exit(EXIT_FAILURE);
+	}
 
 	// Read the last temporal index from saved state
 	size_t last_idx = len_time > 0 ? len_time - 1 : 0;
+	
+	// VALIDATION: Check X coordinates consistency (optional but recommended)
+	int x_varid;
+	if (nc_inq_varid(ncid, "x", &x_varid) == NC_NOERR) {
+		std::vector<double> netcdf_x(len_x);
+		if (nc_get_var_double(ncid, x_varid, netcdf_x.data()) == NC_NOERR) {
+			// Compare first, middle, and last coordinates
+			const double tol = 1.0;  // 1 meter tolerance
+			bool x_mismatch = false;
+			int mismatch_idx = -1;
+			
+			const std::vector<size_t> check_indices = {0, len_x/2, len_x-1};
+			for (size_t i : check_indices) {
+				if (i < len_x && i < m_pSimulation->m_vCrossSectionX.size()) {
+					double diff = fabs(netcdf_x[i] - m_pSimulation->m_vCrossSectionX[i]);
+					if (diff > tol) {
+						x_mismatch = true;
+						mismatch_idx = i;
+						break;
+					}
+				}
+			}
+			
+			if (x_mismatch) {
+				std::cerr << "\n" << std::string(80, '=') << "\n";
+				std::cerr << "WARNING: X coordinate mismatch detected!\n";
+				std::cerr << "Cross-section " << mismatch_idx << ":\n";
+				std::cerr << "  NetCDF X = " << netcdf_x[mismatch_idx] << " m\n";
+				std::cerr << "  Current X = " << m_pSimulation->m_vCrossSectionX[mismatch_idx] << " m\n";
+				std::cerr << "  Difference = " << fabs(netcdf_x[mismatch_idx] - m_pSimulation->m_vCrossSectionX[mismatch_idx]) << " m\n";
+				std::cerr << "\nThis suggests geometry files have changed since NetCDF was created.\n";
+				std::cerr << "Continuing with current geometry, but results may be inconsistent.\n";
+				std::cerr << std::string(80, '=') << "\n\n";
+			}
+		}
+	}
 
 	// Map NetCDF variables to simulation vectors
 	auto restore_var = [&](const char* varname, std::vector<double>& target) {
