@@ -54,12 +54,12 @@ string const PLATFORM = "Intel x86/GNU C++";
 inline auto NAME = "BARRIER Project";
 inline auto AUTHOR =  "Manuel Cobos (GDFA, University of Granada)";
 inline auto VERSION = "v0.11.0 - 2025-12-23";
-string const PROGRAM_NAME = "High-performance 1D estuarine hydrodynamic model (23 December 2025) - BARRiEr Project (https://barrier.dinamicambiental.es)";
+string const PROGRAM_NAME = "High-performance 1D estuarine hydrodynamic model (23 December 2025)\n      BARRiEr Project (https://barrier.dinamicambiental.es)";
 string const PROGRAM_NAME_SHORT = "BARRIER";
 
 
 string const NOTE = "      Note ";
-string const COPYRIGHT = "(C) 2025 Manuel Cobos";
+string const COPYRIGHT = "(C) 2026 Manuel Cobos";
 string const LINE = "-------------------------------------------------------------------------------";
 string const DISCLAIMER1 = "This program is distributed in the hope that it will be useful. but WITHOUT ANY";
 string const DISCLAIMER2 = "WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A";

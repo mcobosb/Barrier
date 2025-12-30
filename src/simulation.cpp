@@ -195,6 +195,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         return;
     }
 
+    std::cout << "      - Configuration file loaded successfully" << std::endl;
+
     // Display simulation start date
     std::cout << "      - Simulation start/end date: " << getSimulationStartDateTimeString() << " / " << getSimulationEndDateTimeString() << std::endl;
 
@@ -209,13 +211,56 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     
     // Read geometry and forcing files
     CDataReader::bOpenLogFile(this);
+    
+    // Log simulation configuration summary
+    if (LogStream.is_open()) {
+        LogStream << std::string(80, '=') << "\n";
+        LogStream << "SIMULATION CONFIGURATION SUMMARY\n";
+        LogStream << std::string(80, '=') << "\n";
+        LogStream << "Configuration file: " << configFile << "\n";
+        LogStream << "Simulation period: " << getSimulationStartDateTimeString() 
+                  << " to " << getSimulationEndDateTimeString() << "\n";
+        LogStream << "Duration: " << m_dSimDuration << " s (" 
+                  << m_dSimDuration/86400.0 << " days)\n";
+        LogStream << "Timestep: " << m_dSimTimestep << " s\n";
+        LogStream << "Courant number: " << m_dCourantNumber << "\n";
+        LogStream << "Number of cross-sections: " << m_nCrossSectionsNumber << "\n";
+        LogStream << "\nPhysical processes:\n";
+        LogStream << "  - Water temperature: " << (m_bDoWaterTemperature ? "YES" : "NO") << "\n";
+        LogStream << "  - Water salinity: " << (m_bDoWaterSalinity ? "YES" : "NO") << "\n";
+        LogStream << "  - Sediment transport: " << (m_bDoSedimentTransport ? "YES" : "NO") << "\n";
+        LogStream << "  - Dry bed treatment: " << (m_bDoDryBed ? "YES" : "NO") << "\n";
+        LogStream << "\nNumerical methods:\n";
+        LogStream << "  - TVD flux limiter: " << (m_bDoMcCormackLimiterFlux ? "YES" : "NO") << "\n";
+        LogStream << "  - Surface gradient method: " << (m_bDoSurfaceGradientMethod ? "YES" : "NO") << "\n";
+        LogStream << "  - Source term balance: " << (m_bDoSourceTermBalance ? "YES" : "NO") << "\n";
+        LogStream << "\nBoundary conditions:\n";
+        LogStream << "  - Upstream hydrodynamic: Type " << m_nUpwardEstuarineCondition << "\n";
+        LogStream << "  - Downstream hydrodynamic: Type " << m_nDownwardEstuarineCondition << "\n";
+        if (m_bDoWaterTemperature) {
+            LogStream << "  - Upstream temperature: Type " << m_nUpwardTemperatureCondition << "\n";
+            LogStream << "  - Downstream temperature: Type " << m_nDownwardTemperatureCondition << "\n";
+        }
+        if (m_bDoWaterSalinity) {
+            LogStream << "  - Upstream salinity: Type " << m_nUpwardSalinityCondition << "\n";
+            LogStream << "  - Downstream salinity: Type " << m_nDownwardSalinityCondition << "\n";
+        }
+        LogStream << "\nOutput file: " << m_strOutFile << generateOutputFileName() << "\n";
+        LogStream << std::string(80, '=') << "\n\n";
+        LogStream.flush();
+    }
+    
+    std::cout << "      - Reading input data files..." << std::endl;
     reader.bReadAlongChannelDataFile(this);
     reader.bReadCrossSectionGeometryFile(this);
+    std::cout << "      - Along-channel data and cross-section geometry loaded successfully" << std::endl;
     if (m_nUpwardEstuarineCondition > 1) {
         CDataReader::bReadUpwardBoundaryConditionFile(this);
+        std::cout << "      - Upstream boundary condition file loaded successfully" << std::endl;
     }
     if (m_nDownwardEstuarineCondition > 1) {
         CDataReader::bReadDownwardBoundaryConditionFile(this);
+        std::cout << "      - Downstream boundary condition file loaded successfully" << std::endl;
     }
     // === Temperature: Boundary conditions and forcing ===
     if (m_bDoWaterTemperature) {
@@ -234,6 +279,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         }
         if (!m_strHeatFluxFile.empty()) {
             CDataReader::bReadHeatFluxFile(this);
+            std::cout << "      - Heat flux data (atmospheric forcing) loaded successfully" << std::endl;
             if (m_bCalculateRHFromTemperature == true) {
                 // Calculate daily minimum temperatures if RH needs to be estimated
                 calculateDailyMinTemperatures();
@@ -242,9 +288,11 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     }
     if (m_bDoSedimentTransport) {
         reader.bReadAlongChannelSedimentsFile(this);
+        std::cout << "      - Sediment transport data loaded successfully" << std::endl;
     }
     if (m_bHydroFile) {
         reader.bReadHydrographsFile(this);
+        std::cout << "      - Hydrographs file loaded successfully" << std::endl;
     }
 
     // Initialize simulation vectors
@@ -449,8 +497,53 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         m_nStep++;
     }
 
-    // Simulation completed
+    // Simulation completed - Calculate and log elapsed time
     cout << endl;
+    
+    time_t tEndTime = time(nullptr);
+    double dTotalElapsedTime = difftime(tEndTime, m_tSysStartLoopTime);
+    
+    // Display summary on screen
+    cout << "    - Simulation completed successfully" << endl;
+    cout << "      - Total computation time: " << std::fixed << setprecision(2) 
+         << dTotalElapsedTime << " s";
+    if (dTotalElapsedTime > 60.0) {
+        cout << " (" << dTotalElapsedTime/60.0 << " min)";
+    }
+    if (dTotalElapsedTime > 3600.0) {
+        cout << " (" << dTotalElapsedTime/3600.0 << " hours)";
+    }
+    cout << endl;
+    
+    // Log detailed summary
+    if (LogStream.is_open()) {
+        LogStream << "\n" << std::string(80, '=') << "\n";
+        LogStream << "SIMULATION COMPLETED SUCCESSFULLY\n";
+        LogStream << std::string(80, '=') << "\n";
+        LogStream << "Final simulation date: " << getSimulationEndDateTimeString() << "\n";
+        LogStream << "Total timesteps executed: " << m_nStep - 1 << "\n";
+        LogStream << "Total computation time: " << std::fixed << setprecision(2) 
+                  << dTotalElapsedTime << " s";
+        if (dTotalElapsedTime > 60.0) {
+            LogStream << " (" << dTotalElapsedTime/60.0 << " min)";
+        }
+        if (dTotalElapsedTime > 3600.0) {
+            LogStream << " (" << dTotalElapsedTime/3600.0 << " hours)";
+        }
+        LogStream << "\n";
+        
+        // Calculate performance metrics
+        double simulated_days = m_dSimDuration / 86400.0;
+        double ratio = simulated_days / (dTotalElapsedTime / 86400.0);
+        LogStream << "Performance ratio: " << std::fixed << setprecision(1) 
+                  << ratio << "x real time\n";
+        LogStream << "Average time per timestep: " << std::fixed << setprecision(4) 
+                  << dTotalElapsedTime / (m_nStep - 1) << " s\n";
+        LogStream << "\nOutput file: " << m_strOutFile << "\n";
+        LogStream << std::string(80, '=') << "\n";
+        LogStream.flush();
+    }
+    
     writer.nCloseNetCDFFile();
 
     if (LogStream.is_open()) {

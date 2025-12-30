@@ -197,10 +197,14 @@ string CScreenPresenter::strGetBuild()
 void CScreenPresenter::AnnounceStart(CSimulation* m_pSimulation)
 {
    cout << endl
-        << PROGRAM_NAME << " for " << PLATFORM << " " << strGetBuild() << endl;
+        << PROGRAM_NAME << endl
+        << "      for " << PLATFORM << " (" << strGetBuild() << " build)" << endl
+        << "      " << COPYRIGHT << endl;
 
    m_pSimulation->LogStream << endl
-        << PROGRAM_NAME << " for " << PLATFORM << " " << strGetBuild() << endl;
+        << PROGRAM_NAME << endl
+        << "      for " << PLATFORM << " (" << strGetBuild() << " build)" << endl
+        << "      " << COPYRIGHT << endl;
 }
 
 /**
