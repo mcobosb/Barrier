@@ -296,7 +296,7 @@ void CYAMLReader::parseGeometrySection(const YAML::Node& node) {
  * 
  * 4. Numerical parameters:
  *    - courant_number: CFL condition (typically 0.15-0.5)
- *    - tvd_limiter: {enabled, method: minmod/roe/vanleer/vanalbada, psi_formula, delta}
+ *    - tvd_limiter: {enabled, method: minmod/roe/vanleer/vanalbada, transport_method (optional), psi_formula, delta}
  *    - surface_gradient_method: Use improved gradient calculation
  *    - source_term_balance: Balance source terms with flux gradients
  *    - beta_coefficient: Use momentum correction factor β
@@ -428,6 +428,37 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
             else if (method == "roe") m_pSimulation->nSetEquationLimiterFlux(2);
             else if (method == "vanleer") m_pSimulation->nSetEquationLimiterFlux(3);
             else if (method == "vanalbada") m_pSimulation->nSetEquationLimiterFlux(4);
+            std::cout << "      - Hydrodynamics limiter: " << method << std::endl;
+        }
+        
+        // Optional: separate limiter for transport (salinity/temperature)
+        // If not specified, transport uses same limiter as hydrodynamics
+        if (tvd["transport_method"]) {
+            std::string method = tvd["transport_method"].as<std::string>();
+            int transport_limiter = 0;
+            bool use_independent = true;
+            
+            if (method == "none" || method == "upwind") {
+                // No TVD limiter: simple first-order upwind (very stable, diffusive)
+                transport_limiter = 0;
+                use_independent = true;
+            }
+            else if (method == "minmod") transport_limiter = 1;
+            else if (method == "roe") transport_limiter = 2;
+            else if (method == "vanleer") transport_limiter = 3;
+            else if (method == "vanalbada") transport_limiter = 4;
+            
+            m_pSimulation->nSetTransportLimiterFlux(transport_limiter, use_independent);
+            
+            if (transport_limiter == 0) {
+                std::cout << "      - Transport limiter: NONE (1st-order upwind)" << std::endl;
+            } else {
+                std::cout << "      - Transport limiter (independent): " << method << std::endl;
+            }
+        } else {
+            // Use same limiter for transport as for hydrodynamics
+            m_pSimulation->nSetTransportLimiterFlux(0, false);
+            std::cout << "      - Transport limiter: same as hydrodynamics" << std::endl;
         }
         
         if (tvd["psi_formula"]) {
@@ -443,7 +474,13 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
     
     // Other numeric methods
     if (node["surface_gradient_method"]) {
-        m_pSimulation->bSetDoSurfaceGradientMethod(node["surface_gradient_method"].as<bool>());
+        bool use_sgm = node["surface_gradient_method"].as<bool>();
+        m_pSimulation->bSetDoSurfaceGradientMethod(use_sgm);
+        if (use_sgm) {
+            std::cout << "      ⚠ WARNING: Surface gradient method enabled" << std::endl;
+            std::cout << "         This method may produce spurious oscillations in channels" << std::endl;
+            std::cout << "         with abrupt geometry transitions. Use with caution." << std::endl;
+        }
     }
     
     if (node["source_term_balance"]) {
