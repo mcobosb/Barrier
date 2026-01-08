@@ -179,7 +179,7 @@ string CScreenPresenter::strGetBuild()
    strBuild.append(" ");
    strBuild.append(__DATE__);
 #ifdef _DEBUG
-   strBuild.append(" DEBUG)");
+   strBuild.append(" DEBUG");
 #endif
    strBuild.append(" build)");
 
@@ -198,13 +198,11 @@ void CScreenPresenter::AnnounceStart(CSimulation* m_pSimulation)
 {
    cout << endl
         << PROGRAM_NAME << endl
-        << "      for " << PLATFORM << " (" << strGetBuild() << " build)" << endl
-        << "      " << COPYRIGHT << endl;
+        << "      for " << PLATFORM << " " << strGetBuild() << endl;
 
    m_pSimulation->LogStream << endl
         << PROGRAM_NAME << endl
-        << "      for " << PLATFORM << " (" << strGetBuild() << " build)" << endl
-        << "      " << COPYRIGHT << endl;
+        << "      for " << PLATFORM << " " << strGetBuild() << endl;
 }
 
 /**
