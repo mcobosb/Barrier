@@ -335,6 +335,13 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     //! Relative time units
     const char* time_units = "seconds since simulation start";
     nc_put_att_text(m_ncId, NC_GLOBAL, "time_units", strlen(time_units), time_units);
+    
+    //! YAML configuration (for full reproducibility)
+    if (!m_pSimulation->m_strYAMLConfigContent.empty()) {
+        nc_put_att_text(m_ncId, NC_GLOBAL, "yaml_configuration", 
+                       m_pSimulation->m_strYAMLConfigContent.length(), 
+                       m_pSimulation->m_strYAMLConfigContent.c_str());
+    }
 
     //! End the definition of NetCDF file
     status = nc_enddef(m_ncId);
