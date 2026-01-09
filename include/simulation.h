@@ -132,20 +132,74 @@ public:
 
 
 
-    //! If true, Manning is calculated as a function of water level
-    bool m_bManningDependsOnLevel = false;
-    //! Getter for Manning level-dependence
-    [[nodiscard]] bool bGetManningDependsOnLevel() const { return m_bManningDependsOnLevel; }
-    //! Setter for Manning level-dependence
-    void bSetManningDependsOnLevel(bool bValue) { m_bManningDependsOnLevel = bValue; }
+    // === PHYSICAL PROCESS FLAGS ===
+    //! Calculate water temperature?
+    bool m_bDoWaterTemperature{false};
     
+    //! Compute water salinity?
+    bool m_bDoWaterSalinity{false};
+    
+    //! Compute water density?
+    bool m_bDoWaterDensity{false};
+    
+    //! If true, Manning is calculated as a function of water level
+    bool m_bManningDependsOnLevel{false};
+    
+    //! Compute sediment transport?
+    bool m_bDoSedimentTransport{false};
+    
+    //! Do Dry Bed?
+    bool m_bDoDryBed{false};
+    
+    //! Do McCormack Limiter Flux?
+    bool m_bDoMcCormackLimiterFlux{false};
+    
+    //! Do Surface Gradient Method?
+    bool m_bDoSurfaceGradientMethod{false};
+    
+    //! Do Source Term Balance?
+    bool m_bDoSourceTermBalance{false};
+    
+    //! Do beta coefficient?
+    bool m_bDoBetaCoefficient{false};
+    
+    //! Do Murillo condition?
+    bool m_bDoMurilloCondition{false};
+    
+    //! Smooth bathymetry before simulation?
+    bool m_bDoSmoothBathymetry{false};
+    
+    //! Smooth solution (regularization) during simulation?
+    bool m_bDoSmoothSolution{false};
+    
+    //! Save at every computational timestep (for debugging)?
+    bool m_bSaveAllTimesteps{false};
+    
+    //! Flag to calculate RH from Tair and Tmin (when RH time series is not available)
+    bool m_bCalculateRHFromTemperature{false};
+    
+    //! Simulation continuation flag
+    bool m_bContinueSimulation{false};
+    
+    //! Read hydrograph input?
+    bool m_bHydroFile{false};
+    
+    //! Boolean for error
+    bool m_bReturnError{false};
+    
+    //! Is this timestep saved?
+    bool m_bSaveTime{false};
+    
+    //! Flag for extreme flow conditions
+    bool m_bExtremeFlowConditions{false};
+    
+    //! Use independent transport limiter (different from hydrodynamics)?
+    bool m_bUseIndependentTransportLimiter{false};
+    
+    // === CACHE AND OPTIMIZATION ===
     //! Cache for binary search in calculateHydraulicParameters() - exploits spatial coherence
     //! Stores last interpolation index for each cross-section (speeds up ~30%)
     mutable std::vector<int> m_vLastInterpolationIndex;
-
-    // === Temperature and energy balance ===
-    //! Calculate water temperature?
-    bool m_bDoWaterTemperature{};
 
     //! Initial temperature condition filename (if applicable)
     std::string m_strInitialTemperatureConditionFilename;
@@ -227,25 +281,14 @@ public:
     //! Index = day from simulation start (0, 1, 2, ...)
     std::vector<double> m_vDailyMinTemperature;
     
-    //! Flag to calculate RH from Tair and Tmin (when RH time series is not available)
-    bool m_bCalculateRHFromTemperature{false};
-    
     // === Simulation continuation options ===
-    bool m_bContinueSimulation = false;
     std::string m_strContinueNetcdfPath;
-    // friend class CHydrograph;
+    
+    // === Friend classes ===
     friend class CHydrograph;
-
-    // friend class CDataWriter;
     friend class CDataWriter;
-
-    // friend class CCrossSection;
     friend class CCrossSection;
-
-    // friend class CDataReader;
     friend class CDataReader;
-
-    // friend class CScreenPresenter;
     friend class CScreenPresenter;
 
 
@@ -294,15 +337,18 @@ public:
 
     //! Name of main log file
     string m_strLogFile;
-
-    //! Is this timestep saved?
-    bool m_bSaveTime;
-
-    //! Save at every computational timestep (for debugging)?
-    bool m_bSaveAllTimesteps;
+    
+    //! YAML configuration content (for NetCDF metadata)
+    string m_strYAMLConfigContent;
 
     //! Computational timestep obtained from Courant number
     double m_dTimestep;
+    
+    //! Adaptive timestep control variables
+    double m_dTimestepPrevious;     // Previous timestep for comparison
+    double m_dTimestepMin;          // Minimum timestep reached during simulation
+    double m_dTimestepMax;          // Maximum allowed timestep (= m_dSimTimestep)
+    int m_nTimestepChanges;         // Counter for significant timestep changes
 
     //! Lambda Value
     double m_dLambda;
@@ -310,14 +356,8 @@ public:
     //! The initial estuarine condition, IEC [0 = in calm, 1 = water flow or 2 = elevation]
     int m_nInitialEstuarineCondition;
 
-    //! Compute sediment transport?
-    bool m_bDoSedimentTransport;
-
     //! The equation for Sediment Transport
     int m_nEquationSedimentTransport;
-
-    //! Compute water salinity?
-    bool m_bDoWaterSalinity{};
 
     //! Name of the initial salinity condition file [if compute water salinity]
     string m_strInitialSalinityConditionFilename;
@@ -372,6 +412,12 @@ public:
     //! The downward estuarine condition value at previous the last node and time t
     double m_dNextDownwardBoundaryValue{};
 
+    //! TVD flux limiter working vectors for passive tracers (salinity, temperature, etc.)
+    //! These are reusable for any passive scalar transport to avoid code duplication
+    vector<double> m_vTracer_r_ratio;         // Smoothness indicator r = ∇S[i]/∇S[i-1]
+    vector<double> m_vTracer_limiter;         // Limiter function Ψ(r) 
+    vector<double> m_vTracer_flux_limited;    // TVD-limited flux at cell interfaces
+
     //! The upward estuarine salinity condition filename
     string m_strUpwardSalinityBoundaryConditionFilename;
 
@@ -402,14 +448,30 @@ public:
     //! The downward estuarine salinity condition value at previous the last node and time t
     double m_dNextDownwardSalinityBoundaryValue{};
     
-    //! The Courant Number
+    //! Salt mass balance tracking (downstream boundary)
+    double m_dSaltInitialMass{0.0};        // Initial total salt mass in estuary at t=0 (kg)
+    double m_dSaltInflowDownstream{0.0};   // Cumulative salt entering through ocean boundary (kg)
+    double m_dSaltOutflowDownstream{0.0};  // Cumulative salt leaving through ocean boundary (kg)
+    double m_dSaltNetFlowDownstream{0.0};  // Net cumulative flow (inflow - outflow) (kg)
+    double m_dPredictorBoundaryFlux{0.0};  // Predictor boundary flux (kg/s) - for McCormack averaging
+    double m_dCorrectorBoundaryFlux{0.0};  // Corrector boundary flux (kg/s) - for McCormack averaging
+    
+    //! The Courant Number (user-provided, used as upper limit only)
     double m_dCourantNumber{};
+    
+    //! Automatic CFL control based on numerical scheme stability
+    double m_dCourantNumberMaxTheoretical; // Max CFL for scheme (TVD-McCormack)
+    double m_dCourantNumberOptimal;        // Optimal CFL with safety factor
+    double m_dCourantNumberCurrent;        // Current effective Courant (adaptive)
+    double m_dCourantNumberMin;            // Minimum Courant reached
+    int m_nCourantReductions;              // Counter for Courant reductions
 
-    //! Do McCormack Limiter Flux?
-    bool m_bDoMcCormackLimiterFlux{};
-
-    //! The equation for McCormack Limiter Flux
+    //! The equation for McCormack Limiter Flux (hydrodynamics)
     int m_nEquationMcCormackLimiterFlux{};
+
+    //! The equation for transport limiter flux (salinity/temperature)
+    //! If not specified, uses same as hydrodynamics
+    int m_nEquationTransportLimiterFlux{};
 
     //! Psi Formula
     int m_nPsiFormula{};
@@ -417,38 +479,18 @@ public:
     //! Delta Value
     double m_dDeltaValue{};
 
-    //! Do Surface Gradient Method?
-    bool m_bDoSurfaceGradientMethod{};
-
-    //! Do Source Term Balance?
-    bool m_bDoSourceTermBalance{};
-
-    //! Do beta coefficient?
-    bool m_bDoBetaCoefficient{};
-
-    //! Do Dry Bed?
-    bool m_bDoDryBed{};
-
-    //! Do Murillo condition?
-    bool m_bDoMurilloCondition{};
-
-    //! Compute water density?
-    bool m_bDoWaterDensity{};
-    
-    //! Smooth bathymetry before simulation?
-    bool m_bDoSmoothBathymetry{};
+    //! Bathymetry smoothing parameters
     int m_nBathymetrySmoothingPasses{1};
     double m_dBathymetrySmoothingAlpha{0.25};
 
-        //! Maximum astronomical tide level calculated
-    double m_dMaxAstronomicalTide = 0.0;
+    //! Maximum astronomical tide level calculated
+    double m_dMaxAstronomicalTide{0.0};
 
-    int m_nThresholddBdeta = 0;
+    int m_nThresholddBdeta{0};
     //! Vector of eta where the gradient threshold of B(eta) per section is exceeded
     vector<double> m_vEtaWidthGradientThreshold;
 
-    //! Smooth solution (regularization) during simulation?
-    bool m_bDoSmoothSolution{};
+    //! Solution smoothing parameters
     int m_nSolutionSmoothingPasses{1};
     double m_dSolutionSmoothingAlpha{0.25};
 
@@ -491,6 +533,8 @@ public:
     vector<double> m_vPredictedCrossSectionArea;
     //! Corrected cross-section areas
     vector<double> m_vCorrectedCrossSectionArea;
+    //! Previous timestep cross-section areas (for salt mass conservation)
+    vector<double> m_vPreviousCrossSectionArea;
 
     //! Cross-section water flows
     vector<double> m_vCrossSectionQ;
@@ -548,6 +592,9 @@ public:
     //! Cross-section mean water velocity
     vector<double> m_vCrossSectionU;
 
+    //! Previous timestep velocity (for salt mass conservation)
+    vector<double> m_vPreviousCrossSectionU;
+
     //! Cross-section perturbation water velocities
     vector<double> m_vCrossSectionC;
 
@@ -571,6 +618,17 @@ public:
     
     //! Cross-section salinity temporal gradient (ASt term)
     vector<double> m_vCrossSectionSalinityASt;
+    
+    //! Storage for predictor and corrector fluxes (McCormack scheme)
+    vector<double> m_vCrossSectionSalinityASt_predictor;
+    vector<double> m_vCrossSectionSalinityASt_corrector;
+    
+    //! Salinity flux terms (analogous to F0, F1 for hydrodynamics)
+    vector<double> m_vCrossSectionFS;      // Total salinity flux: advection + diffusion
+    vector<double> m_vCrossSectionGS;      // Salinity source terms (currently unused, for future extensions)
+    
+    //! Previous timestep values for mass conservation
+    vector<double> m_vPreviousCrossSectionSalinity;
 
     //! Cross-section bottom sediment transport
     vector<double> m_vCrossSectionQb;
@@ -661,9 +719,6 @@ public:
     //! Code for error handling
     int m_nStringError;
 
-    //! Boolean for error
-    bool m_bReturnError;
-
     //! Text attachment for error handling
     string m_strErrorAttachment;
 
@@ -717,6 +772,11 @@ public:
     //! Method for setting the compute water temperature
     void bSetDoWaterTemperature(bool doWaterTemperature) { m_bDoWaterTemperature = doWaterTemperature; }
 
+    //! Getter for Manning level-dependence
+    [[nodiscard]] bool bGetManningDependsOnLevel() const { return m_bManningDependsOnLevel; }
+    //! Setter for Manning level-dependence
+    void bSetManningDependsOnLevel(bool bValue) { m_bManningDependsOnLevel = bValue; }
+
     //! Method for getting the compute water salinity
     [[nodiscard]] bool bGetDoWaterSalinity() const { return m_bDoWaterSalinity; }
     //! Method for setting the compute water salinity
@@ -766,10 +826,20 @@ public:
     //! Method for setting if McComarck limiter flux is applied
     void bSetDoMcComarckLimiterFlux(bool doMcComarckLimiterFlux) { m_bDoMcCormackLimiterFlux = doMcComarckLimiterFlux; }
 
-    //! Method for getting equation limiter flux
+    //! Method for getting equation limiter flux (hydrodynamics)
     [[nodiscard]] int nGetEquationLimiterFlux() const { return m_nEquationMcCormackLimiterFlux; }
-    //! Method for setting equation limiter flux
+    //! Method for setting equation limiter flux (hydrodynamics)
     void nSetEquationLimiterFlux(int equationLimiterFlux) { m_nEquationMcCormackLimiterFlux = equationLimiterFlux; }
+
+    //! Method for getting transport limiter flux (salinity/temperature)
+    [[nodiscard]] int nGetTransportLimiterFlux() const { 
+        return m_bUseIndependentTransportLimiter ? m_nEquationTransportLimiterFlux : m_nEquationMcCormackLimiterFlux; 
+    }
+    //! Method for setting transport limiter flux
+    void nSetTransportLimiterFlux(int transportLimiterFlux, bool independent) { 
+        m_nEquationTransportLimiterFlux = transportLimiterFlux; 
+        m_bUseIndependentTransportLimiter = independent;
+    }
 
     //! Method for getting Psi formula
     [[nodiscard]] int nGetPsiFormula() const { return m_nPsiFormula; }
@@ -829,9 +899,6 @@ public:
     //! Add output variable
     void strAddOutputVariable(const string& strItem) { m_vOutputVariables.push_back(strItem); }
 
-    //! Read hydrograph input?
-    bool m_bHydroFile;
-
     //! A vector with hydrograph objects
     vector<CHydrograph> hydrographs;
 
@@ -878,9 +945,17 @@ public:
     void mergeTracerPredictorCorrector();
     void smoothSolution();
     void smoothBathymetry();
-    // Predictor-corrector for salinity and temperature
-    void calculate_salinity_predictor();
-    void calculate_salinity_corrector();
+    
+    // Generic TVD flux limiter for passive tracer transport
+    // Computes limited fluxes to prevent spurious oscillations while maintaining 2nd order accuracy
+    void compute_tracer_tvd_flux(const vector<double>& tracer, const vector<double>& discharge,
+                                  const vector<double>& area, vector<double>& flux_limited);
+    
+    // Salinity transport (modular design like hydrodynamics)
+    void calculateSalinityFluxes();        // Compute advective + diffusive fluxes
+    void calculateSalinitySourceTerms();   // Compute source terms (if any)
+    void calculate_salinity_predictor();   // Apply McCormack predictor step
+    void calculate_salinity_corrector();   // Apply McCormack corrector step
 
     void calculateRadiativeFluxes();
     void calculate_temperature(); // Legacy wrapper (calls predictor/corrector based on m_nPredictor)
@@ -981,17 +1056,15 @@ public:
     }
 
     private:
-    // FIX: These must be vector<vector<double>>
+    // === Private data members for internal precomputation ===
     vector<double> m_vBedZ;
     vector<double> m_vManningN;
     vector<double> m_vPositionX;
-    vector<double> m_vBeta;  // FIX: Changed from vector<double> to vector<vector<double>>
+    vector<double> m_vBeta;
     
-    // CHANGE from vector<double> to vector<vector<double>>
-    vector<vector<double>> m_vWidth;      // ✅ CORREGIDO
-    vector<vector<double>> m_vLeftY;      // ✅ CORREGIDO
-    vector<vector<double>> m_vRightY;     // ✅ CORREGIDO
-    
+    vector<vector<double>> m_vWidth;
+    vector<vector<double>> m_vLeftY;
+    vector<vector<double>> m_vRightY;
     vector<vector<double>> m_vEstuaryAreas;
     vector<vector<double>> m_vEstuaryHydraulicRadius;
     vector<vector<double>> m_vEstuaryWaterDepths;
@@ -999,7 +1072,7 @@ public:
     vector<int> m_vElevationSectionsCount;
 
     public:
-    // Simple optimization method
+    // === Optimization methods ===
     void precomputeEstuaryData();
 };
 #endif // SIMULATION_H

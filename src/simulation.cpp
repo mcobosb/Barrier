@@ -10,8 +10,10 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <chrono>
@@ -189,6 +191,16 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     
 
     std::cout << "      - Detected configuration file" << std::endl;
+    
+    // Read YAML file content as string (for NetCDF metadata)
+    std::ifstream yamlFile(configFile);
+    if (yamlFile.is_open()) {
+        std::stringstream buffer;
+        buffer << yamlFile.rdbuf();
+        m_strYAMLConfigContent = buffer.str();
+        yamlFile.close();
+    }
+    
     CYAMLReader yamlReader;
     if (!yamlReader.loadConfiguration(configFile, this)) {
         std::cerr << "❌ Error loading YAML configuration: " 
@@ -217,18 +229,18 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     // === CRITICAL WARNING FOR DEBUG LEVEL 3 ===
     if (m_nLogFileDetail >= 3) {
         std::cerr << "\n" << std::string(80, '!') << "\n";
-        std::cerr << "⚠️  CRITICAL WARNING: log_file_detail = " << m_nLogFileDetail << "\n";
-        std::cerr << "⚠️  NetCDF output will be written at EVERY timestep!\n";
-        std::cerr << "⚠️  This will:\n";
-        std::cerr << "⚠️    - Make simulation EXTREMELY SLOW (10-100x slower)\n";
-        std::cerr << "⚠️    - Generate HUGE files (potentially GB to TB)\n";
-        std::cerr << "⚠️    - May FILL YOUR DISK and crash the system\n";
-        std::cerr << "⚠️  \n";
-        std::cerr << "⚠️  Recommended: Use log_file_detail = 2 for detailed diagnostics\n";
-        std::cerr << "⚠️  Only use level 3 for debugging specific short runs!\n";
-        std::cerr << std::string(80, '!') << "\n";
-        std::cerr << "Press Ctrl+C within 5 seconds to abort...\n\n";
-        std::cerr.flush();
+            std::cerr << "CRITICAL WARNING: log_file_detail = " << m_nLogFileDetail << "\n";
+            std::cerr << "NetCDF output will be written at EVERY timestep!\n";
+            std::cerr << "This will:\n";
+            std::cerr << "  - Make simulation EXTREMELY SLOW (10-100x slower)\n";
+            std::cerr << "  - Generate HUGE files (potentially GB to TB)\n";
+            std::cerr << "  - May FILL YOUR DISK and crash the system\n";
+            std::cerr << "\n";
+            std::cerr << "Recommended: Use log_file_detail = 2 for detailed diagnostics\n";
+            std::cerr << "Only use level 3 for debugging specific short runs!\n";
+            std::cerr << std::string(80, '!') << "\n";
+            std::cerr << "Press Ctrl+C within 5 seconds to abort...\n\n";
+            std::cerr.flush();
         
         // Give user 5 seconds to abort
         std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -243,10 +255,10 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         // === CRITICAL WARNING IN LOG FILE ===
         if (m_nLogFileDetail >= 3) {
             LogStream << "\n" << std::string(80, '!') << "\n";
-            LogStream << "⚠️  CRITICAL WARNING: DEBUG LEVEL 3 ACTIVE\n";
-            LogStream << "⚠️  NetCDF output writing at EVERY timestep\n";
-            LogStream << "⚠️  Expect extremely slow execution and huge output files\n";
-            LogStream << std::string(80, '!') << "\n\n";
+                LogStream << "CRITICAL WARNING: DEBUG LEVEL 3 ACTIVE\n";
+                LogStream << "NetCDF output writing at EVERY timestep\n";
+                LogStream << "Expect extremely slow execution and huge output files\n";
+                LogStream << std::string(80, '!') << "\n\n";
         }
         
         LogStream << "Configuration file: " << configFile << "\n";
@@ -260,7 +272,105 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         LogStream << "Duration: " << m_dSimDuration << " s (" 
                   << m_dSimDuration/86400.0 << " days)\n";
         LogStream << "Timestep: " << m_dSimTimestep << " s\n";
-        LogStream << "Courant number: " << m_dCourantNumber << "\n";
+        LogStream << "Courant number: " << m_dCourantNumber << " (adaptive control enabled)\n";
+        
+        // Initialize automatic CFL control based on numerical scheme
+        // CRITICAL: Shallow water + TVD-McCormack is MORE restrictive than pure advection
+        // Empirical evidence shows instabilities (elevation oscillations, spurious diffusion)
+        // when CFL exceeds ~0.15-0.2 in coupled hyperbolic systems
+        
+        // Conservative CFL limits based on shallow water + tracer coupling:
+        // - Pure first-order upwind: CFL_safe ≈ 0.5 (very stable but diffusive)
+        // - TVD-McCormack with MinMod: CFL_safe ≈ 0.25 (balanced)
+        // - TVD-McCormack with Superbee: CFL_safe ≈ 0.15 (sharp fronts, needs restriction)
+        // - TVD-McCormack with Van Leer/Van Albada: CFL_safe ≈ 0.2
+        
+        // Determine practical safe CFL for coupled shallow water system
+        if (!m_bDoMcCormackLimiterFlux || m_nEquationMcCormackLimiterFlux == 0) {
+            // No TVD: first-order upwind (most stable)
+            m_dCourantNumberMaxTheoretical = 0.5;
+        } else {
+            // TVD active: conservative limits for coupled system
+            switch (m_nEquationMcCormackLimiterFlux) {
+                case 1:  // MinMod - most stable, good for smooth solutions
+                    m_dCourantNumberMaxTheoretical = 0.25;
+                    break;
+                case 2:  // Superbee - captures sharp fronts but very restrictive
+                    m_dCourantNumberMaxTheoretical = 0.15;
+                    break;
+                case 3:  // Van Leer - balanced performance
+                    m_dCourantNumberMaxTheoretical = 0.2;
+                    break;
+                case 4:  // Van Albada - similar to Van Leer
+                    m_dCourantNumberMaxTheoretical = 0.2;
+                    break;
+                default:
+                    m_dCourantNumberMaxTheoretical = 0.2;
+            }
+        }
+        
+        // Apply minimal safety margin: use 90% of empirically-determined maximum
+        // Already very conservative based on shallow water coupling requirements
+        const double SAFETY_FACTOR = 0.9;
+        m_dCourantNumberOptimal = SAFETY_FACTOR * m_dCourantNumberMaxTheoretical;
+        
+        // User-provided Courant is treated as optional upper limit
+        // Model uses minimum of (optimal, user_provided) ensuring stability
+        // WARNING: User values higher than optimal will be IGNORED for safety
+        if (m_dCourantNumber > 0.0) {
+            if (m_dCourantNumber < m_dCourantNumberOptimal) {
+                m_dCourantNumberOptimal = m_dCourantNumber;
+                LogStream << "⚠️  User CFL=" << m_dCourantNumber << " < Auto-calculated CFL=" 
+                          << SAFETY_FACTOR * m_dCourantNumberMaxTheoretical
+                          << " (using user value)\n";
+            } else if (m_dCourantNumber > m_dCourantNumberOptimal * 1.1) {
+                LogStream << "⚠️  User CFL=" << m_dCourantNumber << " EXCEEDS safe limit=" 
+                          << m_dCourantNumberOptimal << "\n";
+                LogStream << "    → IGNORED for stability (would cause oscillations)\n";
+            }
+        }
+        
+        m_dCourantNumberCurrent = m_dCourantNumberOptimal;
+        m_dCourantNumberMin = m_dCourantNumberOptimal;
+        m_nCourantReductions = 0;
+        m_bExtremeFlowConditions = false;
+        
+        // Log automatic CFL determination
+        LogStream << "\n=== AUTOMATIC CFL DETERMINATION ===\n";
+        LogStream << "System: Coupled shallow water + TVD-McCormack tracers\n";
+        LogStream << "Limiter: ";
+        if (!m_bDoMcCormackLimiterFlux || m_nEquationMcCormackLimiterFlux == 0) {
+            LogStream << "None (1st order upwind)";
+        } else {
+            const char* limiter_names[] = {"", "MinMod", "Superbee", "Van Leer", "Van Albada"};
+            LogStream << limiter_names[m_nEquationMcCormackLimiterFlux];
+        }
+        LogStream << "\nCFL_max (empirical for coupled system): " << m_dCourantNumberMaxTheoretical << "\n";
+        LogStream << "CFL_optimal (with 90% safety): " << m_dCourantNumberOptimal << "\n";
+        if (m_dCourantNumber > 0.0) {
+            LogStream << "CFL_user (config): " << m_dCourantNumber;
+            if (m_dCourantNumber < m_dCourantNumberOptimal) {
+                LogStream << " [LIMITING - user more conservative]\n";
+            } else if (m_dCourantNumber > m_dCourantNumberOptimal * 1.1) {
+                LogStream << " [IGNORED - exceeds stability limit]\n";
+            } else {
+                LogStream << " [OK - close to optimal]\n";
+            }
+        }
+        LogStream << "CFL_active: " << m_dCourantNumberCurrent << "\n";
+        LogStream << "\nNote: Higher CFL causes elevation oscillations and\n";
+        LogStream << "      spurious diffusion in coupled hyperbolic systems.\n";
+        LogStream << "===================================\n\n";
+        LogStream.flush();
+    }
+    
+    std::cout << "      - Reading input data files..." << std::endl;
+    reader.bReadAlongChannelDataFile(this);
+    reader.bReadCrossSectionGeometryFile(this);
+    std::cout << "      - Along-channel data and cross-section geometry loaded successfully" << std::endl;
+    
+    // Print geometry and configuration summary AFTER reading geometry
+    if (m_nLogFileDetail >= 1) {
         LogStream << "Number of cross-sections: " << m_nCrossSectionsNumber << "\n";
         LogStream << "\nPhysical processes:\n";
         LogStream << "  - Water temperature: " << (m_bDoWaterTemperature ? "YES" : "NO") << "\n";
@@ -271,6 +381,11 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         LogStream << "  - TVD flux limiter: " << (m_bDoMcCormackLimiterFlux ? "YES" : "NO") << "\n";
         LogStream << "  - Surface gradient method: " << (m_bDoSurfaceGradientMethod ? "YES" : "NO") << "\n";
         LogStream << "  - Source term balance: " << (m_bDoSourceTermBalance ? "YES" : "NO") << "\n";
+        LogStream << "  - Solution regularization: " << (m_bDoSmoothSolution ? "YES" : "NO") << "\n";
+        if (m_bDoSmoothSolution) {
+            LogStream << "    • Passes: " << m_nSolutionSmoothingPasses << "\n";
+            LogStream << "    • Alpha: " << m_dSolutionSmoothingAlpha << "\n";
+        }
         LogStream << "\nBoundary conditions:\n";
         LogStream << "  - Upstream hydrodynamic: Type " << m_nUpwardEstuarineCondition << "\n";
         LogStream << "  - Downstream hydrodynamic: Type " << m_nDownwardEstuarineCondition << "\n";
@@ -286,11 +401,6 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         LogStream << std::string(80, '=') << "\n\n";
         LogStream.flush();
     }
-    
-    std::cout << "      - Reading input data files..." << std::endl;
-    reader.bReadAlongChannelDataFile(this);
-    reader.bReadCrossSectionGeometryFile(this);
-    std::cout << "      - Along-channel data and cross-section geometry loaded successfully" << std::endl;
     if (m_nUpwardEstuarineCondition > 1) {
         CDataReader::bReadUpwardBoundaryConditionFile(this);
         std::cout << "      - Upstream boundary condition file loaded successfully" << std::endl;
@@ -524,6 +634,31 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         if (m_nLogFileDetail >= 1) {
             writePeriodicStatistics();
         }
+
+        // === Salt mass balance diagnostics ===
+        if (m_bDoWaterSalinity && LogStream.is_open() && m_nLogFileDetail >= 1) {
+            // Compute total salt mass in domain
+            double total_salt = 0.0;
+            for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+                total_salt += m_vCrossSectionArea[i] * m_vCrossSectionSalinity[i];
+            }
+            // Compute salt fluxes at boundaries (kg/s)
+            double salt_in = 0.0, salt_out = 0.0;
+            // Upstream (dam)
+            if (m_vCrossSectionQ[0] > 0.0) {
+                salt_in += m_vCrossSectionQ[0] * m_vCrossSectionSalinity[0];
+            } else {
+                salt_out -= m_vCrossSectionQ[0] * m_vCrossSectionSalinity[0];
+            }
+            // Downstream (ocean)
+            int last = m_nCrossSectionsNumber - 1;
+            if (m_vCrossSectionQ[last] < 0.0) {
+                salt_in += -m_vCrossSectionQ[last] * m_vCrossSectionSalinity[last];
+            } else {
+                salt_out += m_vCrossSectionQ[last] * m_vCrossSectionSalinity[last];
+            }
+            // Removed per-timestep [SaltBalance] log
+        }
         
         // Level 2: Save output at EVERY timestep (WARNING: Very slow, huge files)
         // Use only for debugging specific timesteps
@@ -583,6 +718,28 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
                   << ratio << "x real time\n";
         LogStream << "Average time per timestep: " << std::fixed << setprecision(4) 
                   << dTotalElapsedTime / (m_nStep - 1) << " s\n";
+        
+        // Adaptive timestep statistics
+        LogStream << "\nAdaptive timestep statistics:\n";
+        LogStream << "  - Minimum timestep: " << std::fixed << setprecision(2) << m_dTimestepMin << " s\n";
+        LogStream << "  - Maximum timestep: " << std::fixed << setprecision(2) << m_dTimestepMax << " s\n";
+        LogStream << "  - Target timestep: " << std::fixed << setprecision(2) << m_dSimTimestep << " s\n";
+        LogStream << "  - Timestep range: " << std::fixed << setprecision(1) << m_dTimestepMax/m_dTimestepMin << "x\n";
+        LogStream << "  - Significant changes: " << m_nTimestepChanges << " times\n";
+        if (m_dTimestepMin < m_dSimTimestep * 0.5) {
+            LogStream << "  ⚠️ Timestep frequently reduced: Consider lowering Courant number or refining mesh\n";
+        }
+        
+        // Adaptive Courant statistics
+        LogStream << "\nAdaptive Courant control:\n";
+        LogStream << "  - Optimal CFL (auto-calculated): " << std::fixed << setprecision(3) << m_dCourantNumberOptimal << "\n";
+        LogStream << "  - Minimum CFL reached: " << std::fixed << setprecision(3) << m_dCourantNumberMin << "\n";
+        LogStream << "  - CFL reduction factor: " << std::fixed << setprecision(2) << m_dCourantNumberMin/m_dCourantNumberOptimal << "x\n";
+        LogStream << "  - Extreme flow events: " << m_nCourantReductions << " times\n";
+        if (m_nCourantReductions > 0) {
+            LogStream << "  ℹ️ Adaptive CFL prevented instabilities during " << m_nCourantReductions << " extreme flow events\n";
+        }
+        
         LogStream << "\nOutput file: " << m_strOutFile << "\n";
         LogStream << std::string(80, '=') << "\n";
         LogStream.flush();
@@ -1218,6 +1375,9 @@ void CSimulation::getLastHydraulicParameters(const int nCrossSection) {
 void CSimulation::calculateTimestep() {
     double dMinTimestep = 10000000.0;
     double dWaterDensityFactor = 1.0;
+    // Track maximum local CFL and its location for diagnostics
+    double max_local_cfl = 0.0;
+    int critical_section_idx = -1;
   
     // ⚡ OPTIMIZATION: Cache sqrt(G) to avoid recomputing in every iteration
     static const double sqrt_G = sqrt(G);
@@ -1226,31 +1386,31 @@ void CSimulation::calculateTimestep() {
     for (int i=1; i < m_nCrossSectionsNumber-1; i++) {
         if (m_vCrossSectionArea[i] > DRY_AREA) {
             const double dX = m_vCrossSectionDX[i];
-            
             // Mean flow velocity: u = Q / A
             const double u = m_vCrossSectionQ[i] / m_vCrossSectionArea[i];
             m_vCrossSectionU[i] = u;
-
             // Shallow water wave celerity: c = sqrt(g·A/B) = sqrt(g·h) where h=A/B is mean depth
             const double c = sqrt_G * sqrt(m_vCrossSectionArea[i] / m_vCrossSectionWidth[i]);
             m_vCrossSectionC[i] = c;
-
             // Additional stability constraint for density-driven flows (baroclinic adjustment)
             if (m_bDoWaterDensity) {
                 dWaterDensityFactor = m_dCourantNumber * dX / (m_vCrossSectionWidth[i] * m_dBetaSalinityConstant);
             }
-
             // ⚡ OPTIMIZATION: Precalculate characteristic speeds to avoid recomputing in max()
             // CFL timestep: Δt = C·Δx / max(|u+c|, |u-c|)
             const double lambda_plus = fabs(u + c);   // Downstream characteristic
             const double lambda_minus = fabs(u - c);  // Upstream characteristic
             const double max_lambda = std::max(lambda_plus, lambda_minus);
-            
+            // Compute local CFL for this section
+            double local_cfl = (max_lambda > 0.0) ? (m_dTimestep * max_lambda / dX) : 0.0;
+            if (local_cfl > max_local_cfl) {
+                max_local_cfl = local_cfl;
+                critical_section_idx = i;
+            }
             if (const double dTimestepTmp = m_dCourantNumber * dX / max_lambda; 
                 dTimestepTmp < dMinTimestep) {
                 dMinTimestep = dTimestepTmp;
             }
-
             // Apply density factor constraint if active
             if (m_bDoWaterDensity && (dWaterDensityFactor < dMinTimestep)) {
                 dMinTimestep = dWaterDensityFactor;
@@ -1291,31 +1451,176 @@ void CSimulation::calculateTimestep() {
     
     m_dTimestep = dMinTimestep;
 
-    // Additional stability constraint for salinity diffusion (if active)
-    // Criterion: Δt ≤ 0.5·Δx² / Kh to prevent numerical instabilities in diffusion term
-    if (m_bDoWaterSalinity && m_dLongitudinalDispersion > 0.0) {
-        for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
-            double dX = m_vCrossSectionDX[i];
-            double dt_diffusion = 0.5 * dX * dX / m_dLongitudinalDispersion;  // Factor 0.5 for safety margin
-            if (dt_diffusion < m_dTimestep) {
-                m_dTimestep = dt_diffusion;
+    // === STEP 2: Apply rigorous adaptive Courant control ===
+    // Objective criterion: If max(CFL_local) > 0.95·C_optimal → reduce C_current
+    // Safety margin: 5% below target to prevent instabilities
+    const double CFL_SAFETY_MARGIN = 0.95;
+    const double CFL_CRITICAL_THRESHOLD = CFL_SAFETY_MARGIN * m_dCourantNumberOptimal;
+    
+    if (max_local_cfl > CFL_CRITICAL_THRESHOLD && !m_bExtremeFlowConditions) {
+        // Entering high-CFL regime: reduce Courant preventively
+        // Reduction factor: keep CFL below threshold with 10% extra safety
+        const double reduction_factor = 0.9 * CFL_CRITICAL_THRESHOLD / max_local_cfl;
+        m_dCourantNumberCurrent = std::max(0.05, m_dCourantNumberOptimal * reduction_factor);
+        m_nCourantReductions++;
+        m_bExtremeFlowConditions = true;
+        
+        // Recompute timestep with reduced Courant
+        m_dTimestep *= reduction_factor;
+        
+        // Log only first occurrence or if log level is very high
+        if (m_nLogFileDetail >= 2 || m_nCourantReductions == 1) {
+            std::ofstream LogStream(m_strLogFile.c_str(), std::ios_base::app);
+            LogStream << std::fixed << std::setprecision(3);
+            LogStream << "🔴 HIGH CFL [t=" << m_dCurrentTime/3600.0 << "h]: "
+                      << "CFL=" << max_local_cfl << " | C: " << m_dCourantNumberOptimal << "→" << m_dCourantNumberCurrent << "\n";
+            LogStream.flush();
+        }
+    }
+    else if (max_local_cfl < 0.7 * CFL_CRITICAL_THRESHOLD && m_bExtremeFlowConditions) {
+        // Exiting high-CFL regime: gradually recover Courant
+        // Conservative recovery: increase by 20% per step until reaching optimal value
+        m_dCourantNumberCurrent = std::min(m_dCourantNumberOptimal, m_dCourantNumberCurrent * 1.2);
+        
+        if (m_dCourantNumberCurrent >= 0.99 * m_dCourantNumberOptimal) {
+            m_bExtremeFlowConditions = false;
+            
+            // Log recovery only at high detail level
+            if (m_nLogFileDetail >= 2) {
+                std::ofstream LogStream(m_strLogFile.c_str(), std::ios_base::app);
+                LogStream << "🟢 CFL NORMALIZED [t=" << std::fixed << std::setprecision(1) 
+                          << m_dCurrentTime/3600.0 << "h]\n";
+                LogStream.flush();
             }
         }
     }
-
-    // Enforce minimum timestep threshold (0.1 seconds)
-    if (m_dTimestep < 0.1) {
-        m_dTimestep = 0.1;
+    else if (m_bExtremeFlowConditions && m_dCourantNumberCurrent < m_dCourantNumberOptimal) {
+        // Gradual recovery while still in elevated CFL regime (conservative 5% increase)
+        m_dCourantNumberCurrent = std::min(m_dCourantNumberOptimal, m_dCourantNumberCurrent * 1.05);
     }
     
-    // Enforce maximum timestep (user-specified output timestep)
+    // Track minimum Courant reached during simulation
+    if (m_dCourantNumberCurrent < m_dCourantNumberMin) {
+        m_dCourantNumberMin = m_dCourantNumberCurrent;
+    }
+
+    // === STEP 3: Apply rigorous diffusion stability constraint ===
+    // Diffusion stability (Fourier condition): Δt ≤ α·Δx² / (2·Kh)
+    // where α = stability factor (0.4-0.5 for explicit schemes)
+    // Physical basis: diffusive time scale τ_diff = Δx²/Kh must be resolved
+    if (m_bDoWaterSalinity && m_dLongitudinalDispersion > 0.0) {
+        const double DIFFUSION_SAFETY_FACTOR = 0.4;  // Conservative: 0.4 < 0.5 (stability limit)
+        double min_Pe = 1e10;  // Track minimum Péclet number (diagnostic)
+        
+        for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
+            if (m_vCrossSectionArea[i] > DRY_AREA) {
+                const double dX = m_vCrossSectionDX[i];
+                const double u = fabs(m_vCrossSectionU[i]);
+                
+                // Diffusion stability: Δt ≤ α·Δx²/Kh
+                const double dt_diffusion = DIFFUSION_SAFETY_FACTOR * dX * dX / m_dLongitudinalDispersion;
+                if (dt_diffusion < m_dTimestep) {
+                    m_dTimestep = dt_diffusion;
+                    // Log only if extremely restrictive (Δt < 10s) and high detail level
+                    if (m_nLogFileDetail >= 3 && dt_diffusion < 10.0) {
+                        std::ofstream LogStream(m_strLogFile.c_str(), std::ios_base::app);
+                        LogStream << "⚠️ DIFFUSION LIMIT [t=" << std::fixed << std::setprecision(1) 
+                                  << m_dCurrentTime/3600.0 << "h]: Δt=" << std::setprecision(2) 
+                                  << m_dTimestep << "s\n";
+                        LogStream.flush();
+                    }
+                }
+                
+                // Diagnostic: Péclet number Pe = u·Δx/Kh
+                // Pe << 1: diffusion-dominated (smooth profiles, can use larger Δt)
+                // Pe >> 1: advection-dominated (sharp fronts, TVD limiters essential)
+                // Pe ≈ 2: balanced advection-diffusion (optimal for accuracy)
+                const double Pe = u * dX / m_dLongitudinalDispersion;
+                min_Pe = std::min(min_Pe, Pe);
+            }
+        }
+        
+        // Warning: Only if Pe is extremely low and might cause performance issues
+        // Log once per simulated hour maximum
+        static double last_Pe_warning_time = -3600.0;
+        if (min_Pe < 0.05 && m_nLogFileDetail >= 3 && 
+            (m_dCurrentTime - last_Pe_warning_time) > 3600.0) {
+            std::ofstream LogStream(m_strLogFile.c_str(), std::ios_base::app);
+            LogStream << "ℹ️ Very low Péclet (Pe=" << std::fixed << std::setprecision(3) 
+                      << min_Pe << ") - diffusion-dominated\n";
+            LogStream.flush();
+            last_Pe_warning_time = m_dCurrentTime;
+        }
+    }
+
+    // === STEP 4: Enforce absolute safety limits ===
+    // Minimum timestep: 0.1s (below this, round-off errors and computational cost dominate)
+    const double ABSOLUTE_MIN_TIMESTEP = 0.1;  // seconds
+    static bool timestep_floor_logged = false;
+    if (m_dTimestep < ABSOLUTE_MIN_TIMESTEP) {
+        // Log only first occurrence to avoid spam
+        if (m_nLogFileDetail >= 2 && !timestep_floor_logged) {
+            std::ofstream LogStream(m_strLogFile.c_str(), std::ios_base::app);
+            LogStream << "⚠️ TIMESTEP FLOOR: Δt clamped to " << ABSOLUTE_MIN_TIMESTEP << "s\n";
+            LogStream.flush();
+            timestep_floor_logged = true;
+        }
+        m_dTimestep = ABSOLUTE_MIN_TIMESTEP;
+    }
+    
+    // Maximum timestep: user-specified output timestep (for output synchronization)
     if (m_dTimestep > m_dSimTimestep) {
         m_dTimestep = m_dSimTimestep;
     }
+    
+    // Track timestep statistics for performance diagnostics
+    if (m_dTimestep < m_dTimestepMin) {
+        m_dTimestepMin = m_dTimestep;
+    }
+    if (m_dTimestep > m_dTimestepMax) {
+        m_dTimestepMax = m_dTimestep;
+    }
 
-    // Synchronize timestep with output times if approaching scheduled save point
+    // === STEP 5: Log significant timestep changes for monitoring ===
+    // For sub-second timesteps, only log drastic changes to avoid spam
+    // Use time-based throttling: max 1 message per simulated hour
+    static double last_timestep_log_time = -3600.0;
+    const double LOG_THROTTLE_INTERVAL = 3600.0;  // 1 hour of simulated time
+    const bool should_throttle = (m_dCurrentTime - last_timestep_log_time) < LOG_THROTTLE_INTERVAL;
+    
+    if (m_nLogFileDetail >= 1 && m_dTimestepPrevious > 0.0) {
+        const double dt_ratio = m_dTimestep / m_dTimestepPrevious;
+        
+        // Log only drastic changes (>50% reduction or >100% increase) or if not throttled
+        const bool drastic_change = (dt_ratio < 0.5 || dt_ratio > 2.0);
+        if (drastic_change || (!should_throttle && (dt_ratio < 0.8 || dt_ratio > 1.25))) {
+            m_nTimestepChanges++;
+            
+            std::ofstream LogStream(m_strLogFile.c_str(), std::ios_base::app);
+            LogStream << std::fixed << std::setprecision(2);
+            
+            if (dt_ratio < 0.8) {
+                // Timestep decreased
+                LogStream << "⏬ Δt: " << m_dTimestepPrevious << "→" << m_dTimestep << "s "
+                          << "(" << std::setprecision(0) << (dt_ratio-1.0)*100.0 << "%)";
+                if (critical_section_idx >= 0 && m_nLogFileDetail >= 2) {
+                    LogStream << " x=" << std::setprecision(1) 
+                              << m_vCrossSectionX[critical_section_idx]/1000.0 << "km";
+                }
+                LogStream << "\n";
+            } else if (m_nLogFileDetail >= 2) {
+                // Timestep increased (only log at higher detail level)
+                LogStream << "⏫ Δt: " << m_dTimestepPrevious << "→" << m_dTimestep << "s\n";
+            }
+            LogStream.flush();
+            last_timestep_log_time = m_dCurrentTime;  // Update throttle timer
+        }
+    }
+
+    // === STEP 6: Synchronize with output times ===
+    // Reduce timestep to hit exact output time (ensures precise snapshot timing)
     if (m_bSaveAllTimesteps) {
-        // Save at every computational timestep
+        // Save at every computational timestep (debug mode)
         m_bSaveTime = true;
     }
     else if ((m_nTimeId < static_cast<int>(m_vOutputTimes.size())) && (m_dCurrentTime + m_dTimestep > m_vOutputTimes[m_nTimeId])) {
@@ -2185,6 +2490,80 @@ void CSimulation::updateCorrectorBoundaries() {
     }
 }
 
+//======================================================================================================================
+/**
+ * @brief Generic TVD flux limiter for passive tracer transport (salinity, temperature, etc.)
+ * 
+ * Computes TVD-limited fluxes at cell faces to prevent spurious oscillations while
+ * maintaining 2nd order accuracy in smooth regions.
+ * 
+ * @param tracer Scalar field to transport (salinity, temperature, etc.)
+ * @param velocity Velocity field at cell centers
+ * @param area Cross-sectional areas
+ * @param flux_limited Output: TVD-limited flux at faces [kg/s or similar]
+ */
+//======================================================================================================================
+void CSimulation::compute_tracer_tvd_flux(const vector<double>& tracer, const vector<double>& discharge,
+                                            const vector<double>& area, vector<double>& flux_limited) {
+    const int n = m_nCrossSectionsNumber;
+    const int limiter_type = nGetTransportLimiterFlux();  // Get limiter for transport
+    
+    // Boundary fluxes set to zero (boundary conditions applied separately)
+    flux_limited[0] = 0.0;
+    flux_limited[n] = 0.0;
+    
+    // Early exit if no limiter (use simple upwind)
+    if (limiter_type == 0 || !m_bDoMcCormackLimiterFlux) {
+        for (int i = 1; i < n; i++) {
+            // Discharge at interface (average of adjacent cells)
+            const double Q_face = 0.5 * (discharge[i-1] + discharge[i]);
+            // Upwind concentration
+            const double phi_upwind = (Q_face > 0.0) ? tracer[i-1] : tracer[i];
+            // Flux = Q * phi
+            flux_limited[i] = Q_face * phi_upwind;
+        }
+        return;
+    }
+    
+    // Main TVD loop
+    for (int i = 1; i < n; i++) {
+        // Discharge at interface (average of adjacent cells)
+        // Use Q directly from momentum equations to ensure mass conservation consistency
+        const double Q_face = 0.5 * (discharge[i-1] + discharge[i]);
+        
+        if (fabs(Q_face) < 1e-6) {
+            flux_limited[i] = 0.0;
+            continue;
+        }
+        const double delta_phi = tracer[i] - tracer[i-1];
+        if (fabs(delta_phi) < 1e-10) {
+            flux_limited[i] = Q_face * tracer[i-1];
+            continue;
+        }
+        // Compute gradient ratio for TVD limiter
+        double r = 1.0;
+        if (Q_face > 0.0 && i >= 2) {
+            const double delta_upwind = tracer[i-1] - tracer[i-2];
+            r = (fabs(delta_phi) > 1e-12) ? (delta_upwind / delta_phi) : 1.0;
+        } else if (Q_face < 0.0 && i < n-1) {
+            const double delta_downwind = tracer[i+1] - tracer[i];
+            r = (fabs(delta_phi) > 1e-12) ? (delta_downwind / delta_phi) : 1.0;
+        }
+        // Apply limiter function
+        double psi;
+        switch (limiter_type) {
+            case 1:  psi = std::max(0.0, std::min(r, 1.0)); break;
+            case 2:  psi = std::max(0.0, std::max(std::min(2.0*r, 1.0), std::min(r, 2.0))); break;
+            case 3:  psi = (fabs(r) + r) / (1.0 + fabs(r)); break;
+            case 4:  psi = ((r*r) + r) / (1.0 + r*r); break;
+            default: psi = 0.0;
+        }
+        // Reconstruct interface value and compute flux
+        const double phi_upwind = (Q_face > 0.0) ? tracer[i-1] : tracer[i];
+        const double correction = (Q_face > 0.0) ? 0.5 * psi * delta_phi : -0.5 * psi * delta_phi;
+        flux_limited[i] = Q_face * (phi_upwind + correction);
+    }
+}
 
 
 //======================================================================================================================
@@ -2194,8 +2573,8 @@ void CSimulation::updateCorrectorBoundaries() {
  * Solves advection-diffusion equation for salinity:
  * ∂(AS)/∂t + ∂(QS)/∂x = ∂/∂x(Kh·A·∂S/∂x)
  * 
- * Uses upwind advection scheme based on flow direction:
- * - If u > 0: backward difference (i - i-1)
+ * Uses TVD-limited advection for sharp fronts + centered diffusion:
+
  * - If u < 0: forward difference (i+1 - i)
  * 
  * Diffusion uses centered differences for stability.
@@ -2204,51 +2583,62 @@ void CSimulation::updateCorrectorBoundaries() {
  */
 //======================================================================================================================
 void CSimulation::calculate_salinity_predictor() {
-    // Compute advection and diffusion terms (centered scheme for diffusion, upwind for advection)
-    for (int i = 1; i < m_nCrossSectionsNumber-1; ++i) {
-        double dx = m_vCrossSectionDX[i];
-        double u = m_vCrossSectionU[i];
+    // Compute TVD-limited advective fluxes at cell faces
+    // Use predicted discharge from hydrodynamic predictor step
+    vector<double> tvd_flux(m_nCrossSectionsNumber+1, 0.0);
+    compute_tracer_tvd_flux(m_vCrossSectionSalinity, m_vPredictedCrossSectionQ, 
+                            m_vCrossSectionArea, tvd_flux);
+    
+    // Compute advection and diffusion terms (TVD for advection, centered for diffusion)
+    // Equation: ∂(A·S)/∂t = -∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)
+    for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+        double dx = m_vCrossSectionDX[std::max(1, std::min(i, m_nCrossSectionsNumber-2))];
         
-        // Upwind advection: choose direction based on flow
-        double adv = -u * (m_vCrossSectionSalinity[i] - m_vCrossSectionSalinity[i-1]) / dx;
-        if (u < 0) adv = -u * (m_vCrossSectionSalinity[i+1] - m_vCrossSectionSalinity[i]) / dx;
-        
-        // Centered diffusion: ∂²S/∂x² ≈ (S[i+1] - 2S[i] + S[i-1])/Δx²
-        double diff = 0.0;
+        // TVD advection: flux already in units of [kg/s or m³/s·psu]
+        // -∂(Q·S)/∂x is already computed by differencing tvd_flux
+        double d_QS_dx = 0.0;
+        if (i == 0)
+            d_QS_dx = (tvd_flux[1] - tvd_flux[0]) / dx;
+        else if (i == m_nCrossSectionsNumber-1)
+            d_QS_dx = (tvd_flux[m_nCrossSectionsNumber] - tvd_flux[m_nCrossSectionsNumber-1]) / dx;
+        else
+            d_QS_dx = (tvd_flux[i+1] - tvd_flux[i]) / dx;
+
+        // Diffusion term: ∂/∂x(Kh·A·∂S/∂x)
+        // Using centered differences with area at cell center
+        double d_KhAdSdx_dx = 0.0;
         if (m_dLongitudinalDispersion > 0.0) {
-            diff = m_dLongitudinalDispersion * (m_vCrossSectionSalinity[i+1] - 2*m_vCrossSectionSalinity[i] + m_vCrossSectionSalinity[i-1]) / (dx*dx);
+            double A_i = m_vCrossSectionArea[i];
+            double S_ip1 = (i < m_nCrossSectionsNumber-1) ? m_vCrossSectionSalinity[i+1] : (2*m_vCrossSectionSalinity[i] - m_vCrossSectionSalinity[i-1]);
+            double S_im1 = (i > 0) ? m_vCrossSectionSalinity[i-1] : (2*m_vCrossSectionSalinity[i] - m_vCrossSectionSalinity[i+1]);
+            
+            // ∂/∂x(Kh·A·∂S/∂x) ≈ Kh·A·∂²S/∂x² for constant Kh and slowly varying A
+            d_KhAdSdx_dx = m_dLongitudinalDispersion * A_i * (S_ip1 - 2*m_vCrossSectionSalinity[i] + S_im1) / (dx*dx);
         }
         
-        // Store Δ(A·S) for mass update
-        m_vCrossSectionSalinityASt[i] = m_dTimestep * (adv + diff) * m_vCrossSectionArea[i];
+        // Update: Δ(A·S) = dt * [-∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)]
+        m_vCrossSectionSalinityASt[i] = m_dTimestep * (-d_QS_dx + d_KhAdSdx_dx);
     }
-    
-    // Zero flux at boundaries (can be adjusted based on BC type)
-    m_vCrossSectionSalinityASt[0] = 0.0;
-    m_vCrossSectionSalinityASt[m_nCrossSectionsNumber-1] = 0.0;
 
     // Update salinity conserving salt mass: S_new = (A·S_old + Δ(A·S))/A_new
+    static int clamp_count = 0;
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
         if (m_vCrossSectionArea[i] > DRY_AREA) {
             double salt_mass = m_vCrossSectionArea[i] * m_vCrossSectionSalinity[i];
             double delta_mass = m_vCrossSectionSalinityASt[i];
             salt_mass += delta_mass;
-            
             // Enforce physical bounds: salinity >= 0
             if (salt_mass < 0.0) salt_mass = 0.0;
-            
-            m_vPredictedCrossSectionS[i] = salt_mass / m_vCrossSectionArea[i];
-            
+            m_vPredictedCrossSectionS[i] = salt_mass / m_vPredictedCrossSectionArea[i];
             // Clamp to physical range [0, S_ocean]
-            if (m_vPredictedCrossSectionS[i] < 0.0) m_vPredictedCrossSectionS[i] = 0.0;
-            if (m_vPredictedCrossSectionS[i] > m_dDownwardSalinityBoundaryValue) {
-                m_vPredictedCrossSectionS[i] = m_dDownwardSalinityBoundaryValue;
-            }
+            if (m_vPredictedCrossSectionS[i] < 0.0) { m_vPredictedCrossSectionS[i] = 0.0; clamp_count++; }
+            if (m_vPredictedCrossSectionS[i] > m_dDownwardSalinityBoundaryValue) { m_vPredictedCrossSectionS[i] = m_dDownwardSalinityBoundaryValue; clamp_count++; }
         } else {
             // Dry area: zero salinity
             m_vPredictedCrossSectionS[i] = 0.0;
         }
     }
+    // Removed per-timestep clamping log in predictor
     
     // Apply boundary conditions
     // Upstream salinity boundary condition
@@ -2313,14 +2703,24 @@ void CSimulation::calculate_salinity_predictor() {
         }
     }
     
-    // Apply downstream BC based on condition type
+    // Apply downstream BC based on condition type AND flow direction
+    const int last = m_nCrossSectionsNumber - 1;
+    const double Q_downstream = m_vPredictedCrossSectionQ[last];  // Use predictor flow
+    
     if (nGetDownwardSalinityCondition() == 1) {
         // Type 1: Use upstream value (unusual but allowed)
-        m_vPredictedCrossSectionS[m_nCrossSectionsNumber-1] = up_sal;
+        m_vPredictedCrossSectionS[last] = up_sal;
     }
     else if (nGetDownwardSalinityCondition() == 2) {
-        // Type 2: Use prescribed downstream value (typical for ocean boundary)
-        m_vPredictedCrossSectionS[m_nCrossSectionsNumber-1] = down_sal;
+        // Type 2: Radiation BC - depends on flow direction
+        if (Q_downstream < 0.0) {
+            // FLOOD TIDE: Inflow from ocean → impose ocean salinity
+            m_vPredictedCrossSectionS[last] = down_sal;
+        } else {
+            // EBB TIDE: Outflow to ocean → zero-gradient (radiation)
+            // Let estuary water exit naturally without imposing ocean salinity
+            m_vPredictedCrossSectionS[last] = m_vPredictedCrossSectionS[last-1];
+        }
     }
 }
 
@@ -2334,52 +2734,77 @@ void CSimulation::calculate_salinity_predictor() {
  */
 //======================================================================================================================
 void CSimulation::calculate_salinity_corrector() {
-    // Compute advection and diffusion using predicted state
-    for (int i = 1; i < m_nCrossSectionsNumber-1; ++i) {
-        double dx = m_vCrossSectionDX[i];
-        double u = m_vCrossSectionU[i];
+    // Compute TVD-limited advective fluxes at cell faces (using predicted state)
+    // Use corrected discharge from hydrodynamic corrector step
+    vector<double> tvd_flux(m_nCrossSectionsNumber+1, 0.0);
+    compute_tracer_tvd_flux(m_vPredictedCrossSectionS, m_vCorrectedCrossSectionQ, m_vPredictedCrossSectionArea, tvd_flux);
+
+    // Compute advection and diffusion terms (TVD for advection, centered for diffusion)
+    // Equation: ∂(A·S)/∂t = -∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)
+    for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+        double dx = m_vCrossSectionDX[std::max(1, std::min(i, m_nCrossSectionsNumber-2))];
         
-        // Upwind advection with predicted salinity
-        double adv = -u * (m_vPredictedCrossSectionS[i] - m_vPredictedCrossSectionS[i-1]) / dx;
-        if (u < 0) adv = -u * (m_vPredictedCrossSectionS[i+1] - m_vPredictedCrossSectionS[i]) / dx;
-        
-        // Centered diffusion with predicted salinity
-        double diff = 0.0;
+        // TVD advection: flux already in units of [kg/s or m³/s·psu]
+        // -∂(Q·S)/∂x is already computed by differencing tvd_flux
+        double d_QS_dx = 0.0;
+        if (i == 0)
+            d_QS_dx = (tvd_flux[1] - tvd_flux[0]) / dx;
+        else if (i == m_nCrossSectionsNumber-1)
+            d_QS_dx = (tvd_flux[m_nCrossSectionsNumber] - tvd_flux[m_nCrossSectionsNumber-1]) / dx;
+        else
+            d_QS_dx = (tvd_flux[i+1] - tvd_flux[i]) / dx;
+
+        // Diffusion term: ∂/∂x(Kh·A·∂S/∂x)
+        // Using centered differences with area at cell center (predicted state)
+        double d_KhAdSdx_dx = 0.0;
         if (m_dLongitudinalDispersion > 0.0) {
-            diff = m_dLongitudinalDispersion * (m_vPredictedCrossSectionS[i+1] - 2*m_vPredictedCrossSectionS[i] + m_vPredictedCrossSectionS[i-1]) / (dx*dx);
+            double A_i = m_vPredictedCrossSectionArea[i];
+            double S_ip1 = (i < m_nCrossSectionsNumber-1) ? m_vPredictedCrossSectionS[i+1] : (2*m_vPredictedCrossSectionS[i] - m_vPredictedCrossSectionS[i-1]);
+            double S_im1 = (i > 0) ? m_vPredictedCrossSectionS[i-1] : (2*m_vPredictedCrossSectionS[i] - m_vPredictedCrossSectionS[i+1]);
+            
+            // ∂/∂x(Kh·A·∂S/∂x) ≈ Kh·A·∂²S/∂x² for constant Kh and slowly varying A
+            d_KhAdSdx_dx = m_dLongitudinalDispersion * A_i * (S_ip1 - 2*m_vPredictedCrossSectionS[i] + S_im1) / (dx*dx);
         }
         
-        m_vCrossSectionSalinityASt[i] = m_dTimestep * (adv + diff) * m_vPredictedCrossSectionArea[i];
+        // Update: Δ(A·S) = dt * [-∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)]
+        m_vCrossSectionSalinityASt[i] = m_dTimestep * (-d_QS_dx + d_KhAdSdx_dx);
     }
-    
-    m_vCrossSectionSalinityASt[0] = 0.0;
-    m_vCrossSectionSalinityASt[m_nCrossSectionsNumber-1] = 0.0;
 
-    for (int i = 0; i < m_nCrossSectionsNumber; i++)
-    {
-        if (m_vCrossSectionArea[i] > DRY_AREA) {
+    // Update salinity conserving salt mass: S_new = (A·S_old + Δ(A·S))/A_new
+    static int clamp_count = 0;
+    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+        if (m_vPredictedCrossSectionArea[i] > DRY_AREA) {
             double salt_mass = m_vPredictedCrossSectionArea[i] * m_vPredictedCrossSectionS[i];
             double delta_mass = m_vCrossSectionSalinityASt[i];
             salt_mass += delta_mass;
+            // Enforce physical bounds: salinity >= 0
             if (salt_mass < 0.0) salt_mass = 0.0;
-            m_vCorrectedCrossSectionS[i] = salt_mass / m_vCrossSectionArea[i];
-            if (m_vCorrectedCrossSectionS[i] < 0.0) m_vCorrectedCrossSectionS[i] = 0.0;
-            if (m_vCorrectedCrossSectionS[i] > m_dDownwardSalinityBoundaryValue) m_vCorrectedCrossSectionS[i] = m_dDownwardSalinityBoundaryValue;
+            m_vCorrectedCrossSectionS[i] = salt_mass / m_vCorrectedCrossSectionArea[i];
+            // Clamp to physical range [0, S_ocean]
+            if (m_vCorrectedCrossSectionS[i] < 0.0) { m_vCorrectedCrossSectionS[i] = 0.0; clamp_count++; }
+            if (m_vCorrectedCrossSectionS[i] > m_dDownwardSalinityBoundaryValue) { m_vCorrectedCrossSectionS[i] = m_dDownwardSalinityBoundaryValue; clamp_count++; }
         } else {
+            // Dry area: zero salinity
             m_vCorrectedCrossSectionS[i] = 0.0;
         }
     }
+    // Removed per-timestep clamping log in corrector
     
-    // Condiciones de frontera
+    // Boundary conditions (same logic as predictor)
+    // Upstream salinity boundary condition
     double up_sal = m_dUpwardSalinityBoundaryValue;
-    if (!m_strUpwardSalinityBoundaryConditionFilename.empty() && !m_vUpwardSalinityBoundaryConditionTime.empty() && !m_vUpwardSalinityBoundaryConditionValue.empty()) {
+    if (!m_strUpwardSalinityBoundaryConditionFilename.empty() &&
+        !m_vUpwardSalinityBoundaryConditionTime.empty() &&
+        !m_vUpwardSalinityBoundaryConditionValue.empty()) {
         double t = m_dCurrentTime;
-        auto it = std::lower_bound(m_vUpwardSalinityBoundaryConditionTime.begin(), m_vUpwardSalinityBoundaryConditionTime.end(), t);
+        auto it = std::lower_bound(m_vUpwardSalinityBoundaryConditionTime.begin(),
+                                   m_vUpwardSalinityBoundaryConditionTime.end(), t);
         if (it == m_vUpwardSalinityBoundaryConditionTime.begin()) {
             up_sal = m_vUpwardSalinityBoundaryConditionValue.front();
         } else if (it == m_vUpwardSalinityBoundaryConditionTime.end()) {
             up_sal = m_vUpwardSalinityBoundaryConditionValue.back();
         } else {
+            // Linear interpolation between time points
             size_t idx = std::distance(m_vUpwardSalinityBoundaryConditionTime.begin(), it);
             double t1 = m_vUpwardSalinityBoundaryConditionTime[idx-1];
             double t2 = m_vUpwardSalinityBoundaryConditionTime[idx];
@@ -2388,21 +2813,25 @@ void CSimulation::calculate_salinity_corrector() {
             up_sal = s1 + (s2-s1)*(t-t1)/(t2-t1);
         }
     }
+    // Apply upstream BC based on condition type
     if (nGetUpwardSalinityCondition() == 0) {
+        // Type 0: Only apply if inflow (Q > 0)
         if (m_vCrossSectionQ[0] > 0.0) {
             m_vCorrectedCrossSectionS[0] = up_sal;
         }
     }
-    else if (nGetUpwardSalinityCondition() == 1) {
+    else if (nGetUpwardSalinityCondition() == 1 || nGetUpwardSalinityCondition() == 2) {
+        // Type 1/2: Always impose prescribed value
         m_vCorrectedCrossSectionS[0] = up_sal;
     }
-    else if (nGetUpwardSalinityCondition() == 2) {
-        m_vCorrectedCrossSectionS[0] = up_sal;
-    }
+    // Downstream salinity boundary condition
     double down_sal = m_dDownwardSalinityBoundaryValue;
-    if (!m_strDownwardSalinityBoundaryConditionFilename.empty() && !m_vDownwardSalinityBoundaryConditionTime.empty() && !m_vDownwardSalinityBoundaryConditionValue.empty()) {
+    if (!m_strDownwardSalinityBoundaryConditionFilename.empty() &&
+        !m_vDownwardSalinityBoundaryConditionTime.empty() &&
+        !m_vDownwardSalinityBoundaryConditionValue.empty()) {
         double t = m_dCurrentTime;
-        auto it = std::lower_bound(m_vDownwardSalinityBoundaryConditionTime.begin(), m_vDownwardSalinityBoundaryConditionTime.end(), t);
+        auto it = std::lower_bound(m_vDownwardSalinityBoundaryConditionTime.begin(),
+                                   m_vDownwardSalinityBoundaryConditionTime.end(), t);
         if (it == m_vDownwardSalinityBoundaryConditionTime.begin()) {
             down_sal = m_vDownwardSalinityBoundaryConditionValue.front();
         } else if (it == m_vDownwardSalinityBoundaryConditionTime.end()) {
@@ -2416,11 +2845,22 @@ void CSimulation::calculate_salinity_corrector() {
             down_sal = s1 + (s2-s1)*(t-t1)/(t2-t1);
         }
     }
+    // Apply downstream BC based on condition type AND flow direction
+    const int last = m_nCrossSectionsNumber - 1;
+    const double Q_downstream = m_vCorrectedCrossSectionQ[last];  // Use corrector flow
     if (nGetDownwardSalinityCondition() == 1) {
-        m_vCorrectedCrossSectionS[m_nCrossSectionsNumber-1] = up_sal;
+        // Type 1: Use upstream value (unusual but allowed)
+        m_vCorrectedCrossSectionS[last] = up_sal;
     }
     else if (nGetDownwardSalinityCondition() == 2) {
-        m_vCorrectedCrossSectionS[m_nCrossSectionsNumber-1] = down_sal;
+        // Type 2: Radiation BC - depends on flow direction
+        if (Q_downstream < 0.0) {
+            // FLOOD TIDE: Inflow from ocean → impose ocean salinity
+            m_vCorrectedCrossSectionS[last] = down_sal;
+        } else {
+            // EBB TIDE: Outflow to ocean → zero-gradient (radiation)
+            m_vCorrectedCrossSectionS[last] = m_vCorrectedCrossSectionS[last-1];
+        }
     }
 }
 
@@ -2907,10 +3347,24 @@ void CSimulation::mergePredictorCorrector() {
  * @note Boundaries already set in calculate_salinity/temperature_corrector
  */
 void CSimulation::mergeTracerPredictorCorrector() {
-    // Salinity averaging
+    // Salinity averaging - conserve mass by averaging A*S from predictor/corrector
+    // and dividing by the final merged area (already computed in mergePredictorCorrector)
     if (bGetDoWaterSalinity() && m_vPredictedCrossSectionS.size() == static_cast<size_t>(m_nCrossSectionsNumber) && m_vCorrectedCrossSectionS.size() == static_cast<size_t>(m_nCrossSectionsNumber)) {
         for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
-            m_vCrossSectionSalinity[i] = 0.5 * (m_vPredictedCrossSectionS[i] + m_vCorrectedCrossSectionS[i]);
+            // Average mass (A*S) from predictor and corrector
+            double AS_pred = m_vPredictedCrossSectionArea[i] * m_vPredictedCrossSectionS[i];
+            double AS_corr = m_vCorrectedCrossSectionArea[i] * m_vCorrectedCrossSectionS[i];
+            double AS_avg = 0.5 * (AS_pred + AS_corr);
+            
+            // Use the final merged area (computed in mergePredictorCorrector)
+            double A_final = m_vCrossSectionArea[i];
+            
+            if (A_final > 1e-10) {  // Avoid division by zero
+                m_vCrossSectionSalinity[i] = AS_avg / A_final;
+            } else {
+                // If area is essentially zero, set salinity to zero (dry cell)
+                m_vCrossSectionSalinity[i] = 0.0;
+            }
         }
     }
     // Temperature averaging
@@ -3274,154 +3728,15 @@ void CSimulation::AnnounceProgress() {
 void CSimulation::checkAnomalousValues() {
     if (!LogStream.is_open()) return;
     
-    // 0. Check for abrupt temporal changes in Q and A (indicates numerical instability)
-    // Store previous timestep values (static to persist between calls)
-    static std::vector<double> Q_prev;
-    static std::vector<double> A_prev;
-    static std::vector<bool> was_unstable_Q;  // Track which nodes were unstable
-    static std::vector<bool> was_unstable_A;  // Track which nodes had abrupt area changes
-    static bool first_call = true;
+
     
-    if (first_call) {
-        Q_prev.resize(m_nCrossSectionsNumber);
-        A_prev.resize(m_nCrossSectionsNumber);
-        was_unstable_Q.resize(m_nCrossSectionsNumber, false);
-        was_unstable_A.resize(m_nCrossSectionsNumber, false);
-        first_call = false;
-    }
+
     
-    if (m_dCurrentTime > 3600.0) {  // Skip first hour (initialization)
-        for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
-            if (m_vCrossSectionArea[i] > DRY_AREA && A_prev[i] > DRY_AREA) {
-                // Check for excessive relative change (>50% in one timestep)
-                double dQ = fabs(m_vCrossSectionQ[i] - Q_prev[i]);
-                double dA = fabs(m_vCrossSectionArea[i] - A_prev[i]);
-                double rel_change_Q = dQ / std::max(fabs(Q_prev[i]), 1e-6);
-                double rel_change_A = dA / std::max(A_prev[i], 1e-6);
-                
-                // Check Q instability
-                bool is_unstable_Q = (rel_change_Q > 0.5 && fabs(m_vCrossSectionQ[i]) > 100.0);
-                if (is_unstable_Q && !was_unstable_Q[i]) {
-                    // TRANSITION: Entering unstable state
-                    LogStream << "💥 INSTABILITY START [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime 
-                              << "s]: Abrupt Q change at x=" << std::setprecision(0) << m_vPositionX[i] 
-                              << "m (" << std::setprecision(0) << Q_prev[i] << " → " 
-                              << m_vCrossSectionQ[i] << " m³/s, Δ=" << std::setprecision(1) 
-                              << rel_change_Q*100 << "%)\n";
-                    m_nWarningCount++;
-                    was_unstable_Q[i] = true;
-                }
-                else if (!is_unstable_Q && was_unstable_Q[i]) {
-                    // TRANSITION: Leaving unstable state (recovery)
-                    LogStream << "✅ STABILITY RECOVERED [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime 
-                              << "s]: Q at x=" << std::setprecision(0) << m_vPositionX[i] 
-                              << "m stabilized (Q=" << std::setprecision(0) << m_vCrossSectionQ[i] << " m³/s)\n";
-                    was_unstable_Q[i] = false;
-                }
-                
-                // Check A instability
-                bool is_unstable_A = (rel_change_A > 0.3 && m_vCrossSectionArea[i] > 10.0);
-                if (is_unstable_A && !was_unstable_A[i]) {
-                    // TRANSITION: Entering unstable state
-                    LogStream << "💥 INSTABILITY START [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime 
-                              << "s]: Abrupt A change at x=" << std::setprecision(0) << m_vPositionX[i] 
-                              << "m (" << std::setprecision(1) << A_prev[i] << " → " 
-                              << m_vCrossSectionArea[i] << " m², Δ=" << std::setprecision(1) 
-                              << rel_change_A*100 << "%)\n";
-                    m_nWarningCount++;
-                    was_unstable_A[i] = true;
-                }
-                else if (!is_unstable_A && was_unstable_A[i]) {
-                    // TRANSITION: Leaving unstable state (recovery)
-                    LogStream << "✅ STABILITY RECOVERED [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime 
-                              << "s]: A at x=" << std::setprecision(0) << m_vPositionX[i] 
-                              << "m stabilized (A=" << std::setprecision(1) << m_vCrossSectionArea[i] << " m²)\n";
-                    was_unstable_A[i] = false;
-                }
-            }
-        }
-    }
+
     
-    // Update previous values for next timestep
-    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-        Q_prev[i] = m_vCrossSectionQ[i];
-        A_prev[i] = m_vCrossSectionArea[i];
-    }
+
     
-    // 1. Check CFL number
-    double max_cfl = 0.0;
-    int max_cfl_location = 0;
-    for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
-        if (m_vCrossSectionArea[i] > DRY_AREA && m_vCrossSectionDX[i] > 0) {
-            double u = m_vCrossSectionU[i];
-            double c = m_vCrossSectionC[i];
-            double cfl = m_dTimestep * (fabs(u) + c) / m_vCrossSectionDX[i];
-            if (cfl > max_cfl) {
-                max_cfl = cfl;
-                max_cfl_location = i;
-            }
-        }
-    }
-    
-    if (max_cfl > 1.0) {
-        LogStream << "⚠️  WARNING [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime 
-                  << "s]: CFL = " << std::setprecision(3) << max_cfl 
-                  << " > 1.0 at x = " << std::setprecision(0) << m_vPositionX[max_cfl_location]
-                  << " m (potential instability)\n";
-        m_nWarningCount++;
-    }
-    
-    // 2. Check for excessive velocities
-    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-        if (m_vCrossSectionArea[i] > DRY_AREA) {
-            double u = fabs(m_vCrossSectionU[i]);
-            if (u > 5.0) {
-                LogStream << "⚠️  WARNING [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime 
-                          << "s]: Excessive velocity U = " << std::setprecision(2) << u 
-                          << " m/s at x = " << std::setprecision(0) << m_vPositionX[i] << " m\n";
-                m_nWarningCount++;
-                break;  // Only report first occurrence per timestep
-            }
-        }
-    }
-    
-    // 3. Check Froude number (supercritical flow)
-    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-        if (m_vCrossSectionArea[i] > DRY_AREA) {
-            double u = fabs(m_vCrossSectionU[i]);
-            double c = m_vCrossSectionC[i];
-            double Fr = u / c;
-            if (Fr > 1.0) {
-                LogStream << "⚠️  WARNING [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime 
-                          << "s]: Supercritical flow Fr = " << std::setprecision(2) << Fr 
-                          << " at x = " << std::setprecision(0) << m_vPositionX[i] << " m\n";
-                m_nWarningCount++;
-                break;
-            }
-        }
-    }
-    
-    // 3b. Check for spatial oscillations in discharge (wiggle instability)
-    // Pattern: Q[i-1] and Q[i+1] have same sign but Q[i] has opposite sign
-    for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
-        if (m_vCrossSectionArea[i] > DRY_AREA) {
-            double Q_prev = m_vCrossSectionQ[i-1];
-            double Q_curr = m_vCrossSectionQ[i];
-            double Q_next = m_vCrossSectionQ[i+1];
-            
-            // Detect oscillation: Q[i] has opposite sign from neighbors
-            if ((Q_prev * Q_curr < 0) && (Q_next * Q_curr < 0) && 
-                (Q_prev * Q_next > 0) && (fabs(Q_curr) > 1000.0)) {
-                LogStream << "🌊 INSTABILITY [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime 
-                          << "s]: Spatial oscillation in Q at x=" << std::setprecision(0) << m_vPositionX[i] 
-                          << "m (Q[i-1]=" << std::setprecision(0) << Q_prev 
-                          << ", Q[i]=" << Q_curr 
-                          << ", Q[i+1]=" << Q_next << ")\n";
-                m_nWarningCount++;
-                break;
-            }
-        }
-    }
+
     
     // 4. Check temperature (if active) - SPECIAL ATTENTION TO RESERVOIR
     if (m_bDoWaterTemperature) {
@@ -3497,40 +3812,31 @@ void CSimulation::checkAnomalousValues() {
 void CSimulation::writePeriodicStatistics() {
     if (!LogStream.is_open()) return;
     
-    // Write statistics every simulated hour (3600 seconds)
-    const double log_interval = 3600.0;
-    if (m_dCurrentTime - m_dLastLogTime < log_interval) return;
-    
-    m_dLastLogTime = m_dCurrentTime;
-    
+    // Write periodic simulation diagnostics/statistics only at output (save) timesteps
+    // Only log if current time matches output save time (within half a timestep tolerance)
+    if (fmod(m_dCurrentTime, m_dSimTimestep) > 0.5 * m_dTimestep &&
+        fabs(m_dCurrentTime - m_dSimTimestep) > 1e-6) return;
+
     // Calculate statistics
     double Q_min = 1e10, Q_max = -1e10;
     double U_max = 0.0;
     double eta_min = 1e10, eta_max = -1e10;
     double CFL_max = 0.0;
-    
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
         if (m_vCrossSectionArea[i] > DRY_AREA) {
-            // Discharge statistics
             if (m_vCrossSectionQ[i] < Q_min) Q_min = m_vCrossSectionQ[i];
             if (m_vCrossSectionQ[i] > Q_max) Q_max = m_vCrossSectionQ[i];
-            
-            // Velocity statistics
             double u_abs = fabs(m_vCrossSectionU[i]);
             if (u_abs > U_max) U_max = u_abs;
-            
-            // Water elevation statistics
             if (m_vCrossSectionWaterElevation[i] < eta_min) eta_min = m_vCrossSectionWaterElevation[i];
             if (m_vCrossSectionWaterElevation[i] > eta_max) eta_max = m_vCrossSectionWaterElevation[i];
-            
-            // CFL number
             if (i > 0 && i < m_nCrossSectionsNumber-1 && m_vCrossSectionDX[i] > 0) {
                 double cfl = m_dTimestep * (u_abs + m_vCrossSectionC[i]) / m_vCrossSectionDX[i];
                 if (cfl > CFL_max) CFL_max = cfl;
             }
         }
     }
-    
+
     // Calculate current date/time
     static time_t t_start = 0;
     if (t_start == 0) {
@@ -3546,11 +3852,24 @@ void CSimulation::writePeriodicStatistics() {
     }
     time_t t_current = t_start + static_cast<time_t>(m_dCurrentTime);
     std::tm* tm_current = std::localtime(&t_current);
-    
     char datetime_buf[32];
     std::strftime(datetime_buf, sizeof(datetime_buf), "%Y-%m-%d %H:%M:%S", tm_current);
-    
-    // Write basic statistics
+
+    // Write periodic statistics header
+    LogStream << std::string(120, '=') << "\n";
+    LogStream << "SIMULATION DIAGNOSTICS - PERIODIC STATISTICS\n";
+    LogStream << "t=" << m_dCurrentTime/3600.0 << "h: ";
+
+    // Salt mass (if salinity active)
+    if (m_bDoWaterSalinity) {
+        double salt_mass = 0.0;
+        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+            if (m_vCrossSectionArea[i] > DRY_AREA)
+                salt_mass += m_vCrossSectionArea[i] * m_vCrossSectionSalinity[i];
+        }
+        LogStream << "Salt mass = " << salt_mass << " kg\n";
+    }
+
     LogStream << std::setw(20) << datetime_buf
               << std::fixed << std::setprecision(1)
               << std::setw(10) << m_dCurrentTime
@@ -3566,7 +3885,7 @@ void CSimulation::writePeriodicStatistics() {
               << std::setprecision(2)
               << std::setw(10) << eta_min
               << std::setw(10) << eta_max;
-    
+
     // Temperature statistics (if active)
     if (m_bDoWaterTemperature) {
         double T_min = 1e10, T_max = -1e10;
@@ -3574,20 +3893,16 @@ void CSimulation::writePeriodicStatistics() {
             if (m_vCrossSectionTemperature[i] < T_min) T_min = m_vCrossSectionTemperature[i];
             if (m_vCrossSectionTemperature[i] > T_max) T_max = m_vCrossSectionTemperature[i];
         }
-        
-        // Get reservoir temperature if using 0D model
         double T_res = 0.0;
         if (m_nUpwardTemperatureCondition == 3 && !m_vUpwardTemperatureBoundaryConditionValue.empty()) {
-            // Interpolate reservoir temperature at current simulation time
             T_res = linearInterpolation1d(m_dCurrentTime, m_vHeatFluxTime, m_vUpwardTemperatureBoundaryConditionValue);
         }
-        
         LogStream << std::setprecision(2)
                   << std::setw(10) << T_min
                   << std::setw(10) << T_max
                   << std::setw(10) << T_res;
     }
-    
+
     // Salinity statistics (if active)
     if (m_bDoWaterSalinity) {
         double S_min = 1e10, S_max = -1e10;
@@ -3595,13 +3910,98 @@ void CSimulation::writePeriodicStatistics() {
             if (m_vCrossSectionSalinity[i] < S_min) S_min = m_vCrossSectionSalinity[i];
             if (m_vCrossSectionSalinity[i] > S_max) S_max = m_vCrossSectionSalinity[i];
         }
-        
         LogStream << std::setprecision(2)
                   << std::setw(10) << S_min
                   << std::setw(10) << S_max;
     }
-    
+
     LogStream << "\n";
+
+    // Advanced salinity diagnostics (every hour)
+    if (m_bDoWaterSalinity) {
+        // Find salt wedge intrusion limit (isohaline 1 ppt)
+        // Search from upstream (dam) to downstream (ocean) to find furthest upstream intrusion
+        int intrusion_idx = -1;
+        double intrusion_distance = 0.0;
+        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+            if (m_vCrossSectionSalinity[i] >= 1.0) {
+                // First occurrence from upstream = furthest intrusion
+                intrusion_idx = i;
+                intrusion_distance = m_vCrossSectionX[i];
+                break;
+            }
+        }
+        // Calculate maximum salinity gradient (halocline strength)
+        double max_grad = 0.0;
+        int max_grad_idx = 0;
+        for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
+            double grad = fabs(m_vCrossSectionSalinity[i+1] - m_vCrossSectionSalinity[i-1]) /
+                         (m_vCrossSectionX[i+1] - m_vCrossSectionX[i-1]);
+            if (grad > max_grad) {
+                max_grad = grad;
+                max_grad_idx = i;
+            }
+        }
+        // Estimate advective vs diffusive transport
+        double advective_flux = 0.0;
+        double diffusive_flux = 0.0;
+        int n_active = 0;
+        for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
+            if (m_vCrossSectionArea[i] > DRY_AREA) {
+                advective_flux += fabs(m_vCrossSectionU[i] * m_vCrossSectionSalinity[i] * m_vCrossSectionArea[i]);
+                if (m_dLongitudinalDispersion > 0.0) {
+                    double dS_dx = (m_vCrossSectionSalinity[i+1] - m_vCrossSectionSalinity[i-1]) /
+                                   (m_vCrossSectionX[i+1] - m_vCrossSectionX[i-1]);
+                    diffusive_flux += fabs(m_dLongitudinalDispersion * dS_dx * m_vCrossSectionArea[i]);
+                }
+                n_active++;
+            }
+        }
+        if (n_active > 0) {
+            advective_flux /= n_active;
+            diffusive_flux /= n_active;
+        }
+        // Estimate numerical diffusion (Pe = u*dx/K)
+        double Pe_min = 1e10;
+        double numerical_diffusion = 0.0;
+        for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
+            if (m_vCrossSectionArea[i] > DRY_AREA && m_vCrossSectionU[i] > 0.1) {
+                double dx = m_vCrossSectionDX[i];
+                double u = fabs(m_vCrossSectionU[i]);
+                double Pe = (m_dLongitudinalDispersion > 0.0) ?
+                           (u * dx / m_dLongitudinalDispersion) : 1e10;
+                if (Pe < Pe_min) Pe_min = Pe;
+                numerical_diffusion = std::max(numerical_diffusion, u * dx * 0.5);
+            }
+        }
+        LogStream << "🌊 SALINITY [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime/3600.0 << "h]:\n";
+        if (intrusion_idx >= 0) {
+            LogStream << "  • Salt wedge intrusion: " << std::setprecision(1) << intrusion_distance/1000.0
+                      << " km (S≥1ppt at section " << intrusion_idx << ")\n";
+        } else {
+            LogStream << "  • Salt wedge: Not detected (S<1ppt throughout domain)\n";
+        }
+        LogStream << "  • Halocline: max gradient = " << std::setprecision(4) << max_grad*1000.0
+                  << " ppt/km at x=" << std::setprecision(1) << m_vCrossSectionX[max_grad_idx]/1000.0 << " km\n";
+        LogStream << "  • Transport: Advection=" << std::setprecision(1) << advective_flux
+                  << " kg/s, Diffusion=" << diffusive_flux << " kg/s";
+        if (advective_flux > 0) {
+            LogStream << " (Ratio=" << std::setprecision(2) << diffusive_flux/advective_flux << ")";
+        }
+        LogStream << "\n";
+        LogStream << "  • Dispersion coefficient: K_physical=" << std::setprecision(1) << m_dLongitudinalDispersion
+                  << " m²/s, K_numerical≈" << numerical_diffusion << " m²/s";
+        if (numerical_diffusion > m_dLongitudinalDispersion * 0.1) {
+            LogStream << " ⚠️ HIGH";
+        }
+        LogStream << "\n";
+        if (Pe_min < 2.0) {
+            LogStream << "  ⚠️ WARNING: Low Péclet number (Pe=" << std::setprecision(1) << Pe_min
+                      << ") - Diffusion dominates over advection!\n";
+        }
+        LogStream << "\n";
+    }
+    LogStream.flush();
     
     // Detailed salinity diagnostics every 6 hours (if log level >= 2)
     if (m_bDoWaterSalinity && m_nLogFileDetail >= 2) {
@@ -3671,38 +4071,7 @@ void CSimulation::writePeriodicStatistics() {
                 }
             }
             
-            LogStream << "🌊 SALINITY [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime/3600.0 << "h]:\n";
-            
-            if (intrusion_idx >= 0) {
-                LogStream << "  • Salt wedge intrusion: " << std::setprecision(1) << intrusion_distance/1000.0 
-                          << " km (S≥1ppt at section " << intrusion_idx << ")\n";
-            } else {
-                LogStream << "  • Salt wedge: Not detected (S<1ppt throughout domain)\n";
-            }
-            
-            LogStream << "  • Halocline: max gradient = " << std::setprecision(4) << max_grad*1000.0 
-                      << " ppt/km at x=" << std::setprecision(1) << m_vCrossSectionX[max_grad_idx]/1000.0 << " km\n";
-            
-            LogStream << "  • Transport: Advection=" << std::setprecision(1) << advective_flux 
-                      << " kg/s, Diffusion=" << diffusive_flux << " kg/s";
-            if (advective_flux > 0) {
-                LogStream << " (Ratio=" << std::setprecision(2) << diffusive_flux/advective_flux << ")";
-            }
-            LogStream << "\n";
-            
-            LogStream << "  • Dispersion coefficient: K_physical=" << std::setprecision(1) << m_dLongitudinalDispersion 
-                      << " m²/s, K_numerical≈" << numerical_diffusion << " m²/s";
-            if (numerical_diffusion > m_dLongitudinalDispersion * 0.1) {
-                LogStream << " ⚠️ HIGH";
-            }
-            LogStream << "\n";
-            
-            if (Pe_min < 2.0) {
-                LogStream << "  ⚠️ WARNING: Low Péclet number (Pe=" << std::setprecision(1) << Pe_min 
-                          << ") - Diffusion dominates over advection!\n";
-            }
-            
-            LogStream << "\n";
+            // ...removed per-timestep detailed salinity log for new summary/statistics logging...
         }
     }
     
