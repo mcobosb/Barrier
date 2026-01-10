@@ -1671,6 +1671,14 @@ void CSimulation::calculateBoundaryConditions() {
                                                           m_vEstuaryWaterDepths[1],
                                                           m_vEstuaryAreas[1]);
     }
+    
+    // Upstream boundary (condition type 3 = discharge prescribed from time series)
+    if (nGetUpwardEstuarineCondition() == 3 && !m_vUpwardBoundaryConditionTime.empty()) {
+        // Interpolate discharge from time series at current time
+        m_dUpwardBoundaryValue = linearInterpolation1d(m_dCurrentTime, 
+                                                       m_vUpwardBoundaryConditionTime, 
+                                                       m_vUpwardBoundaryConditionValue);
+    }
 
     // Downstream boundary (condition type 2 = water surface elevation prescribed)
     if (nGetDownwardEstuarineCondition() == 2) {

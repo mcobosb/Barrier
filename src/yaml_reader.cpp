@@ -345,8 +345,10 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
                     m_pSimulation->nSetUpwardEstuarineCondition(type);
                 } catch (...) {
                     std::string type = upstream["type"].as<std::string>();
-                    if (type == "reflective") m_pSimulation->nSetUpwardEstuarineCondition(1);
-                    else if (type == "free") m_pSimulation->nSetUpwardEstuarineCondition(0);
+                    if (type == "free") m_pSimulation->nSetUpwardEstuarineCondition(0);
+                    else if (type == "reflective") m_pSimulation->nSetUpwardEstuarineCondition(1);
+                    else if (type == "elevation") m_pSimulation->nSetUpwardEstuarineCondition(2);
+                    else if (type == "discharge") m_pSimulation->nSetUpwardEstuarineCondition(3);
                 }
             }
         }
@@ -374,9 +376,9 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
                     m_pSimulation->nSetDownwardEstuarineCondition(type);
                 } catch (...) {
                     std::string type = downstream["type"].as<std::string>();
-                    if (type == "elevation") m_pSimulation->nSetDownwardEstuarineCondition(2);
+                    if (type == "free") m_pSimulation->nSetDownwardEstuarineCondition(0);
                     else if (type == "reflective") m_pSimulation->nSetDownwardEstuarineCondition(1);
-                    else if (type == "free") m_pSimulation->nSetDownwardEstuarineCondition(0);
+                    else if (type == "elevation") m_pSimulation->nSetDownwardEstuarineCondition(2);
                 }
             }
         }
