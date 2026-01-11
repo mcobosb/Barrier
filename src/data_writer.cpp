@@ -336,11 +336,21 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     const char* time_units = "seconds since simulation start";
     nc_put_att_text(m_ncId, NC_GLOBAL, "time_units", strlen(time_units), time_units);
     
-    //! YAML configuration (for full reproducibility)
+    //! YAML configuration as separate dimension + variable (preserves formatting better)
     if (!m_pSimulation->m_strYAMLConfigContent.empty()) {
-        nc_put_att_text(m_ncId, NC_GLOBAL, "yaml_configuration", 
-                       m_pSimulation->m_strYAMLConfigContent.length(), 
-                       m_pSimulation->m_strYAMLConfigContent.c_str());
+        // Create dimension for config string length
+        int config_len_dim;
+        size_t config_length = m_pSimulation->m_strYAMLConfigContent.length();
+        nc_def_dim(m_ncId, "config_length", config_length, &config_len_dim);
+        
+        // Create char variable to store config
+        int config_var;
+        nc_def_var(m_ncId, "yaml_configuration", NC_CHAR, 1, &config_len_dim, &config_var);
+        nc_put_att_text(m_ncId, config_var, "long_name", 
+                       strlen("YAML configuration file content"), 
+                       "YAML configuration file content");
+        
+        // Store config in variable (done after nc_enddef below)
     }
 
     //! End the definition of NetCDF file
@@ -355,6 +365,14 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     //! Only write all times if NOT using unlimited mode (detail != 2 and not saveAllTimesteps)
     if (m_pSimulation->m_nLogFileDetail != 2 && !m_pSimulation->bGetSaveAllTimesteps()) {
         nc_put_var_double(m_ncId, n_TId, m_pSimulation->m_vOutputTimes.data());
+    }
+    
+    //! Write YAML configuration content (after enddef)
+    if (!m_pSimulation->m_strYAMLConfigContent.empty()) {
+        int config_var;
+        if (nc_inq_varid(m_ncId, "yaml_configuration", &config_var) == NC_NOERR) {
+            nc_put_var_text(m_ncId, config_var, m_pSimulation->m_strYAMLConfigContent.c_str());
+        }
     }
 }
 
