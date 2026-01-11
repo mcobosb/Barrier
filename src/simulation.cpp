@@ -364,7 +364,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         LogStream.flush();
     }
     
-    std::cout << "      - Reading input data files..." << std::endl;
+    std::cout << "      - Reading input data files" << std::endl;
     reader.bReadAlongChannelDataFile(this);
     reader.bReadCrossSectionGeometryFile(this);
     std::cout << "      - Along-channel data and cross-section geometry loaded successfully" << std::endl;
