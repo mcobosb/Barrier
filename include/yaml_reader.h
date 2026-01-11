@@ -63,9 +63,6 @@ public:
     std::string m_strSedimentPropertiesFilename;
     std::string m_strHydrographsFilename;
     std::string m_strSalinityFilename;
-
-    //! manning_db value read from YAML
-    int m_nThresholddBdeta = 0;
 };
 
 #endif // YAML_READER_H
