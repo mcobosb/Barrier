@@ -90,6 +90,10 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["Rh"]["longname"] = "hydraulic radius";
     m_mVariableDefinitions["Rh"]["units"] = "m";
 
+    m_mVariableDefinitions["n"]["description"] = "Manning roughness coefficient";
+    m_mVariableDefinitions["n"]["longname"] = "manning coefficient";
+    m_mVariableDefinitions["n"]["units"] = "s/m^(1/3)";
+
     m_mVariableDefinitions["level"]["description"] = "Water depth";
     m_mVariableDefinitions["level"]["longname"] = "water depth";
     m_mVariableDefinitions["level"]["units"] = "m";

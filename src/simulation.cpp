@@ -561,9 +561,11 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         calculateFlowTerms();
         calculateSourceTerms();
 
+        // Apply predictor boundary conditions BEFORE calculating predictor
+        updatePredictorBoundaries();
+        
         // Advance hydrodynamics to predictor state (eta*, Q*)
         calculatePredictor();
-        updatePredictorBoundaries();
         if (bGetDoDryBed()) dryArea();
 
         // Advance transport scalars to predictor state (S*, T*)
@@ -591,9 +593,11 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         calculateFlowTerms();
         calculateSourceTerms();
 
+        // Apply corrector boundary conditions BEFORE calculating corrector
+        updateCorrectorBoundaries();
+        
         // Advance hydrodynamics to corrector state (eta**, Q**)
         calculateCorrector();
-        updateCorrectorBoundaries();
         if (bGetDoDryBed()) dryArea();
 
         // Advance transport scalars to corrector state (S**, T**)
@@ -2059,7 +2063,7 @@ void CSimulation::calculateSourceTerms() {
     }
 
     // 3. Assemble total source terms
-    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+    for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
         // Grid spacing (use appropriate Δx for each node)
         const double inv_dx = (i < m_nCrossSectionsNumber - 1) ? m_vInvDX[i] : m_vInvDX[i-1];
         
@@ -3590,6 +3594,9 @@ vector<double> CSimulation::vGetVariable(const string& strVariableName) const {
     }
     else if (strVariableName == "Rh") {
         return m_vCrossSectionHydraulicRadius;
+    }
+    else if (strVariableName == "n") {
+        return m_vCrossSectionManningNumber;
     }
     else if (strVariableName == "B") {
         return m_vCrossSectionWidth;
