@@ -111,7 +111,6 @@ CSimulation::CSimulation() {
 
     // Tide and geometry parameters
     m_dMaxAstronomicalTide = 0.0;
-    m_vEtaWidthGradientThreshold.clear();
 
     // Simulation start date/time (default: 2024-01-01 00:00:00)
     m_nSimStartYear = 2024;
@@ -220,8 +219,6 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     reader.m_strSedimentPropertiesFilename = yamlReader.m_strSedimentPropertiesFilename;
     reader.m_strHydroFilename = yamlReader.m_strHydrographsFilename;
 
-    // Transferir el threshold de gradiente desde yamlReader
-    m_nThresholddBdeta = yamlReader.m_nThresholddBdeta;
     
     // Read geometry and forcing files
     CDataReader::bOpenLogFile(this);
@@ -489,11 +486,6 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     // Calculate UTM coordinates for river banks (always performed)
     calculateRiverBankUTMCoordinates();
-
-    // Calculate eta threshold for width gradient in each cross-section
-    for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
-        estuary[i].calculateEtaMaxWidthGradient(m_dMaxAstronomicalTide, m_nThresholddBdeta, m_vEtaWidthGradientThreshold[i]);
-    }
 
     // Generate output filename and create NetCDF file
     std::string m_strOutFileName = generateOutputFileName();
@@ -821,8 +813,6 @@ void CSimulation::initializeVectors() {
     // Density and baroclinic terms
     m_vCrossSectionDRhoDx =
     m_vPredictedCrossSectionDensity = vZeros;
-
-    m_vEtaWidthGradientThreshold.resize(nCrossSectionsNumber, 0.0);
 
     // Initialize density with fresh water value
     const vector<double> vRhos(static_cast<size_t>(nCrossSectionsNumber), FRESH_WATER_DENSITY);
@@ -1907,7 +1897,7 @@ void CSimulation::calculate_GS_A_terms() {
             // Water-level-dependent Manning coefficient correction (if enabled)
             double neta = 1.0;
             if (m_bManningDependsOnLevel) {
-                neta = pow(n_eta(m_vPredictedCrossSectionWaterDepth[i], m_dMaxAstronomicalTide, m_vEtaWidthGradientThreshold[i]), 2.0);
+                neta = pow(n_eta(m_vPredictedCrossSectionWaterDepth[i], m_dMaxAstronomicalTide), 2.0);
             }
             
             // Friction slope: Sf = (n²*η*|Q|*Q) / (A²*R^(4/3))
@@ -1936,7 +1926,7 @@ void CSimulation::calculate_GS_A_terms() {
             if (m_nPredictor == 1) {
                 double neta = 1.0;
                 if (m_bManningDependsOnLevel) {
-                    neta = pow(n_eta(m_vPredictedCrossSectionWaterDepth[i], m_dMaxAstronomicalTide, m_vEtaWidthGradientThreshold[i]), 2.0);
+                    neta = pow(n_eta(m_vPredictedCrossSectionWaterDepth[i], m_dMaxAstronomicalTide), 2.0);
                 }
                 if (m_vCrossSectionArea[i] > DRY_AREA && m_vCrossSectionHydraulicRadius[i] > 1e-6) {
                     // ⚡ OPTIMIZATION: Precalculate repeated terms
@@ -1956,7 +1946,7 @@ void CSimulation::calculate_GS_A_terms() {
             else {
                 double neta = 1.0;
                 if (m_bManningDependsOnLevel) {
-                    neta = pow(n_eta(m_vPredictedCrossSectionWaterDepth[i], m_dMaxAstronomicalTide, m_vEtaWidthGradientThreshold[i]), 2.0);
+                    neta = pow(n_eta(m_vPredictedCrossSectionWaterDepth[i], m_dMaxAstronomicalTide), 2.0);
                 }
                 if (m_vPredictedCrossSectionArea[i] > DRY_AREA && m_vCrossSectionHydraulicRadius[i] > 1e-6) {
                     // ⚡ OPTIMIZATION: Precalculate repeated terms

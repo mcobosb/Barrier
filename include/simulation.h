@@ -486,10 +486,6 @@ public:
     //! Maximum astronomical tide level calculated
     double m_dMaxAstronomicalTide{0.0};
 
-    int m_nThresholddBdeta{0};
-    //! Vector of eta where the gradient threshold of B(eta) per section is exceeded
-    vector<double> m_vEtaWidthGradientThreshold;
-
     //! Solution smoothing parameters
     int m_nSolutionSmoothingPasses{1};
     double m_dSolutionSmoothingAlpha{0.25};
@@ -966,11 +962,10 @@ public:
 
     //! Calculate adaptive Manning's n coefficient based on water level
     //! Returns n(η) varying linearly between 1.0 (submerged) and 2.0 (emergent)
-    static inline double n_eta(double eta, double maxTide, double etaMaxGrad) {
-        if (eta <= maxTide) return 1.0;
-        if (eta >= etaMaxGrad) return 2.0;
-        if (etaMaxGrad - maxTide < 1e-8) return 2.0;
-        return 1.0 + (eta - maxTide) / (etaMaxGrad - maxTide);
+    static inline double n_eta(double eta, double maxTide) {
+        if (eta <= 0) return 1.0;
+        if (eta >= maxTide) return 2.0;
+        return 1.0 + eta / maxTide;
     }
     
     static double getMaxAstronomicalTide(const std::string& tidesFile);

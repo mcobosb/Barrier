@@ -455,7 +455,7 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
             if (transport_limiter == 0) {
                 std::cout << "      - Transport limiter: NONE (1st-order upwind)" << std::endl;
             } else {
-                std::cout << "      - Transport limiter (independent): " << method << std::endl;
+                std::cout << "      - Transport limiter: " << method << std::endl;
             }
         } else {
             // Use same limiter for transport as for hydrodynamics
@@ -504,16 +504,6 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
     // Manning dependence on water level
     if (node["manning_eta"]) {
         m_pSimulation->bSetManningDependsOnLevel(node["manning_eta"].as<bool>());
-    }
-
-    // Read manning_db as positive integer
-    if (node["manning_db"]) {
-        int val = node["manning_db"].as<int>();
-        if (val > 0) {
-            m_nThresholddBdeta = val;
-        } else {
-            std::cerr << "El valor de manning_db debe ser un entero positivo. Se ignora." << std::endl;
-        }
     }
 }
 
