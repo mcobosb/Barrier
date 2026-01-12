@@ -47,6 +47,7 @@ others/
 # Testing
 tests/
 test/
+calibration/
 
 # Documentation
 docs/
