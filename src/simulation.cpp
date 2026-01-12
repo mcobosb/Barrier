@@ -2676,7 +2676,7 @@ void CSimulation::updateCorrectorBoundaries() {
  */
 //======================================================================================================================
 void CSimulation::compute_tracer_tvd_flux(const vector<double>& tracer, const vector<double>& discharge,
-                                            const vector<double>& area, vector<double>& flux_limited) {
+                                            vector<double>& flux_limited) {
     const int n = m_nCrossSectionsNumber;
     const int limiter_type = nGetTransportLimiterFlux();  // Get limiter for transport
     
@@ -2828,8 +2828,7 @@ void CSimulation::calculate_salinity_predictor() {
     // Compute TVD-limited advective fluxes at cell faces
     // Use predicted discharge from hydrodynamic predictor step
     vector<double> tvd_flux(m_nCrossSectionsNumber+1, 0.0);
-    compute_tracer_tvd_flux(tracer_bc, m_vPredictedCrossSectionQ,
-                            m_vCrossSectionArea, tvd_flux);
+    compute_tracer_tvd_flux(tracer_bc, m_vPredictedCrossSectionQ, tvd_flux);
 
     // Boundary advective fluxes: compute_tracer_tvd_flux() sets them to zero by design.
     // For open boundaries this is wrong: we must supply the boundary flux using the BC value
@@ -2985,7 +2984,7 @@ void CSimulation::calculate_salinity_corrector() {
     // Compute TVD-limited advective fluxes at cell faces (using predicted state)
     // Use corrected discharge from hydrodynamic corrector step
     vector<double> tvd_flux(m_nCrossSectionsNumber+1, 0.0);
-    compute_tracer_tvd_flux(tracer_bc, m_vCorrectedCrossSectionQ, m_vPredictedCrossSectionArea, tvd_flux);
+    compute_tracer_tvd_flux(tracer_bc, m_vCorrectedCrossSectionQ, tvd_flux);
 
     // Boundary advective fluxes
     {
@@ -4259,8 +4258,29 @@ void CSimulation::writePeriodicStatistics() {
                     numerical_diffusion = std::max(numerical_diffusion, u * dx * 0.5);
                 }
             }
-            
-            // ...removed per-timestep detailed salinity log for new summary/statistics logging...
+
+            LogStream << "\n";
+            LogStream << "SALINITY DETAIL [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime/3600.0 << "h] (6-hour):\n";
+            if (intrusion_idx >= 0) {
+                LogStream << "  - Intrusion (S≥1 ppt): x=" << std::setprecision(2) << intrusion_distance/1000.0
+                          << " km (section " << intrusion_idx << ")\n";
+            } else {
+                LogStream << "  - Intrusion (S≥1 ppt): not detected\n";
+            }
+            LogStream << "  - Max |dS/dx|: " << std::setprecision(4) << max_grad*1000.0
+                      << " ppt/km at x=" << std::setprecision(2) << m_vCrossSectionX[max_grad_idx]/1000.0 << " km\n";
+            LogStream << "  - Mean |adv flux|≈" << std::setprecision(2) << advective_flux
+                      << " ; mean |diff flux|≈" << std::setprecision(2) << diffusive_flux;
+            if (advective_flux > 0.0) {
+                LogStream << " ; diff/adv=" << std::setprecision(3) << (diffusive_flux / advective_flux);
+            }
+            LogStream << "\n";
+            LogStream << "  - K_physical=" << std::setprecision(2) << m_dLongitudinalDispersion
+                      << " m^2/s ; K_numerical≈" << std::setprecision(2) << numerical_diffusion << " m^2/s\n";
+            if (Pe_min < 2.0) {
+                LogStream << "  - WARNING: Low Peclet (min Pe=" << std::setprecision(2) << Pe_min << ")\n";
+            }
+            LogStream << "\n";
         }
     }
     

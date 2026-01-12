@@ -965,7 +965,7 @@ public:
     // Generic TVD flux limiter for passive tracer transport
     // Computes limited fluxes to prevent spurious oscillations while maintaining 2nd order accuracy
     void compute_tracer_tvd_flux(const vector<double>& tracer, const vector<double>& discharge,
-                                  const vector<double>& area, vector<double>& flux_limited);
+                                  vector<double>& flux_limited);
     
     // Salinity transport (modular design like hydrodynamics)
     void calculateSalinityFluxes();        // Compute advective + diffusive fluxes
