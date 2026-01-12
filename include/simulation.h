@@ -135,6 +135,24 @@ public:
     // === PHYSICAL PROCESS FLAGS ===
     //! Calculate water temperature?
     bool m_bDoWaterTemperature{false};
+
+    enum class ETemperatureMode {
+        Off = 0,
+        Transport = 1,
+        Given = 2
+    };
+
+    //! Temperature mode: off / solve transport / prescribed uniform time series
+    ETemperatureMode m_eTemperatureMode{ETemperatureMode::Off};
+
+    //! If mode=Given: file with (time_since_start_s, temperature_C)
+    std::string m_strGivenTemperatureFilename;
+    std::vector<double> m_vGivenTemperatureTime;
+    std::vector<double> m_vGivenTemperatureValue;
+
+    bool bIsGivenTemperature() const { return m_eTemperatureMode == ETemperatureMode::Given; }
+    double getGivenTemperatureAtTime(double t) const;
+    void applyGivenTemperatureAtTime(double t);
     
     //! Compute water salinity?
     bool m_bDoWaterSalinity{false};

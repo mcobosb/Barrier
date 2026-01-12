@@ -60,6 +60,7 @@ CSimulation::CSimulation() {
 
     // Physical process flags
     m_bDoWaterTemperature = false;
+    m_eTemperatureMode = ETemperatureMode::Off;
     m_bManningDependsOnLevel = false;
     m_bDoWaterSalinity = false;
     m_bDoWaterDensity = false;
@@ -408,25 +409,36 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     }
     // === Temperature: Boundary conditions and forcing ===
     if (m_bDoWaterTemperature) {
-        if (m_nUpwardTemperatureCondition == 2 || m_bCalculateRHFromTemperature == false) {
-            CDataReader::bReadUpwardTemperatureBoundaryConditionFile(this);
+        if (bIsGivenTemperature()) {
+            if (m_strGivenTemperatureFilename.empty()) {
+                std::cerr << ERR << "temperature.enabled: given requires temperature.given_file (time,temperature)" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            CDataReader::bReadGivenTemperatureFile(this);
+            std::cout << "      - Given temperature file loaded successfully" << std::endl;
         }
-        if (m_nDownwardTemperatureCondition > 1) {
-            CDataReader::bReadDownwardTemperatureBoundaryConditionFile(this);
-        }
-        // Forzamiento: heat_flux_file (Tair, humedad relativa, viento)
-        // REQUIRED for upstream type 3 (0D reservoir model)
-        if (m_nUpwardTemperatureCondition == 3 && m_strHeatFluxFile.empty()) {
-            std::cerr << ERR << "Upstream temperature condition type 3 (0D reservoir model) requires heat_flux_file" << std::endl;
-            std::cerr << "      Please specify heat_flux_file with meteorological forcing (time, T_air, RH, wind, pressure)" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        if (!m_strHeatFluxFile.empty()) {
-            CDataReader::bReadHeatFluxFile(this);
-            std::cout << "      - Heat flux data (atmospheric forcing) loaded successfully" << std::endl;
-            if (m_bCalculateRHFromTemperature == true) {
-                // Calculate daily minimum temperatures if RH needs to be estimated
-                calculateDailyMinTemperatures();
+
+        if (!bIsGivenTemperature()) {
+            if (m_nUpwardTemperatureCondition == 2 || m_bCalculateRHFromTemperature == false) {
+                CDataReader::bReadUpwardTemperatureBoundaryConditionFile(this);
+            }
+            if (m_nDownwardTemperatureCondition > 1) {
+                CDataReader::bReadDownwardTemperatureBoundaryConditionFile(this);
+            }
+            // Forzamiento: heat_flux_file (Tair, humedad relativa, viento)
+            // REQUIRED for upstream type 3 (0D reservoir model)
+            if (m_nUpwardTemperatureCondition == 3 && m_strHeatFluxFile.empty()) {
+                std::cerr << ERR << "Upstream temperature condition type 3 (0D reservoir model) requires heat_flux_file" << std::endl;
+                std::cerr << "      Please specify heat_flux_file with meteorological forcing (time, T_air, RH, wind, pressure)" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            if (!m_strHeatFluxFile.empty()) {
+                CDataReader::bReadHeatFluxFile(this);
+                std::cout << "      - Heat flux data (atmospheric forcing) loaded successfully" << std::endl;
+                if (m_bCalculateRHFromTemperature == true) {
+                    // Calculate daily minimum temperatures if RH needs to be estimated
+                    calculateDailyMinTemperatures();
+                }
             }
         }
     }
@@ -444,7 +456,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     precomputeEstuaryData();
 
     // For reservoir temperature mode (type 3), initialize upstream temperature
-    if (m_bDoWaterTemperature && m_nUpwardTemperatureCondition == 3) {
+    if (m_bDoWaterTemperature && !bIsGivenTemperature() && m_nUpwardTemperatureCondition == 3) {
         // Initialize temperature vector with initial condition if empty or wrong size
         if (m_vUpwardTemperatureBoundaryConditionValue.empty() || 
             m_vUpwardTemperatureBoundaryConditionValue.size() != m_vHeatFluxTime.size()) {
@@ -477,6 +489,11 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     // Initialize hydraulic conditions (skipped if continuing from NetCDF)
     calculateAlongEstuaryInitialConditions();
+
+    // If temperature is prescribed, overwrite initial spatial field
+    if (m_bDoWaterTemperature && bIsGivenTemperature()) {
+        applyGivenTemperatureAtTime(m_dCurrentTime);
+    }
 
     // Calculate initial hydraulic parameters if continuing simulation
     if (m_bContinueSimulation) {
@@ -554,6 +571,10 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         applyBoundariesToCurrentState();
         calculateHydraulicParameters();
 
+        if (m_bDoWaterTemperature && bIsGivenTemperature()) {
+            applyGivenTemperatureAtTime(m_dCurrentTime);
+        }
+
         // Calculate water density from salinity and temperature at time n
         if (bGetDoWaterSalinity() || bGetDoWaterTemperature()) {
             calculate_density();
@@ -572,7 +593,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         if (bGetDoDryBed()) dryArea();
 
         // Advance transport scalars to predictor state (S*, T*)
-        if (m_bDoWaterTemperature) {
+        if (m_bDoWaterTemperature && !bIsGivenTemperature()) {
             calculateRadiativeFluxes();
             calculate_temperature_predictor();
         }
@@ -588,6 +609,10 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         // Apply BC to predictor state BEFORE calculating hydraulic parameters and fluxes
         applyBoundariesToPredictorState();
         calculateHydraulicParameters();
+
+        if (m_bDoWaterTemperature && bIsGivenTemperature()) {
+            applyGivenTemperatureAtTime(m_dCurrentTime);
+        }
 
         // Calculate water density from predictor state (S*, T*)
         if (bGetDoWaterSalinity() || bGetDoWaterTemperature()) {
@@ -607,7 +632,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         if (bGetDoDryBed()) dryArea();
 
         // Advance transport scalars to corrector state (S**, T**)
-        if (m_bDoWaterTemperature) {
+        if (m_bDoWaterTemperature && !bIsGivenTemperature()) {
             calculate_temperature_corrector();
         }
         if (bGetDoWaterSalinity()) {
@@ -1112,6 +1137,48 @@ double CSimulation::linearInterpolation1d(const double dValue, const vector<doub
         size_t i = std::distance(vX.begin(), it) - 1;
         double slope = (vY[i+1] - vY[i]) / (vX[i+1] - vX[i]);
         return vY[i] + slope * (dValue - vX[i]);
+    }
+}
+
+double CSimulation::getGivenTemperatureAtTime(double t) const {
+    if (m_vGivenTemperatureTime.size() < 2 || m_vGivenTemperatureValue.size() < 2) {
+        return 0.0;
+    }
+    // linearInterpolation1d is non-const; reuse the same logic locally
+    auto it = std::lower_bound(m_vGivenTemperatureTime.begin(), m_vGivenTemperatureTime.end(), t);
+    if (it == m_vGivenTemperatureTime.begin()) {
+        double slope = (m_vGivenTemperatureValue[1] - m_vGivenTemperatureValue[0]) /
+                       (m_vGivenTemperatureTime[1] - m_vGivenTemperatureTime[0]);
+        return m_vGivenTemperatureValue[0] + slope * (t - m_vGivenTemperatureTime[0]);
+    }
+    if (it == m_vGivenTemperatureTime.end()) {
+        size_t n = m_vGivenTemperatureTime.size();
+        double slope = (m_vGivenTemperatureValue[n - 1] - m_vGivenTemperatureValue[n - 2]) /
+                       (m_vGivenTemperatureTime[n - 1] - m_vGivenTemperatureTime[n - 2]);
+        return m_vGivenTemperatureValue[n - 1] + slope * (t - m_vGivenTemperatureTime[n - 1]);
+    }
+    size_t i = std::distance(m_vGivenTemperatureTime.begin(), it) - 1;
+    double slope = (m_vGivenTemperatureValue[i + 1] - m_vGivenTemperatureValue[i]) /
+                   (m_vGivenTemperatureTime[i + 1] - m_vGivenTemperatureTime[i]);
+    return m_vGivenTemperatureValue[i] + slope * (t - m_vGivenTemperatureTime[i]);
+}
+
+void CSimulation::applyGivenTemperatureAtTime(double t) {
+    const double T = getGivenTemperatureAtTime(t);
+    const int N = m_nCrossSectionsNumber;
+    if (N <= 0) return;
+
+    if (m_vCrossSectionTemperature.size() != static_cast<size_t>(N))
+        m_vCrossSectionTemperature.resize(N, 0.0);
+    if (m_vPredictedCrossSectionT.size() != static_cast<size_t>(N))
+        m_vPredictedCrossSectionT.resize(N, 0.0);
+    if (m_vCorrectedCrossSectionT.size() != static_cast<size_t>(N))
+        m_vCorrectedCrossSectionT.resize(N, 0.0);
+
+    for (int i = 0; i < N; ++i) {
+        m_vCrossSectionTemperature[i] = T;
+        m_vPredictedCrossSectionT[i] = T;
+        m_vCorrectedCrossSectionT[i] = T;
     }
 }
 //======================================================================================================================

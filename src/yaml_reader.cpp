@@ -13,9 +13,11 @@
 
 #include "yaml_reader.h"
 #include "simulation.h"
-#include <iostream>
 #include <filesystem>
+#include <iostream>
 #include <sstream>
+#include <algorithm>
+#include <cctype>
 
 namespace fs = std::filesystem;
 
@@ -550,8 +552,44 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
         // Temperature transport
         if (node["temperature"]) {
             const auto& temperature = node["temperature"];
-            if (temperature["enabled"]) {
-                m_pSimulation->m_bDoWaterTemperature = temperature["enabled"].as<bool>();
+            if (temperature["enabled"]) 
+            {
+                const YAML::Node enabledNode = temperature["enabled"];
+
+                if (enabledNode.IsScalar())
+                {
+                    std::string enabledStr = enabledNode.as<std::string>();
+                    std::transform(enabledStr.begin(), enabledStr.end(), enabledStr.begin(),
+                                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+                    if (enabledStr == "given")
+                    {
+                        m_pSimulation->m_bDoWaterTemperature = true;
+                        m_pSimulation->m_eTemperatureMode = CSimulation::ETemperatureMode::Given;
+                    }
+                    else
+                    {
+                        // Backwards compatible: allow true/false
+                        try
+                        {
+                            const bool enabled = enabledNode.as<bool>();
+                            m_pSimulation->m_bDoWaterTemperature = enabled;
+                            m_pSimulation->m_eTemperatureMode = enabled ? CSimulation::ETemperatureMode::Transport
+                                                                        : CSimulation::ETemperatureMode::Off;
+                        }
+                        catch (...)
+                        {
+                            m_pSimulation->m_bDoWaterTemperature = false;
+                            m_pSimulation->m_eTemperatureMode = CSimulation::ETemperatureMode::Off;
+                        }
+                    }
+                }
+                else
+                {
+                    m_pSimulation->m_bDoWaterTemperature = enabledNode.as<bool>();
+                    m_pSimulation->m_eTemperatureMode = m_pSimulation->m_bDoWaterTemperature ? CSimulation::ETemperatureMode::Transport
+                                                                                               : CSimulation::ETemperatureMode::Off;
+                }
             }
             if (temperature["initial_file"]) {
                 std::string filename = temperature["initial_file"].as<std::string>();
@@ -565,6 +603,18 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
             // Read beta_temperature or betaT if present
             if (temperature["beta"]) {
                 m_pSimulation->dSetBetaTemperatureConstant(temperature["beta"].as<double>());
+            }
+            if (temperature["given_file"]) {
+                std::string filename = temperature["given_file"].as<std::string>();
+                if (!filename.empty()) {
+                    m_pSimulation->m_strGivenTemperatureFilename = m_strInputPath + filename;
+                }
+            }
+            else if (temperature["file"]) {
+                std::string filename = temperature["file"].as<std::string>();
+                if (!filename.empty()) {
+                    m_pSimulation->m_strGivenTemperatureFilename = m_strInputPath + filename;
+                }
             }
 
             if (temperature["boundary_conditions"]) {

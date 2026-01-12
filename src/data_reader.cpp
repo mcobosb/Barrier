@@ -291,6 +291,43 @@ void CDataReader::bReadDownwardTemperatureBoundaryConditionFile(CSimulation* m_p
 }
 
 /**
+ * @brief Read prescribed (spatially uniform) temperature time series CSV file
+ *
+ * CSV format (no header): time, temperature
+ * - time: Seconds since simulation start
+ * - temperature: Water temperature (°C)
+ */
+void CDataReader::bReadGivenTemperatureFile(CSimulation* m_pSimulation) {
+
+	ifstream InStream;
+	InStream.open(m_pSimulation->m_strGivenTemperatureFilename.c_str(), ios::in);
+
+	if (!InStream.is_open()) {
+		cerr << ERR << "cannot open " << m_pSimulation->m_strGivenTemperatureFilename << " for input" << endl;
+		return;
+	}
+
+	m_pSimulation->m_vGivenTemperatureTime.clear();
+	m_pSimulation->m_vGivenTemperatureValue.clear();
+
+	string strRec;
+	while (getline(InStream, strRec)) {
+		strRec = strTrim(&strRec);
+		if ((!strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			stringstream string_line(strRec);
+			string token;
+			int j = 0;
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				if (j == 0) m_pSimulation->m_vGivenTemperatureTime.push_back(dValue);
+				if (j == 1) m_pSimulation->m_vGivenTemperatureValue.push_back(dValue);
+				j++;
+			}
+		}
+	}
+}
+
+/**
  * @brief Read cross-section hydraulic properties CSV file
  * 
  * CSV format (no header, multiple rows per cross-section):

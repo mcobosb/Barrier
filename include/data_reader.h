@@ -135,6 +135,9 @@ public:
     static void bReadUpwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation);
     static void bReadDownwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation);
 
+    //! Read prescribed (spatially uniform) temperature time series: time, temperature
+    static void bReadGivenTemperatureFile(CSimulation* m_pSimulation);
+
     //! Read single heat flux forcing file (Tair, relative humidity, wind)
     static void bReadHeatFluxFile(CSimulation* m_pSimulation);
 
