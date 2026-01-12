@@ -549,6 +549,9 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         //! STEP 1: PREDICTOR (forward in time, forward in space)
         //==============================================================================================================
         m_nPredictor = 1;
+        
+        // Apply BC to current state BEFORE calculating hydraulic parameters and fluxes
+        applyBoundariesToCurrentState();
         calculateHydraulicParameters();
 
         // Calculate water density from salinity and temperature at time n
@@ -560,12 +563,12 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         calculate_GS_A_terms();
         calculateFlowTerms();
         calculateSourceTerms();
-
-        // Apply predictor boundary conditions BEFORE calculating predictor
-        updatePredictorBoundaries();
         
         // Advance hydrodynamics to predictor state (eta*, Q*)
         calculatePredictor();
+        
+        // Apply BC to predictor state AFTER calculating predictor interior
+        updatePredictorBoundaries();
         if (bGetDoDryBed()) dryArea();
 
         // Advance transport scalars to predictor state (S*, T*)
@@ -581,6 +584,9 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         //! STEP 2: CORRECTOR (backward in time, backward in space)
         //==============================================================================================================
         m_nPredictor = 2;
+        
+        // Apply BC to predictor state BEFORE calculating hydraulic parameters and fluxes
+        applyBoundariesToPredictorState();
         calculateHydraulicParameters();
 
         // Calculate water density from predictor state (S*, T*)
@@ -592,12 +598,12 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         calculate_GS_A_terms();
         calculateFlowTerms();
         calculateSourceTerms();
-
-        // Apply corrector boundary conditions BEFORE calculating corrector
-        updateCorrectorBoundaries();
         
         // Advance hydrodynamics to corrector state (eta**, Q**)
         calculateCorrector();
+        
+        // Apply BC to corrector state AFTER calculating corrector interior
+        updateCorrectorBoundaries();
         if (bGetDoDryBed()) dryArea();
 
         // Advance transport scalars to corrector state (S**, T**)
@@ -2175,6 +2181,167 @@ void CSimulation::calculateCorrector() {
 
 //======================================================================================================================
 /**
+ * @brief Apply boundary conditions to CURRENT STATE (time n) before predictor calculation
+ * 
+ * CRITICAL: Must be called BEFORE calculateHydraulicParameters() and calculateFlowTerms()
+ * in the predictor phase. This ensures:
+ * 1. Flux terms F0, F1 are calculated with correct boundary values
+ * 2. Source terms see correct gradients at boundaries
+ * 
+ * Sets boundary values for m_vCrossSectionArea and m_vCrossSectionQ at i=0 and i=n.
+ * 
+ * Boundary condition types:
+ * - Type 0: Open/free boundary (gradient extrapolation)
+ * - Type 1: Reflective/wall (Q=0) or prescribed discharge  
+ * - Type 2: Prescribed water surface elevation (with Manning for discharge)
+ * - Type 3: Prescribed discharge (with Manning for area)
+ */
+//======================================================================================================================
+void CSimulation::applyBoundariesToCurrentState() {
+    int n = m_nCrossSectionsNumber - 1;
+    
+    // Upstream boundary - current state
+    if (nGetUpwardEstuarineCondition() == 0) {
+        const double dQ = m_vCrossSectionQ[2] - m_vCrossSectionQ[1];
+        const double dA = m_vCrossSectionArea[2] - m_vCrossSectionArea[1];
+        m_vCrossSectionQ[0] = m_vCrossSectionQ[1] - dQ;
+        m_vCrossSectionArea[0] = m_vCrossSectionArea[1] - dA;
+        if (m_vCrossSectionArea[0] < DRY_AREA) {
+            m_vCrossSectionArea[0] = m_vCrossSectionArea[1];
+        }
+    }
+    else if (nGetUpwardEstuarineCondition() == 1) {
+        m_vCrossSectionQ[0] = 0.0;
+        const double dA = m_vCrossSectionArea[2] - m_vCrossSectionArea[1];
+        m_vCrossSectionArea[0] = m_vCrossSectionArea[1] - dA;
+        if (m_vCrossSectionArea[0] < DRY_AREA) {
+            m_vCrossSectionArea[0] = m_vCrossSectionArea[1];
+        }
+    }
+    else if (nGetUpwardEstuarineCondition() == 2) {
+        m_vCrossSectionArea[0] = m_dUpwardBoundaryValue;
+        double R = linearInterpolation1d(m_vCrossSectionArea[0], m_vEstuaryAreas[0], m_vEstuaryHydraulicRadius[0]);
+        double sign_S0 = (m_vCrossSectionBedSlope[0] >= 0) ? 1.0 : -1.0;
+        m_vCrossSectionQ[0] = m_vCrossSectionArea[0] * sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
+                             pow(R, 2.0/3.0) * sign_S0 / (m_vManningN[0] + 1e-10);
+    }
+    else {  // Type 3: prescribed discharge
+        // For subcritical flow, impose ONE condition at the upstream boundary.
+        // We prescribe Q and extrapolate A from the interior to avoid over-constraining
+        // the solution (which can generate reflections / sign flips near node 1-2).
+        m_vCrossSectionQ[0] = m_dUpwardBoundaryValue;
+        const double dA = m_vCrossSectionArea[2] - m_vCrossSectionArea[1];
+        m_vCrossSectionArea[0] = m_vCrossSectionArea[1] - dA;
+        if (m_vCrossSectionArea[0] < DRY_AREA) {
+            m_vCrossSectionArea[0] = m_vCrossSectionArea[1];
+        }
+    }
+
+    // Downstream boundary - current state
+    if (nGetDownwardEstuarineCondition() == 0) {
+        const double dQ = m_vCrossSectionQ[n-1] - m_vCrossSectionQ[n-2];
+        const double dA = m_vCrossSectionArea[n-1] - m_vCrossSectionArea[n-2];
+        m_vCrossSectionQ[n] = m_vCrossSectionQ[n-1] + dQ;
+        m_vCrossSectionArea[n] = m_vCrossSectionArea[n-1] + dA;
+        if (m_vCrossSectionArea[n] < DRY_AREA) {
+            m_vCrossSectionArea[n] = m_vCrossSectionArea[n-1];
+        }
+    }
+    else if (nGetDownwardEstuarineCondition() == 1) {
+        m_vCrossSectionQ[n] = m_dDownwardBoundaryValue;
+        double dManningFactor = m_vCrossSectionQ[n] * m_vManningN[n] / (sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10));
+        m_vCrossSectionArea[n] = linearInterpolation1d(dManningFactor, m_vPrecalculatedSecondTerm[n], m_vEstuaryAreas[n]);
+    }
+    else {  // Type 2: tidal elevation
+        m_vCrossSectionArea[n] = m_dDownwardBoundaryValue;
+        // Impose stage (area) only. Extrapolate discharge from interior to avoid over-constraining
+        // the subcritical boundary (imposing both η and Q tends to drive the whole domain).
+        const double dQ = m_vCrossSectionQ[n-1] - m_vCrossSectionQ[n-2];
+        m_vCrossSectionQ[n] = m_vCrossSectionQ[n-1] + dQ;
+    }
+}
+
+//======================================================================================================================
+/**
+ * @brief Apply boundary conditions to PREDICTOR STATE before corrector calculation
+ * 
+ * CRITICAL: Must be called BEFORE calculateHydraulicParameters() and calculateFlowTerms()
+ * in the corrector phase. This ensures:
+ * 1. Flux terms F0*, F1* are calculated with correct boundary values from predictor
+ * 2. Source terms see correct gradients at boundaries
+ * 
+ * Sets boundary values for m_vPredictedCrossSectionArea and m_vPredictedCrossSectionQ at i=0 and i=n.
+ * 
+ * Boundary condition types:
+ * - Type 0: Open/free boundary (gradient extrapolation)
+ * - Type 1: Reflective/wall (Q=0) or prescribed discharge
+ * - Type 2: Prescribed water surface elevation (with Manning for discharge)
+ * - Type 3: Prescribed discharge (with Manning for area)
+ */
+//======================================================================================================================
+void CSimulation::applyBoundariesToPredictorState() {
+    int n = m_nCrossSectionsNumber - 1;
+    
+    // Upstream boundary - predictor state
+    if (nGetUpwardEstuarineCondition() == 0) {
+        const double dQ = m_vPredictedCrossSectionQ[2] - m_vPredictedCrossSectionQ[1];
+        const double dA = m_vPredictedCrossSectionArea[2] - m_vPredictedCrossSectionArea[1];
+        m_vPredictedCrossSectionQ[0] = m_vPredictedCrossSectionQ[1] - dQ;
+        m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1] - dA;
+        if (m_vPredictedCrossSectionArea[0] < DRY_AREA) {
+            m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1];
+        }
+    }
+    else if (nGetUpwardEstuarineCondition() == 1) {
+        m_vPredictedCrossSectionQ[0] = 0.0;
+        const double dA = m_vPredictedCrossSectionArea[2] - m_vPredictedCrossSectionArea[1];
+        m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1] - dA;
+        if (m_vPredictedCrossSectionArea[0] < DRY_AREA) {
+            m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1];
+        }
+    }
+    else if (nGetUpwardEstuarineCondition() == 2) {
+        m_vPredictedCrossSectionArea[0] = m_dUpwardBoundaryValue;
+        double R = linearInterpolation1d(m_vPredictedCrossSectionArea[0], m_vEstuaryAreas[0], m_vEstuaryHydraulicRadius[0]);
+        double sign_S0 = (m_vCrossSectionBedSlope[0] >= 0) ? 1.0 : -1.0;
+        m_vPredictedCrossSectionQ[0] = m_vPredictedCrossSectionArea[0] * sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
+                                       pow(R, 2.0/3.0) * sign_S0 / (m_vManningN[0] + 1e-10);
+    }
+    else {  // Type 3: prescribed discharge
+        // Same rationale as applyBoundariesToCurrentState(): impose Q only, extrapolate A.
+        m_vPredictedCrossSectionQ[0] = m_dUpwardBoundaryValue;
+        const double dA = m_vPredictedCrossSectionArea[2] - m_vPredictedCrossSectionArea[1];
+        m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1] - dA;
+        if (m_vPredictedCrossSectionArea[0] < DRY_AREA) {
+            m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1];
+        }
+    }
+
+    // Downstream boundary - predictor state
+    if (nGetDownwardEstuarineCondition() == 0) {
+        const double dQ = m_vPredictedCrossSectionQ[n-1] - m_vPredictedCrossSectionQ[n-2];
+        const double dA = m_vPredictedCrossSectionArea[n-1] - m_vPredictedCrossSectionArea[n-2];
+        m_vPredictedCrossSectionQ[n] = m_vPredictedCrossSectionQ[n-1] + dQ;
+        m_vPredictedCrossSectionArea[n] = m_vPredictedCrossSectionArea[n-1] + dA;
+        if (m_vPredictedCrossSectionArea[n] < DRY_AREA) {
+            m_vPredictedCrossSectionArea[n] = m_vPredictedCrossSectionArea[n-1];
+        }
+    }
+    else if (nGetDownwardEstuarineCondition() == 1) {
+        m_vPredictedCrossSectionQ[n] = m_dDownwardBoundaryValue;
+        double dManningFactor = m_vPredictedCrossSectionQ[n] * m_vManningN[n] / (sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10));
+        m_vPredictedCrossSectionArea[n] = linearInterpolation1d(dManningFactor, m_vPrecalculatedSecondTerm[n], m_vEstuaryAreas[n]);
+    }
+    else {  // Type 2: tidal elevation
+        m_vPredictedCrossSectionArea[n] = m_dDownwardBoundaryValue;
+        // Impose stage (area) only. Extrapolate discharge from predictor interior.
+        const double dQ = m_vPredictedCrossSectionQ[n-1] - m_vPredictedCrossSectionQ[n-2];
+        m_vPredictedCrossSectionQ[n] = m_vPredictedCrossSectionQ[n-1] + dQ;
+    }
+}
+
+//======================================================================================================================
+/**
  * @brief Apply boundary conditions after predictor step
  * 
  * Handles upstream and downstream boundary conditions with various types:
@@ -2239,18 +2406,13 @@ void CSimulation::updatePredictorBoundaries() {
     }
     else {
         // Type 3: Prescribed discharge
-        // Impose discharge, compute area using inverse Manning equation
+        // Impose discharge and extrapolate area from predictor interior.
         m_vPredictedCrossSectionQ[0] = m_dUpwardBoundaryValue;
-        
-        // Compute Manning factor: Qn/√S0 = AR^(2/3)
-        double dManningFactor = m_vPredictedCrossSectionQ[0] * m_vManningN[0] / 
-                              (sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10));
-        
-        // Invert Manning equation to get area from pre-computed AR^(2/3) table
-        m_vPredictedCrossSectionArea[0] = linearInterpolation1d(
-            dManningFactor, 
-            m_vPrecalculatedSecondTerm[0], 
-            m_vEstuaryAreas[0]);
+        const double dA = m_vPredictedCrossSectionArea[2] - m_vPredictedCrossSectionArea[1];
+        m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1] - dA;
+        if (m_vPredictedCrossSectionArea[0] < DRY_AREA) {
+            m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1];
+        }
     }
 
     //==============================================================================================================
@@ -2297,40 +2459,10 @@ void CSimulation::updatePredictorBoundaries() {
     }
     else {
         // Type 2: Prescribed tidal elevation
-        // Impose area (converted from elevation), compute discharge from tide rate of change
+        // Impose area (converted from elevation). Do NOT impose an extra discharge condition.
         m_vPredictedCrossSectionArea[n] = m_dDownwardBoundaryValue;
-        
-        // Compute time rate of change of water surface elevation: dη/dt
-        double dhdt = 0.0;
-        if (m_vDownwardBoundaryConditionTime.size() > 1) {
-            // Find current time interval in tidal time series
-            int idx = 0;
-            for (size_t i = 0; i < m_vDownwardBoundaryConditionTime.size() - 1; i++) {
-                if (m_dCurrentTime >= m_vDownwardBoundaryConditionTime[i] && 
-                    m_dCurrentTime <= m_vDownwardBoundaryConditionTime[i+1]) {
-                    idx = i;
-                    break;
-                }
-            }
-            
-            // Compute temporal derivative: dη/dt ≈ Δη/Δt
-            double dt = m_vDownwardBoundaryConditionTime[idx+1] - m_vDownwardBoundaryConditionTime[idx];
-            if (dt > 0) {
-                double dh = m_vDownwardBoundaryConditionValue[idx+1] - m_vDownwardBoundaryConditionValue[idx];
-                dhdt = dh / dt;
-            }
-        }
-        
-        // Mass conservation at boundary: Q = -A·dη/dt
-        // Sign convention: dη/dt > 0 (rising tide) → Q < 0 (inflow)
-        //                  dη/dt < 0 (falling tide) → Q > 0 (outflow)
-        double Q_tide = -m_vPredictedCrossSectionArea[n] * dhdt;
-        
-        // Blend with interior extrapolation (50/50 weight) for smoothness
-        const double dQ = m_vCrossSectionQ[n-1] - m_vCrossSectionQ[n-2];
-        double Q_extrap = m_vCrossSectionQ[n-1] + dQ;
-        
-        m_vPredictedCrossSectionQ[n] = 0.5 * Q_tide + 0.5 * Q_extrap;
+        const double dQ = m_vPredictedCrossSectionQ[n-1] - m_vPredictedCrossSectionQ[n-2];
+        m_vPredictedCrossSectionQ[n] = m_vPredictedCrossSectionQ[n-1] + dQ;
     }
 }
 
@@ -2391,15 +2523,13 @@ void CSimulation::updateCorrectorBoundaries() {
     }
     else {
         // Type 3: Prescribed discharge with optional selective sponge layer
+        // Impose discharge and extrapolate area from predictor interior (avoid over-constraint).
         m_vCorrectedCrossSectionQ[0] = m_dUpwardBoundaryValue;
-        
-        double dManningFactor = m_vCorrectedCrossSectionQ[0] * m_vManningN[0] / 
-                              (sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10));
-        
-        m_vCorrectedCrossSectionArea[0] = linearInterpolation1d(
-            dManningFactor, 
-            m_vPrecalculatedSecondTerm[0], 
-            m_vEstuaryAreas[0]);
+        const double dA = m_vPredictedCrossSectionArea[2] - m_vPredictedCrossSectionArea[1];
+        m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1] - dA;
+        if (m_vCorrectedCrossSectionArea[0] < DRY_AREA) {
+            m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1];
+        }
         
         // Selective sponge layer: only smooth if discontinuity > 5%
         // Damps spurious oscillations at inflow boundary
@@ -2457,38 +2587,11 @@ void CSimulation::updateCorrectorBoundaries() {
             m_vEstuaryAreas[n]);
     }
     else {
-        // Type 2: Prescribed tidal elevation with tide rate of change
+        // Type 2: Prescribed tidal elevation
         m_vCorrectedCrossSectionArea[n] = m_dDownwardBoundaryValue;
-        
-        // Compute time rate of change of tidal elevation
-        double dhdt = 0.0;
-        if (m_vDownwardBoundaryConditionTime.size() > 1) {
-            // Find current time interval in boundary condition series
-            int idx = 0;
-            for (size_t i = 0; i < m_vDownwardBoundaryConditionTime.size() - 1; i++) {
-                if (m_dCurrentTime >= m_vDownwardBoundaryConditionTime[i] && 
-                    m_dCurrentTime <= m_vDownwardBoundaryConditionTime[i+1]) {
-                    idx = i;
-                    break;
-                }
-            }
-            
-            // Compute dη/dt
-            double dt = m_vDownwardBoundaryConditionTime[idx+1] - m_vDownwardBoundaryConditionTime[idx];
-            if (dt > 0) {
-                double dh = m_vDownwardBoundaryConditionValue[idx+1] - m_vDownwardBoundaryConditionValue[idx];
-                dhdt = dh / dt;
-            }
-        }
-        
-        // Discharge from mass conservation: Q = -A·dη/dt
-        double Q_tide = -m_vCorrectedCrossSectionArea[n] * dhdt;
-        
-        // Blend with extrapolation from predicted interior
-        const double dQ = m_vPredictedCrossSectionQ[n-1] - m_vPredictedCrossSectionQ[n-2];
-        double Q_extrap = m_vPredictedCrossSectionQ[n-1] + dQ;
-        
-        m_vCorrectedCrossSectionQ[n] = 0.5 * Q_tide + 0.5 * Q_extrap;
+        // Extrapolate discharge from corrected interior (keeps stage BC without over-imposing Q).
+        const double dQ = m_vCorrectedCrossSectionQ[n-1] - m_vCorrectedCrossSectionQ[n-2];
+        m_vCorrectedCrossSectionQ[n] = m_vCorrectedCrossSectionQ[n-1] + dQ;
     }
 }
 
@@ -2585,11 +2688,78 @@ void CSimulation::compute_tracer_tvd_flux(const vector<double>& tracer, const ve
  */
 //======================================================================================================================
 void CSimulation::calculate_salinity_predictor() {
+    // --- Boundary salinity values (needed for boundary advective fluxes) ---
+    double up_sal = m_dUpwardSalinityBoundaryValue;
+    if (!m_strUpwardSalinityBoundaryConditionFilename.empty() &&
+        !m_vUpwardSalinityBoundaryConditionTime.empty() &&
+        !m_vUpwardSalinityBoundaryConditionValue.empty()) {
+        const double t = m_dCurrentTime;
+        auto it = std::lower_bound(m_vUpwardSalinityBoundaryConditionTime.begin(),
+                                   m_vUpwardSalinityBoundaryConditionTime.end(), t);
+
+        if (it == m_vUpwardSalinityBoundaryConditionTime.begin()) {
+            up_sal = m_vUpwardSalinityBoundaryConditionValue.front();
+        } else if (it == m_vUpwardSalinityBoundaryConditionTime.end()) {
+            up_sal = m_vUpwardSalinityBoundaryConditionValue.back();
+        } else {
+            const size_t idx = std::distance(m_vUpwardSalinityBoundaryConditionTime.begin(), it);
+            const double t1 = m_vUpwardSalinityBoundaryConditionTime[idx - 1];
+            const double t2 = m_vUpwardSalinityBoundaryConditionTime[idx];
+            const double s1 = m_vUpwardSalinityBoundaryConditionValue[idx - 1];
+            const double s2 = m_vUpwardSalinityBoundaryConditionValue[idx];
+            up_sal = s1 + (s2 - s1) * (t - t1) / (t2 - t1);
+        }
+    }
+
+    double down_sal = m_dDownwardSalinityBoundaryValue;
+    if (!m_strDownwardSalinityBoundaryConditionFilename.empty() &&
+        !m_vDownwardSalinityBoundaryConditionTime.empty() &&
+        !m_vDownwardSalinityBoundaryConditionValue.empty()) {
+        const double t = m_dCurrentTime;
+        auto it = std::lower_bound(m_vDownwardSalinityBoundaryConditionTime.begin(),
+                                   m_vDownwardSalinityBoundaryConditionTime.end(), t);
+
+        if (it == m_vDownwardSalinityBoundaryConditionTime.begin()) {
+            down_sal = m_vDownwardSalinityBoundaryConditionValue.front();
+        } else if (it == m_vDownwardSalinityBoundaryConditionTime.end()) {
+            down_sal = m_vDownwardSalinityBoundaryConditionValue.back();
+        } else {
+            const size_t idx = std::distance(m_vDownwardSalinityBoundaryConditionTime.begin(), it);
+            const double t1 = m_vDownwardSalinityBoundaryConditionTime[idx - 1];
+            const double t2 = m_vDownwardSalinityBoundaryConditionTime[idx];
+            const double s1 = m_vDownwardSalinityBoundaryConditionValue[idx - 1];
+            const double s2 = m_vDownwardSalinityBoundaryConditionValue[idx];
+            down_sal = s1 + (s2 - s1) * (t - t1) / (t2 - t1);
+        }
+    }
+
     // Compute TVD-limited advective fluxes at cell faces
     // Use predicted discharge from hydrodynamic predictor step
     vector<double> tvd_flux(m_nCrossSectionsNumber+1, 0.0);
     compute_tracer_tvd_flux(m_vCrossSectionSalinity, m_vPredictedCrossSectionQ, 
                             m_vCrossSectionArea, tvd_flux);
+
+    // Boundary advective fluxes: compute_tracer_tvd_flux() sets them to zero by design.
+    // For open boundaries this is wrong: we must supply the boundary flux using the BC value
+    // for inflow, and the interior value for outflow (upwind).
+    const int last = m_nCrossSectionsNumber - 1;
+    {
+        const double Q_up = m_vPredictedCrossSectionQ[0];
+        const double S_upwind = (Q_up > 0.0) ? up_sal : m_vCrossSectionSalinity[0];
+        tvd_flux[0] = Q_up * S_upwind;
+    }
+    {
+        const double Q_dn = m_vPredictedCrossSectionQ[last];
+        double S_upwind;
+        if (Q_dn < 0.0) {
+            // Inflow from ocean
+            S_upwind = down_sal;
+        } else {
+            // Outflow to ocean
+            S_upwind = m_vCrossSectionSalinity[last];
+        }
+        tvd_flux[m_nCrossSectionsNumber] = Q_dn * S_upwind;
+    }
     
     // Compute advection and diffusion terms (TVD for advection, centered for diffusion)
     // Equation: ∂(A·S)/∂t = -∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)
@@ -2642,37 +2812,11 @@ void CSimulation::calculate_salinity_predictor() {
     }
     // Removed per-timestep clamping log in predictor
     
-    // Apply boundary conditions
-    // Upstream salinity boundary condition
-    double up_sal = m_dUpwardSalinityBoundaryValue;
-    
-    // If time series provided, interpolate at current time
-    if (!m_strUpwardSalinityBoundaryConditionFilename.empty() && 
-        !m_vUpwardSalinityBoundaryConditionTime.empty() && 
-        !m_vUpwardSalinityBoundaryConditionValue.empty()) {
-        double t = m_dCurrentTime;
-        auto it = std::lower_bound(m_vUpwardSalinityBoundaryConditionTime.begin(), 
-                                   m_vUpwardSalinityBoundaryConditionTime.end(), t);
-        
-        if (it == m_vUpwardSalinityBoundaryConditionTime.begin()) {
-            up_sal = m_vUpwardSalinityBoundaryConditionValue.front();
-        } else if (it == m_vUpwardSalinityBoundaryConditionTime.end()) {
-            up_sal = m_vUpwardSalinityBoundaryConditionValue.back();
-        } else {
-            // Linear interpolation between time points
-            size_t idx = std::distance(m_vUpwardSalinityBoundaryConditionTime.begin(), it);
-            double t1 = m_vUpwardSalinityBoundaryConditionTime[idx-1];
-            double t2 = m_vUpwardSalinityBoundaryConditionTime[idx];
-            double s1 = m_vUpwardSalinityBoundaryConditionValue[idx-1];
-            double s2 = m_vUpwardSalinityBoundaryConditionValue[idx];
-            up_sal = s1 + (s2-s1)*(t-t1)/(t2-t1);
-        }
-    }
-    
+    // Apply boundary conditions to state variables
     // Apply upstream BC based on condition type
     if (nGetUpwardSalinityCondition() == 0) {
         // Type 0: Only apply if inflow (Q > 0)
-        if (m_vCrossSectionQ[0] > 0.0) {
+        if (m_vPredictedCrossSectionQ[0] > 0.0) {
             m_vPredictedCrossSectionS[0] = up_sal;
         }
     }
@@ -2680,33 +2824,7 @@ void CSimulation::calculate_salinity_predictor() {
         // Type 1/2: Always impose prescribed value
         m_vPredictedCrossSectionS[0] = up_sal;
     }
-    // Downstream salinity boundary condition
-    double down_sal = m_dDownwardSalinityBoundaryValue;
-    
-    // If time series provided, interpolate at current time
-    if (!m_strDownwardSalinityBoundaryConditionFilename.empty() && 
-        !m_vDownwardSalinityBoundaryConditionTime.empty() && 
-        !m_vDownwardSalinityBoundaryConditionValue.empty()) {
-        double t = m_dCurrentTime;
-        auto it = std::lower_bound(m_vDownwardSalinityBoundaryConditionTime.begin(), 
-                                   m_vDownwardSalinityBoundaryConditionTime.end(), t);
-        
-        if (it == m_vDownwardSalinityBoundaryConditionTime.begin()) {
-            down_sal = m_vDownwardSalinityBoundaryConditionValue.front();
-        } else if (it == m_vDownwardSalinityBoundaryConditionTime.end()) {
-            down_sal = m_vDownwardSalinityBoundaryConditionValue.back();
-        } else {
-            size_t idx = std::distance(m_vDownwardSalinityBoundaryConditionTime.begin(), it);
-            double t1 = m_vDownwardSalinityBoundaryConditionTime[idx-1];
-            double t2 = m_vDownwardSalinityBoundaryConditionTime[idx];
-            double s1 = m_vDownwardSalinityBoundaryConditionValue[idx-1];
-            double s2 = m_vDownwardSalinityBoundaryConditionValue[idx];
-            down_sal = s1 + (s2-s1)*(t-t1)/(t2-t1);
-        }
-    }
-    
     // Apply downstream BC based on condition type AND flow direction
-    const int last = m_nCrossSectionsNumber - 1;
     const double Q_downstream = m_vPredictedCrossSectionQ[last];  // Use predictor flow
     
     if (nGetDownwardSalinityCondition() == 1) {
@@ -2736,10 +2854,66 @@ void CSimulation::calculate_salinity_predictor() {
  */
 //======================================================================================================================
 void CSimulation::calculate_salinity_corrector() {
+    // --- Boundary salinity values (needed for boundary advective fluxes) ---
+    double up_sal = m_dUpwardSalinityBoundaryValue;
+    if (!m_strUpwardSalinityBoundaryConditionFilename.empty() &&
+        !m_vUpwardSalinityBoundaryConditionTime.empty() &&
+        !m_vUpwardSalinityBoundaryConditionValue.empty()) {
+        const double t = m_dCurrentTime;
+        auto it = std::lower_bound(m_vUpwardSalinityBoundaryConditionTime.begin(),
+                                   m_vUpwardSalinityBoundaryConditionTime.end(), t);
+        if (it == m_vUpwardSalinityBoundaryConditionTime.begin()) {
+            up_sal = m_vUpwardSalinityBoundaryConditionValue.front();
+        } else if (it == m_vUpwardSalinityBoundaryConditionTime.end()) {
+            up_sal = m_vUpwardSalinityBoundaryConditionValue.back();
+        } else {
+            const size_t idx = std::distance(m_vUpwardSalinityBoundaryConditionTime.begin(), it);
+            const double t1 = m_vUpwardSalinityBoundaryConditionTime[idx - 1];
+            const double t2 = m_vUpwardSalinityBoundaryConditionTime[idx];
+            const double s1 = m_vUpwardSalinityBoundaryConditionValue[idx - 1];
+            const double s2 = m_vUpwardSalinityBoundaryConditionValue[idx];
+            up_sal = s1 + (s2 - s1) * (t - t1) / (t2 - t1);
+        }
+    }
+
+    double down_sal = m_dDownwardSalinityBoundaryValue;
+    if (!m_strDownwardSalinityBoundaryConditionFilename.empty() &&
+        !m_vDownwardSalinityBoundaryConditionTime.empty() &&
+        !m_vDownwardSalinityBoundaryConditionValue.empty()) {
+        const double t = m_dCurrentTime;
+        auto it = std::lower_bound(m_vDownwardSalinityBoundaryConditionTime.begin(),
+                                   m_vDownwardSalinityBoundaryConditionTime.end(), t);
+        if (it == m_vDownwardSalinityBoundaryConditionTime.begin()) {
+            down_sal = m_vDownwardSalinityBoundaryConditionValue.front();
+        } else if (it == m_vDownwardSalinityBoundaryConditionTime.end()) {
+            down_sal = m_vDownwardSalinityBoundaryConditionValue.back();
+        } else {
+            const size_t idx = std::distance(m_vDownwardSalinityBoundaryConditionTime.begin(), it);
+            const double t1 = m_vDownwardSalinityBoundaryConditionTime[idx - 1];
+            const double t2 = m_vDownwardSalinityBoundaryConditionTime[idx];
+            const double s1 = m_vDownwardSalinityBoundaryConditionValue[idx - 1];
+            const double s2 = m_vDownwardSalinityBoundaryConditionValue[idx];
+            down_sal = s1 + (s2 - s1) * (t - t1) / (t2 - t1);
+        }
+    }
+
     // Compute TVD-limited advective fluxes at cell faces (using predicted state)
     // Use corrected discharge from hydrodynamic corrector step
     vector<double> tvd_flux(m_nCrossSectionsNumber+1, 0.0);
     compute_tracer_tvd_flux(m_vPredictedCrossSectionS, m_vCorrectedCrossSectionQ, m_vPredictedCrossSectionArea, tvd_flux);
+
+    // Boundary advective fluxes
+    const int last = m_nCrossSectionsNumber - 1;
+    {
+        const double Q_up = m_vCorrectedCrossSectionQ[0];
+        const double S_upwind = (Q_up > 0.0) ? up_sal : m_vPredictedCrossSectionS[0];
+        tvd_flux[0] = Q_up * S_upwind;
+    }
+    {
+        const double Q_dn = m_vCorrectedCrossSectionQ[last];
+        const double S_upwind = (Q_dn < 0.0) ? down_sal : m_vPredictedCrossSectionS[last];
+        tvd_flux[m_nCrossSectionsNumber] = Q_dn * S_upwind;
+    }
 
     // Compute advection and diffusion terms (TVD for advection, centered for diffusion)
     // Equation: ∂(A·S)/∂t = -∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)
@@ -2793,32 +2967,10 @@ void CSimulation::calculate_salinity_corrector() {
     // Removed per-timestep clamping log in corrector
     
     // Boundary conditions (same logic as predictor)
-    // Upstream salinity boundary condition
-    double up_sal = m_dUpwardSalinityBoundaryValue;
-    if (!m_strUpwardSalinityBoundaryConditionFilename.empty() &&
-        !m_vUpwardSalinityBoundaryConditionTime.empty() &&
-        !m_vUpwardSalinityBoundaryConditionValue.empty()) {
-        double t = m_dCurrentTime;
-        auto it = std::lower_bound(m_vUpwardSalinityBoundaryConditionTime.begin(),
-                                   m_vUpwardSalinityBoundaryConditionTime.end(), t);
-        if (it == m_vUpwardSalinityBoundaryConditionTime.begin()) {
-            up_sal = m_vUpwardSalinityBoundaryConditionValue.front();
-        } else if (it == m_vUpwardSalinityBoundaryConditionTime.end()) {
-            up_sal = m_vUpwardSalinityBoundaryConditionValue.back();
-        } else {
-            // Linear interpolation between time points
-            size_t idx = std::distance(m_vUpwardSalinityBoundaryConditionTime.begin(), it);
-            double t1 = m_vUpwardSalinityBoundaryConditionTime[idx-1];
-            double t2 = m_vUpwardSalinityBoundaryConditionTime[idx];
-            double s1 = m_vUpwardSalinityBoundaryConditionValue[idx-1];
-            double s2 = m_vUpwardSalinityBoundaryConditionValue[idx];
-            up_sal = s1 + (s2-s1)*(t-t1)/(t2-t1);
-        }
-    }
     // Apply upstream BC based on condition type
     if (nGetUpwardSalinityCondition() == 0) {
         // Type 0: Only apply if inflow (Q > 0)
-        if (m_vCrossSectionQ[0] > 0.0) {
+        if (m_vCorrectedCrossSectionQ[0] > 0.0) {
             m_vCorrectedCrossSectionS[0] = up_sal;
         }
     }
@@ -2826,29 +2978,7 @@ void CSimulation::calculate_salinity_corrector() {
         // Type 1/2: Always impose prescribed value
         m_vCorrectedCrossSectionS[0] = up_sal;
     }
-    // Downstream salinity boundary condition
-    double down_sal = m_dDownwardSalinityBoundaryValue;
-    if (!m_strDownwardSalinityBoundaryConditionFilename.empty() &&
-        !m_vDownwardSalinityBoundaryConditionTime.empty() &&
-        !m_vDownwardSalinityBoundaryConditionValue.empty()) {
-        double t = m_dCurrentTime;
-        auto it = std::lower_bound(m_vDownwardSalinityBoundaryConditionTime.begin(),
-                                   m_vDownwardSalinityBoundaryConditionTime.end(), t);
-        if (it == m_vDownwardSalinityBoundaryConditionTime.begin()) {
-            down_sal = m_vDownwardSalinityBoundaryConditionValue.front();
-        } else if (it == m_vDownwardSalinityBoundaryConditionTime.end()) {
-            down_sal = m_vDownwardSalinityBoundaryConditionValue.back();
-        } else {
-            size_t idx = std::distance(m_vDownwardSalinityBoundaryConditionTime.begin(), it);
-            double t1 = m_vDownwardSalinityBoundaryConditionTime[idx-1];
-            double t2 = m_vDownwardSalinityBoundaryConditionTime[idx];
-            double s1 = m_vDownwardSalinityBoundaryConditionValue[idx-1];
-            double s2 = m_vDownwardSalinityBoundaryConditionValue[idx];
-            down_sal = s1 + (s2-s1)*(t-t1)/(t2-t1);
-        }
-    }
     // Apply downstream BC based on condition type AND flow direction
-    const int last = m_nCrossSectionsNumber - 1;
     const double Q_downstream = m_vCorrectedCrossSectionQ[last];  // Use corrector flow
     if (nGetDownwardSalinityCondition() == 1) {
         // Type 1: Use upstream value (unusual but allowed)

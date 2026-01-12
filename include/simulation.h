@@ -933,6 +933,8 @@ public:
     void calculate_GS_A_terms();
     void calculateFlowTerms();
     void calculateSourceTerms();
+    void applyBoundariesToCurrentState();
+    void applyBoundariesToPredictorState();
     void calculatePredictor();
     void calculateCorrector();
     void updatePredictorBoundaries();
@@ -964,8 +966,8 @@ public:
     //! Returns n(η) varying linearly between 1.0 (submerged) and 2.0 (emergent)
     static inline double n_eta(double eta, double maxTide) {
         if (eta <= 0) return 1.0;
-        if (eta >= maxTide) return 2.0;
-        return 1.0 + eta / maxTide;
+        if (eta >= maxTide) return 1.2;
+        return 1.0 + 0.2*eta / maxTide;
     }
     
     static double getMaxAstronomicalTide(const std::string& tidesFile);
