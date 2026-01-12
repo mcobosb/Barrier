@@ -2733,19 +2733,43 @@ void CSimulation::calculate_salinity_predictor() {
         }
     }
 
+    // Apply salinity BC consistently to the tracer field used for face fluxes.
+    // Here nodes 0 and last are treated as boundary nodes (prescribed / radiation depending on flow).
+    const int last = m_nCrossSectionsNumber - 1;
+    vector<double> tracer_bc = m_vCrossSectionSalinity;
+    {
+        const double Q_up = m_vPredictedCrossSectionQ[0];
+        if (Q_up > 0.0) {
+            // Inflow from upstream
+            tracer_bc[0] = up_sal;
+        } else {
+            // Outflow: radiation/zero-gradient
+            tracer_bc[0] = (m_nCrossSectionsNumber > 1) ? tracer_bc[1] : tracer_bc[0];
+        }
+    }
+    {
+        const double Q_dn = m_vPredictedCrossSectionQ[last];
+        if (Q_dn < 0.0) {
+            // Inflow from ocean
+            tracer_bc[last] = down_sal;
+        } else {
+            // Outflow to ocean: radiation/zero-gradient
+            tracer_bc[last] = (m_nCrossSectionsNumber > 1) ? tracer_bc[last - 1] : tracer_bc[last];
+        }
+    }
+
     // Compute TVD-limited advective fluxes at cell faces
     // Use predicted discharge from hydrodynamic predictor step
     vector<double> tvd_flux(m_nCrossSectionsNumber+1, 0.0);
-    compute_tracer_tvd_flux(m_vCrossSectionSalinity, m_vPredictedCrossSectionQ, 
+    compute_tracer_tvd_flux(tracer_bc, m_vPredictedCrossSectionQ,
                             m_vCrossSectionArea, tvd_flux);
 
     // Boundary advective fluxes: compute_tracer_tvd_flux() sets them to zero by design.
     // For open boundaries this is wrong: we must supply the boundary flux using the BC value
     // for inflow, and the interior value for outflow (upwind).
-    const int last = m_nCrossSectionsNumber - 1;
     {
         const double Q_up = m_vPredictedCrossSectionQ[0];
-        const double S_upwind = (Q_up > 0.0) ? up_sal : m_vCrossSectionSalinity[0];
+        const double S_upwind = (Q_up > 0.0) ? up_sal : tracer_bc[0];
         tvd_flux[0] = Q_up * S_upwind;
     }
     {
@@ -2756,45 +2780,49 @@ void CSimulation::calculate_salinity_predictor() {
             S_upwind = down_sal;
         } else {
             // Outflow to ocean
-            S_upwind = m_vCrossSectionSalinity[last];
+            S_upwind = tracer_bc[last];
         }
         tvd_flux[m_nCrossSectionsNumber] = Q_dn * S_upwind;
     }
     
-    // Compute advection and diffusion terms (TVD for advection, centered for diffusion)
+    // Compute advection and diffusion terms
     // Equation: ∂(A·S)/∂t = -∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)
-    for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
-        double dx = m_vCrossSectionDX[std::max(1, std::min(i, m_nCrossSectionsNumber-2))];
-        
-        // TVD advection: flux already in units of [kg/s or m³/s·psu]
-        // -∂(Q·S)/∂x is already computed by differencing tvd_flux
-        double d_QS_dx = 0.0;
-        if (i == 0)
-            d_QS_dx = (tvd_flux[1] - tvd_flux[0]) / dx;
-        else if (i == m_nCrossSectionsNumber-1)
-            d_QS_dx = (tvd_flux[m_nCrossSectionsNumber] - tvd_flux[m_nCrossSectionsNumber-1]) / dx;
-        else
-            d_QS_dx = (tvd_flux[i+1] - tvd_flux[i]) / dx;
-
-        // Diffusion term: ∂/∂x(Kh·A·∂S/∂x)
-        // Using centered differences with area at cell center
-        double d_KhAdSdx_dx = 0.0;
-        if (m_dLongitudinalDispersion > 0.0) {
-            double A_i = m_vCrossSectionArea[i];
-            double S_ip1 = (i < m_nCrossSectionsNumber-1) ? m_vCrossSectionSalinity[i+1] : (2*m_vCrossSectionSalinity[i] - m_vCrossSectionSalinity[i-1]);
-            double S_im1 = (i > 0) ? m_vCrossSectionSalinity[i-1] : (2*m_vCrossSectionSalinity[i] - m_vCrossSectionSalinity[i+1]);
-            
-            // ∂/∂x(Kh·A·∂S/∂x) ≈ Kh·A·∂²S/∂x² for constant Kh and slowly varying A
-            d_KhAdSdx_dx = m_dLongitudinalDispersion * A_i * (S_ip1 - 2*m_vCrossSectionSalinity[i] + S_im1) / (dx*dx);
+    // IMPORTANT: use conservative flux form for diffusion, and control-volume length on non-uniform grids.
+    for (int i = 1; i < m_nCrossSectionsNumber - 1; ++i) {
+        const double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+        const double dxR = m_vCrossSectionX[i + 1] - m_vCrossSectionX[i];
+        const double dxCV = 0.5 * (dxL + dxR);
+        if (dxL <= 1e-12 || dxR <= 1e-12 || dxCV <= 1e-12) {
+            m_vCrossSectionSalinityASt[i] = 0.0;
+            continue;
         }
-        
-        // Update: Δ(A·S) = dt * [-∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)]
-        m_vCrossSectionSalinityASt[i] = m_dTimestep * (-d_QS_dx + d_KhAdSdx_dx);
+
+        // Advection divergence: (F_{i+1/2} - F_{i-1/2}) / Δx_CV
+        const double d_QS_dx = (tvd_flux[i + 1] - tvd_flux[i]) / dxCV;
+
+        // Diffusion divergence in flux form.
+        // Define diffusive flux at faces: Fd = -Kh * A_face * (ΔS/Δx)
+        double d_Fd_dx = 0.0;
+        if (m_dLongitudinalDispersion > 0.0) {
+            const double A_L = 0.5 * (m_vCrossSectionArea[i - 1] + m_vCrossSectionArea[i]);
+            const double A_R = 0.5 * (m_vCrossSectionArea[i] + m_vCrossSectionArea[i + 1]);
+            const double Fd_L = -m_dLongitudinalDispersion * A_L * (tracer_bc[i] - tracer_bc[i - 1]) / dxL;
+            const double Fd_R = -m_dLongitudinalDispersion * A_R * (tracer_bc[i + 1] - tracer_bc[i]) / dxR;
+            d_Fd_dx = (Fd_R - Fd_L) / dxCV;
+        }
+
+        // Update: Δ(A·S) = dt * [ -∂(Q·S)/∂x - ∂(Fd)/∂x ]
+        // because ∂/∂x(Kh·A·∂S/∂x) = -∂Fd/∂x.
+        m_vCrossSectionSalinityASt[i] = m_dTimestep * (-d_QS_dx - d_Fd_dx);
     }
 
     // Update salinity conserving salt mass: S_new = (A·S_old + Δ(A·S))/A_new
     static int clamp_count = 0;
-    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+    // Set boundary nodes from BC (do not evolve them with the PDE)
+    m_vPredictedCrossSectionS[0] = tracer_bc[0];
+    m_vPredictedCrossSectionS[last] = tracer_bc[last];
+
+    for (int i = 1; i < m_nCrossSectionsNumber - 1; i++) {
         if (m_vCrossSectionArea[i] > DRY_AREA) {
             double salt_mass = m_vCrossSectionArea[i] * m_vCrossSectionSalinity[i];
             double delta_mass = m_vCrossSectionSalinityASt[i];
@@ -2804,44 +2832,13 @@ void CSimulation::calculate_salinity_predictor() {
             m_vPredictedCrossSectionS[i] = salt_mass / m_vPredictedCrossSectionArea[i];
             // Clamp to physical range [0, S_ocean]
             if (m_vPredictedCrossSectionS[i] < 0.0) { m_vPredictedCrossSectionS[i] = 0.0; clamp_count++; }
-            if (m_vPredictedCrossSectionS[i] > m_dDownwardSalinityBoundaryValue) { m_vPredictedCrossSectionS[i] = m_dDownwardSalinityBoundaryValue; clamp_count++; }
+            if (m_vPredictedCrossSectionS[i] > down_sal) { m_vPredictedCrossSectionS[i] = down_sal; clamp_count++; }
         } else {
             // Dry area: zero salinity
             m_vPredictedCrossSectionS[i] = 0.0;
         }
     }
     // Removed per-timestep clamping log in predictor
-    
-    // Apply boundary conditions to state variables
-    // Apply upstream BC based on condition type
-    if (nGetUpwardSalinityCondition() == 0) {
-        // Type 0: Only apply if inflow (Q > 0)
-        if (m_vPredictedCrossSectionQ[0] > 0.0) {
-            m_vPredictedCrossSectionS[0] = up_sal;
-        }
-    }
-    else if (nGetUpwardSalinityCondition() == 1 || nGetUpwardSalinityCondition() == 2) {
-        // Type 1/2: Always impose prescribed value
-        m_vPredictedCrossSectionS[0] = up_sal;
-    }
-    // Apply downstream BC based on condition type AND flow direction
-    const double Q_downstream = m_vPredictedCrossSectionQ[last];  // Use predictor flow
-    
-    if (nGetDownwardSalinityCondition() == 1) {
-        // Type 1: Use upstream value (unusual but allowed)
-        m_vPredictedCrossSectionS[last] = up_sal;
-    }
-    else if (nGetDownwardSalinityCondition() == 2) {
-        // Type 2: Radiation BC - depends on flow direction
-        if (Q_downstream < 0.0) {
-            // FLOOD TIDE: Inflow from ocean → impose ocean salinity
-            m_vPredictedCrossSectionS[last] = down_sal;
-        } else {
-            // EBB TIDE: Outflow to ocean → zero-gradient (radiation)
-            // Let estuary water exit naturally without imposing ocean salinity
-            m_vPredictedCrossSectionS[last] = m_vPredictedCrossSectionS[last-1];
-        }
-    }
 }
 
 //======================================================================================================================
@@ -2897,58 +2894,77 @@ void CSimulation::calculate_salinity_corrector() {
         }
     }
 
+    // Apply salinity BC consistently to the tracer field used for face fluxes.
+    // Nodes 0 and last are treated as boundary nodes.
+    const int last = m_nCrossSectionsNumber - 1;
+    vector<double> tracer_bc = m_vPredictedCrossSectionS;
+    {
+        const double Q_up = m_vCorrectedCrossSectionQ[0];
+        if (Q_up > 0.0) {
+            tracer_bc[0] = up_sal;
+        } else {
+            tracer_bc[0] = (m_nCrossSectionsNumber > 1) ? tracer_bc[1] : tracer_bc[0];
+        }
+    }
+    {
+        const double Q_dn = m_vCorrectedCrossSectionQ[last];
+        if (Q_dn < 0.0) {
+            tracer_bc[last] = down_sal;
+        } else {
+            tracer_bc[last] = (m_nCrossSectionsNumber > 1) ? tracer_bc[last - 1] : tracer_bc[last];
+        }
+    }
+
     // Compute TVD-limited advective fluxes at cell faces (using predicted state)
     // Use corrected discharge from hydrodynamic corrector step
     vector<double> tvd_flux(m_nCrossSectionsNumber+1, 0.0);
-    compute_tracer_tvd_flux(m_vPredictedCrossSectionS, m_vCorrectedCrossSectionQ, m_vPredictedCrossSectionArea, tvd_flux);
+    compute_tracer_tvd_flux(tracer_bc, m_vCorrectedCrossSectionQ, m_vPredictedCrossSectionArea, tvd_flux);
 
     // Boundary advective fluxes
-    const int last = m_nCrossSectionsNumber - 1;
     {
         const double Q_up = m_vCorrectedCrossSectionQ[0];
-        const double S_upwind = (Q_up > 0.0) ? up_sal : m_vPredictedCrossSectionS[0];
+        const double S_upwind = (Q_up > 0.0) ? up_sal : tracer_bc[0];
         tvd_flux[0] = Q_up * S_upwind;
     }
     {
         const double Q_dn = m_vCorrectedCrossSectionQ[last];
-        const double S_upwind = (Q_dn < 0.0) ? down_sal : m_vPredictedCrossSectionS[last];
+        const double S_upwind = (Q_dn < 0.0) ? down_sal : tracer_bc[last];
         tvd_flux[m_nCrossSectionsNumber] = Q_dn * S_upwind;
     }
 
-    // Compute advection and diffusion terms (TVD for advection, centered for diffusion)
+    // Compute advection and diffusion terms
     // Equation: ∂(A·S)/∂t = -∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)
-    for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
-        double dx = m_vCrossSectionDX[std::max(1, std::min(i, m_nCrossSectionsNumber-2))];
-        
-        // TVD advection: flux already in units of [kg/s or m³/s·psu]
-        // -∂(Q·S)/∂x is already computed by differencing tvd_flux
-        double d_QS_dx = 0.0;
-        if (i == 0)
-            d_QS_dx = (tvd_flux[1] - tvd_flux[0]) / dx;
-        else if (i == m_nCrossSectionsNumber-1)
-            d_QS_dx = (tvd_flux[m_nCrossSectionsNumber] - tvd_flux[m_nCrossSectionsNumber-1]) / dx;
-        else
-            d_QS_dx = (tvd_flux[i+1] - tvd_flux[i]) / dx;
-
-        // Diffusion term: ∂/∂x(Kh·A·∂S/∂x)
-        // Using centered differences with area at cell center (predicted state)
-        double d_KhAdSdx_dx = 0.0;
-        if (m_dLongitudinalDispersion > 0.0) {
-            double A_i = m_vPredictedCrossSectionArea[i];
-            double S_ip1 = (i < m_nCrossSectionsNumber-1) ? m_vPredictedCrossSectionS[i+1] : (2*m_vPredictedCrossSectionS[i] - m_vPredictedCrossSectionS[i-1]);
-            double S_im1 = (i > 0) ? m_vPredictedCrossSectionS[i-1] : (2*m_vPredictedCrossSectionS[i] - m_vPredictedCrossSectionS[i+1]);
-            
-            // ∂/∂x(Kh·A·∂S/∂x) ≈ Kh·A·∂²S/∂x² for constant Kh and slowly varying A
-            d_KhAdSdx_dx = m_dLongitudinalDispersion * A_i * (S_ip1 - 2*m_vPredictedCrossSectionS[i] + S_im1) / (dx*dx);
+    // Use conservative flux form for diffusion and control-volume length for non-uniform grids.
+    for (int i = 1; i < m_nCrossSectionsNumber - 1; ++i) {
+        const double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+        const double dxR = m_vCrossSectionX[i + 1] - m_vCrossSectionX[i];
+        const double dxCV = 0.5 * (dxL + dxR);
+        if (dxL <= 1e-12 || dxR <= 1e-12 || dxCV <= 1e-12) {
+            m_vCrossSectionSalinityASt[i] = 0.0;
+            continue;
         }
-        
-        // Update: Δ(A·S) = dt * [-∂(Q·S)/∂x + ∂/∂x(Kh·A·∂S/∂x)]
-        m_vCrossSectionSalinityASt[i] = m_dTimestep * (-d_QS_dx + d_KhAdSdx_dx);
+
+        const double d_QS_dx = (tvd_flux[i + 1] - tvd_flux[i]) / dxCV;
+
+        double d_Fd_dx = 0.0;
+        if (m_dLongitudinalDispersion > 0.0) {
+            const double A_L = 0.5 * (m_vPredictedCrossSectionArea[i - 1] + m_vPredictedCrossSectionArea[i]);
+            const double A_R = 0.5 * (m_vPredictedCrossSectionArea[i] + m_vPredictedCrossSectionArea[i + 1]);
+            const double Fd_L = -m_dLongitudinalDispersion * A_L * (tracer_bc[i] - tracer_bc[i - 1]) / dxL;
+            const double Fd_R = -m_dLongitudinalDispersion * A_R * (tracer_bc[i + 1] - tracer_bc[i]) / dxR;
+            d_Fd_dx = (Fd_R - Fd_L) / dxCV;
+        }
+
+        m_vCrossSectionSalinityASt[i] = m_dTimestep * (-d_QS_dx - d_Fd_dx);
     }
 
     // Update salinity conserving salt mass: S_new = (A·S_old + Δ(A·S))/A_new
     static int clamp_count = 0;
-    for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+    // Set boundary nodes from BC (do not evolve them with the PDE)
+    m_vCorrectedCrossSectionS[0] = tracer_bc[0];
+    m_vCorrectedCrossSectionS[last] = tracer_bc[last];
+
+    for (int i = 1; i < m_nCrossSectionsNumber - 1; i++) {
         if (m_vPredictedCrossSectionArea[i] > DRY_AREA) {
             double salt_mass = m_vPredictedCrossSectionArea[i] * m_vPredictedCrossSectionS[i];
             double delta_mass = m_vCrossSectionSalinityASt[i];
@@ -2958,42 +2974,13 @@ void CSimulation::calculate_salinity_corrector() {
             m_vCorrectedCrossSectionS[i] = salt_mass / m_vCorrectedCrossSectionArea[i];
             // Clamp to physical range [0, S_ocean]
             if (m_vCorrectedCrossSectionS[i] < 0.0) { m_vCorrectedCrossSectionS[i] = 0.0; clamp_count++; }
-            if (m_vCorrectedCrossSectionS[i] > m_dDownwardSalinityBoundaryValue) { m_vCorrectedCrossSectionS[i] = m_dDownwardSalinityBoundaryValue; clamp_count++; }
+            if (m_vCorrectedCrossSectionS[i] > down_sal) { m_vCorrectedCrossSectionS[i] = down_sal; clamp_count++; }
         } else {
             // Dry area: zero salinity
             m_vCorrectedCrossSectionS[i] = 0.0;
         }
     }
     // Removed per-timestep clamping log in corrector
-    
-    // Boundary conditions (same logic as predictor)
-    // Apply upstream BC based on condition type
-    if (nGetUpwardSalinityCondition() == 0) {
-        // Type 0: Only apply if inflow (Q > 0)
-        if (m_vCorrectedCrossSectionQ[0] > 0.0) {
-            m_vCorrectedCrossSectionS[0] = up_sal;
-        }
-    }
-    else if (nGetUpwardSalinityCondition() == 1 || nGetUpwardSalinityCondition() == 2) {
-        // Type 1/2: Always impose prescribed value
-        m_vCorrectedCrossSectionS[0] = up_sal;
-    }
-    // Apply downstream BC based on condition type AND flow direction
-    const double Q_downstream = m_vCorrectedCrossSectionQ[last];  // Use corrector flow
-    if (nGetDownwardSalinityCondition() == 1) {
-        // Type 1: Use upstream value (unusual but allowed)
-        m_vCorrectedCrossSectionS[last] = up_sal;
-    }
-    else if (nGetDownwardSalinityCondition() == 2) {
-        // Type 2: Radiation BC - depends on flow direction
-        if (Q_downstream < 0.0) {
-            // FLOOD TIDE: Inflow from ocean → impose ocean salinity
-            m_vCorrectedCrossSectionS[last] = down_sal;
-        } else {
-            // EBB TIDE: Outflow to ocean → zero-gradient (radiation)
-            m_vCorrectedCrossSectionS[last] = m_vCorrectedCrossSectionS[last-1];
-        }
-    }
 }
 
 //======================================================================================================================
