@@ -597,7 +597,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             }
         }
 
-        std::cout << "      d) Hydrographs loaded: " << m_nHydrographsNumber << std::endl;
+        std::cout << "        d) Hydrographs loaded: " << m_nHydrographsNumber << std::endl;
         if (have_any) {
             std::cout << "          - t = [" << format_datetime_from_sim_start(*this, t_min)
                       << " .. " << format_datetime_from_sim_start(*this, t_max)
@@ -845,10 +845,16 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         // Level 2: Save output at EVERY timestep (WARNING: Very slow, huge files)
         // Use only for debugging specific timesteps
         if (m_nLogFileDetail >= 3) {
+            // Ensure derived geometry outputs are consistent with merged state
+            calculateHydraulicParameters();
+            calculateRiverBankUTMCoordinates();
             writer.nSetOutputData(this);
         }
         // Level 1-2: Save only at scheduled output times
         else if (m_bSaveTime) {
+            // Ensure derived geometry outputs are consistent with merged state
+            calculateHydraulicParameters();
+            calculateRiverBankUTMCoordinates();
             writer.nSetOutputData(this);
         }
 
@@ -1370,7 +1376,10 @@ void CSimulation::calculateHydraulicParameters() {
     }
     
     // Select appropriate area vector based on predictor/corrector phase
-    const auto& dArea = (m_nPredictor == 1) ? m_vCrossSectionArea : m_vPredictedCrossSectionArea;
+    // - Predictor (m_nPredictor==1): use current state (t^n)
+    // - Corrector (m_nPredictor==2): use predicted state (t*)
+    // - Post-merge/output (m_nPredictor==0): use merged current state
+    const auto& dArea = (m_nPredictor == 2) ? m_vPredictedCrossSectionArea : m_vCrossSectionArea;
     
     // Loop through all cross-sections and interpolate hydraulic properties
     for (int i = 0; i < nCrossSections; i++) {
