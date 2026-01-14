@@ -83,7 +83,6 @@ CCrossSection::~CCrossSection() = default;
  * @param dValue Numerical value to append
  * 
  * @note Called during CSV parsing (data_reader.cpp)
- * @see calculateI1() for computing I1 from geometry
  */
 void CCrossSection::dAppend2Vector(const string& strItem, double dValue){
     if (strItem == "elevation")
@@ -102,10 +101,6 @@ void CCrossSection::dAppend2Vector(const string& strItem, double dValue){
         m_vLeftRBLocation.push_back(dValue);
     else if (strItem == "right river bank location")
         m_vRightRBLocation.push_back(dValue);
-    // else if (strItem == "I1")
-    //     m_vI1.push_back(dValue);
-    // else if (strItem == "I2")
-    //     m_vI2.push_back(dValue);
 }
 
 /**
@@ -219,45 +214,32 @@ double CCrossSection::dGetLeftY(const int nValue) const {
 double CCrossSection::dGetRightY(const int nValue) const {
   return m_vRightRBLocation[nValue];
 }
-// double CCrossSection::dGetI1(const int nValue) const {
-//     return m_vI1[nValue];
-// }
-// double CCrossSection::dGetI2(const int nValue) const {
-//     return m_vI2[nValue];
-// }
 
 /**
- * @brief Getters for complete hydraulic tables (returns copies)
+ * @brief Getters for complete hydraulic tables (no copies)
  * 
- * Returns entire tabulated vectors:
+ * Returns references to entire tabulated vectors:
  * - Area(elevation), Width(elevation), Hydraulic Radius(elevation)
  * - Water depth levels, Bank locations
- * - I1, I2 pressure integral coefficients
  * 
- * @note Returns by value (copy) - use carefully in tight loops
- * @see precomputeEstuaryData() in simulation.cpp for cached access
+ * @note Returns by const reference (no copy). This is safe as long as
+ *       the CCrossSection object outlives the reference.
  */
-vector<double> CCrossSection::vGetArea() {
-    return m_vArea;
+const vector<double>& CCrossSection::vGetArea() const {
+  return m_vArea;
 }
-vector<double> CCrossSection::vGetHydraulicRadius() {
-    return m_vHydraulicRadius;
+const vector<double>& CCrossSection::vGetHydraulicRadius() const {
+  return m_vHydraulicRadius;
 }
-vector<double> CCrossSection::vGetWaterDepth() {
-    return m_vWaterDepth;
+const vector<double>& CCrossSection::vGetWaterDepth() const {
+  return m_vWaterDepth;
 }
-vector<double> CCrossSection::vGetWidth() {
-    return m_vWidth;
+const vector<double>& CCrossSection::vGetWidth() const {
+  return m_vWidth;
 }
-vector<double> CCrossSection::vGetLeftRBLocation() {
-    return m_vLeftRBLocation;
+const vector<double>& CCrossSection::vGetLeftRBLocation() const {
+  return m_vLeftRBLocation;
 }
-vector<double> CCrossSection::vGetRightRBLocation() {
-    return m_vRightRBLocation;
+const vector<double>& CCrossSection::vGetRightRBLocation() const {
+  return m_vRightRBLocation;
 }
-// vector<double> CCrossSection::vGetI1() {
-//     return m_vI1;
-// }
-// vector<double> CCrossSection::vGetI2() {
-//     return m_vI2;
-// }

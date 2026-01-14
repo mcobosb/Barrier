@@ -128,20 +128,14 @@ class CCrossSection {
         // [[nodiscard]] double dGetI2(int nValue) const;
 
         //! Vector getter
-        vector<double> vGetArea();
-        vector<double> vGetHydraulicRadius();
-        vector<double> vGetWaterDepth();
-        vector<double> vGetWidth();
-        vector<double> vGetRightRBLocation();
-        vector<double> vGetLeftRBLocation();
-        // vector<double> vGetBeta();
-        // vector<double> vGetI2();
+        const vector<double>& vGetArea() const;
+        const vector<double>& vGetHydraulicRadius() const;
+        const vector<double>& vGetWaterDepth() const;
+        const vector<double>& vGetWidth() const;
+        const vector<double>& vGetRightRBLocation() const;
+        const vector<double>& vGetLeftRBLocation() const;
+
         
-        //! Calculate I1 pressure integral for each elevation
-        // void calculateI1();
-        // Calculate first eta > m_dMaxAstronomicalTide where dB/deta > threshold
-        // Calculate first eta > maxAstronomicalTide where dB/deta > threshold and store in vector per section
-        void calculateEtaMaxWidthGradient(double maxAstronomicalTide, double threshold, double& etaWidthGradientThreshold) const;
 
         // Vector to store maximum gradient elevation per section (optional, for external use)
         static std::vector<double> vEtaMaxWidthGradient;
