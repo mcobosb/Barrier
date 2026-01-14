@@ -44,6 +44,90 @@ using std::to_string;
 // Forward declarations for helper functions
 double calc_dynamic_albedo(double lat_deg, int day_of_year, double hour_of_day);
 
+namespace {
+
+std::string format_datetime_from_sim_start(const CSimulation& sim, double t_seconds) {
+    std::tm start_tm = {};
+    start_tm.tm_year = sim.nGetSimStartYear() - 1900;
+    start_tm.tm_mon = sim.nGetSimStartMonth() - 1;
+    start_tm.tm_mday = sim.nGetSimStartDay();
+    start_tm.tm_hour = sim.nGetSimStartHour();
+    start_tm.tm_min = sim.nGetSimStartMin();
+    start_tm.tm_sec = sim.nGetSimStartSec();
+    start_tm.tm_isdst = -1;
+
+    std::time_t start_time = std::mktime(&start_tm);
+    if (start_time == static_cast<std::time_t>(-1)) {
+        return "(invalid start_date)";
+    }
+
+    const auto dt = static_cast<std::time_t>(std::llround(t_seconds));
+    std::time_t abs_time = start_time + dt;
+    std::tm* tm_ptr = std::localtime(&abs_time);
+    if (tm_ptr == nullptr) {
+        return "(invalid datetime)";
+    }
+
+    std::ostringstream oss;
+    oss << std::setfill('0')
+        << std::setw(4) << (tm_ptr->tm_year + 1900) << "-"
+        << std::setw(2) << (tm_ptr->tm_mon + 1) << "-"
+        << std::setw(2) << tm_ptr->tm_mday << " "
+        << std::setw(2) << tm_ptr->tm_hour << ":"
+        << std::setw(2) << tm_ptr->tm_min << ":"
+        << std::setw(2) << tm_ptr->tm_sec;
+    return oss.str();
+}
+
+struct MinMax {
+    double min{0.0};
+    double max{0.0};
+    bool valid{false};
+};
+
+MinMax compute_minmax(const std::vector<double>& v) {
+    if (v.empty()) return {};
+    const auto [it_min, it_max] = std::minmax_element(v.begin(), v.end());
+    return MinMax{*it_min, *it_max, true};
+}
+
+void print_time_series_summary(const char* prefix,
+                              const CSimulation& sim,
+                              const std::vector<double>& t,
+                              const std::vector<double>& v,
+                              const char* units) {
+    std::cout << prefix;
+    if (t.empty() || v.empty()) {
+        std::cout << "(empty)" << std::endl;
+        return;
+    }
+
+    const MinMax t_mm = compute_minmax(t);
+    const MinMax v_mm = compute_minmax(v);
+    std::cout << "          - N = " << v.size();
+    if (t.size() != v.size()) {
+        std::cout << " (time points=" << t.size() << ")";
+    }
+    std::cout << std::endl;
+
+    if (t_mm.valid) {
+        std::cout << "          - t = [" << format_datetime_from_sim_start(sim, t_mm.min)
+                  << " .. " << format_datetime_from_sim_start(sim, t_mm.max)
+                  << "]";
+    }
+    std::cout << std::endl;
+    if (v_mm.valid) {
+        std::cout << "          - min = " << std::setprecision(8) << v_mm.min
+                  << ", max = " << std::setprecision(8) << v_mm.max;
+        if (units && *units) {
+            std::cout << " " << units;
+        }
+    }
+    std::cout << std::endl;
+}
+
+}
+
 
 
 //======================================================================================================================
@@ -190,7 +274,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     std::string extension = configPath.extension().string();
     
 
-    std::cout << "      - Detected configuration file" << std::endl;
+    std::cout << "      1. Reading configuration file" << std::endl;
     
     // Read YAML file content as string (for NetCDF metadata)
     std::ifstream yamlFile(configFile);
@@ -209,10 +293,9 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         return;
     }
 
-    std::cout << "      - Configuration file loaded successfully" << std::endl;
-
     // Display simulation start date
-    std::cout << "      - Simulation start/end date: " << getSimulationStartDateTimeString() << " / " << getSimulationEndDateTimeString() << std::endl;
+    std::cout << "        - Simulation start/end date: " << getSimulationStartDateTimeString() << " / " << getSimulationEndDateTimeString() << std::endl;
+    
 
     // Transfer file paths to reader and simulation
     reader.m_strAlongChannelDataFilename = yamlReader.m_strAlongChannelDataFilename;
@@ -362,10 +445,41 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         LogStream.flush();
     }
     
-    std::cout << "      - Reading input data files" << std::endl;
+    std::cout << "      2. Reading input data files" << std::endl;
     reader.bReadAlongChannelDataFile(this);
     reader.bReadCrossSectionGeometryFile(this);
-    std::cout << "      - Along-channel data and cross-section geometry loaded successfully" << std::endl;
+    {
+        // Cross-section summary (one-time, startup)
+        const MinMax x_mm = compute_minmax(m_vCrossSectionX);
+
+        double z_min = 0.0, z_max = 0.0;
+        double n_min = 0.0, n_max = 0.0;
+        bool have_z = false;
+        bool have_n = false;
+        if (m_nCrossSectionsNumber > 0 && static_cast<int>(estuary.size()) >= m_nCrossSectionsNumber) {
+            z_min = z_max = estuary[0].dGetZ();
+            n_min = n_max = estuary[0].dGetManningNumber();
+            have_z = true;
+            have_n = true;
+            for (int i = 1; i < m_nCrossSectionsNumber; ++i) {
+                z_min = std::min(z_min, estuary[i].dGetZ());
+                z_max = std::max(z_max, estuary[i].dGetZ());
+                n_min = std::min(n_min, estuary[i].dGetManningNumber());
+                n_max = std::max(n_max, estuary[i].dGetManningNumber());
+            }
+        }
+
+        std::cout << "        a) Cross-sections loaded: " << m_nCrossSectionsNumber << std::endl;
+        if (x_mm.valid) {
+            std::cout << "          - X = [ " << std::setprecision(8) << x_mm.min << " .. " << x_mm.max << "] m" << std::endl;
+        }
+        if (have_z) {
+            std::cout << "          - Zbed = [" << std::setprecision(8) << z_min << " .. " << z_max << "] m" << std::endl;
+        }
+        if (have_n) {
+            std::cout << "          - Manning n = [" << std::setprecision(8) << n_min << " .. " << n_max << "]" << std::endl;
+        }
+    }
     
     // Print geometry and configuration summary AFTER reading geometry
     if (m_nLogFileDetail >= 1) {
@@ -401,11 +515,17 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     }
     if (m_nUpwardEstuarineCondition > 1) {
         CDataReader::bReadUpwardBoundaryConditionFile(this);
-        std::cout << "      - Upstream boundary condition file loaded successfully" << std::endl;
+        const char* kind = (m_nUpwardEstuarineCondition == 3) ? "discharge" : "level";
+        const char* units = (m_nUpwardEstuarineCondition == 3) ? "m3/s" : "m";
+        std::cout << "        b) Upstream hydrodynamic BC (" << kind << "): " << std::endl;
+        print_time_series_summary("", *this, m_vUpwardBoundaryConditionTime, m_vUpwardBoundaryConditionValue, units);
     }
     if (m_nDownwardEstuarineCondition > 1) {
         CDataReader::bReadDownwardBoundaryConditionFile(this);
-        std::cout << "      - Downstream boundary condition file loaded successfully" << std::endl;
+        const char* kind = (m_nDownwardEstuarineCondition == 3) ? "discharge" : "level";
+        const char* units = (m_nDownwardEstuarineCondition == 3) ? "m3/s" : "m";
+        std::cout << "        c) Downstream hydrodynamic BC (" << kind << "): " << std::endl;
+        print_time_series_summary("", *this, m_vDownwardBoundaryConditionTime, m_vDownwardBoundaryConditionValue, units);
     }
     // === Temperature: Boundary conditions and forcing ===
     if (m_bDoWaterTemperature) {
@@ -448,7 +568,43 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     }
     if (m_bHydroFile) {
         reader.bReadHydrographsFile(this);
-        std::cout << "      - Hydrographs file loaded successfully" << std::endl;
+        // Hydrographs summary (global across all hydrographs)
+        double t_min = 0.0, t_max = 0.0;
+        double q_min = 0.0, q_max = 0.0;
+        bool have_any = false;
+        for (int i = 0; i < m_nHydrographsNumber; ++i) {
+            const auto& ht = hydrographs[i].vGetTime();
+            const auto& hq = hydrographs[i].vGetQ();
+            if (ht.empty() || hq.empty()) {
+                continue;
+            }
+            const MinMax ht_mm = compute_minmax(ht);
+            const MinMax hq_mm = compute_minmax(hq);
+            if (!ht_mm.valid || !hq_mm.valid) {
+                continue;
+            }
+            if (!have_any) {
+                t_min = ht_mm.min;
+                t_max = ht_mm.max;
+                q_min = hq_mm.min;
+                q_max = hq_mm.max;
+                have_any = true;
+            } else {
+                t_min = std::min(t_min, ht_mm.min);
+                t_max = std::max(t_max, ht_mm.max);
+                q_min = std::min(q_min, hq_mm.min);
+                q_max = std::max(q_max, hq_mm.max);
+            }
+        }
+
+        std::cout << "      d) Hydrographs loaded: " << m_nHydrographsNumber << std::endl;
+        if (have_any) {
+            std::cout << "          - t = [" << format_datetime_from_sim_start(*this, t_min)
+                      << " .. " << format_datetime_from_sim_start(*this, t_max)
+                      << "]" << std::endl;
+            std::cout << "          - Q min = " << std::setprecision(8) << q_min
+                      << ", Q max = " << std::setprecision(8) << q_max << " m3/s" << std::endl;
+        }
     }
 
     // Initialize simulation vectors
@@ -475,9 +631,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
     // Restore simulation state from NetCDF if continuing previous run
     if (m_bContinueSimulation && !m_strContinueNetcdfPath.empty()) {
-        std::cout << "      - Loading initial NetCDF for continuing simulation: " << m_strContinueNetcdfPath << std::endl;
         reader.bRestoreStateFromNetCDF(this, m_strContinueNetcdfPath);
-        std::cout << "      - State restored successfully from NetCDF" << std::endl;
+        std::cout << "      3. State restored successfully from NetCDF:" << m_strContinueNetcdfPath << std::endl;
     }
     
     // Apply bathymetry smoothing before calculating slopes (if enabled)
@@ -508,7 +663,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     std::string m_strOutFileName = generateOutputFileName();
     m_strOutFile += m_strOutFileName;
     
-    std::cout << "      - Output file: " << m_strOutFile << std::endl;
+    std::cout << "      4. Output file: " << m_strOutFile << std::endl;
     writer.nDefineNetCDFFile(this);
 
     // Apply dry bed conditions if enabled
@@ -1767,10 +1922,19 @@ void CSimulation::calculateBoundaryConditions() {
 
     // Lateral inflows (hydrographs) at specified cross-sections
     if (m_nHydrographsNumber > 0) {
+        // Recompute every timestep (no stale values) and accumulate contributions
+        // if multiple hydrographs map to the same cross-section.
+        std::fill(m_vLateralSourcesAtT.begin(), m_vLateralSourcesAtT.end(), 0.0);
         for (int i = 0; i < m_nHydrographsNumber; i++) {
-            m_vLateralSourcesAtT[hydrographs[i].m_nNearestCrossSectionNo] = linearInterpolation1d(m_dCurrentTime, 
-                                                                                                  hydrographs[i].vGetTime(), 
-                                                                                                  hydrographs[i].vGetQ());
+            const int node = hydrographs[i].m_nNearestCrossSectionNo;
+            if (node < 0 || node >= m_nCrossSectionsNumber) {
+                continue;
+            }
+            m_vLateralSourcesAtT[node] += linearInterpolation1d(
+                m_dCurrentTime,
+                hydrographs[i].vGetTime(),
+                hydrographs[i].vGetQ()
+            );
         }
     }
 }
@@ -2482,16 +2646,8 @@ void CSimulation::updatePredictorBoundaries() {
         }
     }
 
-    //==============================================================================================================
-    // LATERAL INFLOWS (HYDROGRAPHS)
-    //==============================================================================================================
-    // Add lateral discharge from tributaries/sources at specified cross-sections
-    for (int i = 0; i < nGetHydrographsNumber(); i++) {
-        int node = hydrographs[i].m_nNearestCrossSectionNo;
-        if (node >= 0 && node < m_nCrossSectionsNumber) {
-            m_vPredictedCrossSectionQ[node] += m_vLateralSourcesAtT[node];
-        }
-    }
+    // Lateral inflows are handled as a continuity source term (Gv0 = Ql/Δx)
+    // in calculateSourceTerms(). Do not add them directly to Q here.
 
     //==============================================================================================================
     // DOWNSTREAM BOUNDARY CONDITION
@@ -2614,15 +2770,8 @@ void CSimulation::updateCorrectorBoundaries() {
         }
     }
 
-    //==============================================================================================================
-    // LATERAL INFLOWS (HYDROGRAPHS)
-    //==============================================================================================================
-    for (int i = 0; i < nGetHydrographsNumber(); i++) {
-        int node = hydrographs[i].m_nNearestCrossSectionNo;
-        if (node >= 0 && node < m_nCrossSectionsNumber) {
-            m_vCorrectedCrossSectionQ[node] += m_vLateralSourcesAtT[node];
-        }
-    }
+    // Lateral inflows are handled as a continuity source term (Gv0 = Ql/Δx)
+    // in calculateSourceTerms(). Do not add them directly to Q here.
 
     //==============================================================================================================
     // DOWNSTREAM BOUNDARY CONDITION - Corrector
@@ -3892,7 +4041,7 @@ void CSimulation::AnnounceProgress() {
     std::tm* tm_current = std::localtime(&t_current);
 
     // Imprimir fecha y hora en formato YYYY-MM-DD HH:MM:SS
-    char datetime_buf[32];
+    char datetime_buf[40];
     std::strftime(datetime_buf, sizeof(datetime_buf), "%Y-%m-%d %H:%M:%S", tm_current);
 
     cout << "\r    - Elapsed[Remaining] Time: " << std::fixed << setprecision(3) << setw(6) << sdElapsed <<"[" << std::fixed << setprecision(3) << setw(6) << sdToGo << "] s - Progress: " << std::fixed << setprecision(3) << setw(6) << 100 * m_dCurrentTime / m_dSimDuration  << "% - SimDate: " << datetime_buf << std::flush;
@@ -4993,11 +5142,3 @@ std::string CSimulation::generateOutputFileName() const {
     
     return filename.str();
 }
-
-
-
-
-// === INLINE HELPER FUNCTIONS ===
-// calc_Lv(), calc_rho_air(), and calc_albedo_briegleb() are defined as inline functions
-// in simulation.h for maximum performance (~10x faster than function calls for small functions).
-

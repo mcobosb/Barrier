@@ -212,7 +212,7 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimula
             }
             
             m_pSimulation->dSetSimulationDuration(duration_seconds);
-            std::cout << "      - Calculated duration: " << duration_seconds 
+            std::cout << "        - Calculated duration: " << duration_seconds 
                       << " s (" << duration_seconds / 86400.0 << " days)" << std::endl;
         } else {
             std::cerr << "❌ Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS" << std::endl;
@@ -432,7 +432,7 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
             else if (method == "roe") m_pSimulation->nSetEquationLimiterFlux(2);
             else if (method == "vanleer") m_pSimulation->nSetEquationLimiterFlux(3);
             else if (method == "vanalbada") m_pSimulation->nSetEquationLimiterFlux(4);
-            std::cout << "      - Hydrodynamics limiter: " << method << std::endl;
+            std::cout << "        - Hydrodynamics limiter: " << method << std::endl;
         }
         
         // Optional: separate limiter for transport (salinity/temperature)
@@ -455,14 +455,14 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
             m_pSimulation->nSetTransportLimiterFlux(transport_limiter, use_independent);
             
             if (transport_limiter == 0) {
-                std::cout << "      - Transport limiter: NONE (1st-order upwind)" << std::endl;
+                std::cout << "        - Transport limiter: NONE (1st-order upwind)" << std::endl;
             } else {
-                std::cout << "      - Transport limiter: " << method << std::endl;
+                std::cout << "        - Transport limiter: " << method << std::endl;
             }
         } else {
             // Use same limiter for transport as for hydrodynamics
             m_pSimulation->nSetTransportLimiterFlux(0, false);
-            std::cout << "      - Transport limiter: same as hydrodynamics" << std::endl;
+            std::cout << "        - Transport limiter: same as hydrodynamics" << std::endl;
         }
         
         if (tvd["psi_formula"]) {
