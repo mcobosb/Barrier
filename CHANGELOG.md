@@ -1,3 +1,37 @@
+## [Unreleased]
+
+- (no changes yet)
+
+---
+
+## [0.12.0] - 2026-01-14
+
+### Added
+- Hydrodynamic upstream boundary-condition support for discharge time series (`boundary_conditions.upstream.type: discharge`).
+- Prescribed (spatially uniform) water temperature time series mode (`transport.temperature.given_file`).
+- Embed YAML configuration content into NetCDF output (`yaml_configuration`) to preserve full run provenance.
+- Viewer: more robust NetCDF loading (env var `NETCDF_PATH`, caching) and flood-line (left/right bank) map overlay from UTM coordinates.
+
+### Diagnostics
+- More informative startup console summaries for:
+  - Cross-sections (count and ranges)
+  - Hydrodynamic boundary-condition time series (type, date range, min/max)
+  - Hydrographs (count, date range, min/max)
+- Clearer startup step numbering and log output organization.
+
+### Fixes
+- Lateral inflows (hydrographs): accumulate multiple hydrographs per cross-section and avoid double-counting (handled via continuity source term).
+- Boundary-condition application robustness improvements (time-series types, safer handling and reporting).
+- Continue-from-NetCDF now validates spatial discretization (and warns on geometry/X mismatches).
+
+### Performance
+- Cross-section tabulated getters now return `const std::vector<double>&` instead of copies.
+
+### Changed
+- Hydrodynamic/transport flux computations refactored toward a conservative formulation.
+
+---
+
 ## [0.11.0] - 2025-12-23
 
 ### Major Features
