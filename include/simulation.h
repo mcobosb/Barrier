@@ -981,11 +981,11 @@ public:
     void updateReservoirTemperature0D();
 
     //! Calculate adaptive Manning's n coefficient based on water level
-    //! Returns n(η) varying linearly between 1.0 (submerged) and 2.0 (emergent)
+    //! Returns n(η) varying linearly between 1.0 (mean water level) and 1.2 (one meter above mwl)
     static inline double n_eta(double eta, double maxTide) {
         if (eta <= 0) return 1.0;
-        if (eta >= maxTide) return 1.2;
-        return 1.0 + 0.2*eta / maxTide;
+        if (eta >= 1) return 1.2;
+        return 1.0 + 0.2*eta;
     }
     
     static double getMaxAstronomicalTide(const std::string& tidesFile);
