@@ -500,10 +500,10 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         std::cout << "        " << section_label << ") Cross-sections loaded: " << m_nCrossSectionsNumber << std::endl;
         if (!reader.m_strAlongChannelDataFilename.empty()) {
-            std::cout << "          - Along-channel file: " << reader.m_strAlongChannelDataFilename << std::endl;
+            std::cout << "          · Along-channel file: " << reader.m_strAlongChannelDataFilename << std::endl;
         }
         if (!reader.m_strCrossSectionsFilename.empty()) {
-            std::cout << "          - Cross-sections file: " << reader.m_strCrossSectionsFilename << std::endl;
+            std::cout << "          · Cross-sections file: " << reader.m_strCrossSectionsFilename << std::endl;
         }
         if (x_mm.valid) {
             std::cout << "          - X: [ " << std::setprecision(8) << x_mm.min << " .. " << x_mm.max << "] m" << std::endl;
@@ -568,7 +568,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         const char* units = upstream_is_discharge ? "m3/s" : "m";
         std::cout << "        " << section_label << ") Upstream hydrodynamic BC (" << kind << "): " << std::endl;
         if (!m_strUpwardBoundaryConditionFilename.empty()) {
-            std::cout << "          - File: " << m_strUpwardBoundaryConditionFilename << std::endl;
+            std::cout << "          · File: " << m_strUpwardBoundaryConditionFilename << std::endl;
         }
         print_time_series_summary("", *this, m_vUpwardBoundaryConditionTime, m_vUpwardBoundaryConditionValue, units);
 
@@ -606,7 +606,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         const char* units = (m_nDownwardEstuarineCondition == 3) ? "m3/s" : "m";
         std::cout << "        " << section_label << ") Downstream hydrodynamic BC (" << kind << "): " << std::endl;
         if (!m_strDownwardBoundaryConditionFilename.empty()) {
-            std::cout << "          - File: " << m_strDownwardBoundaryConditionFilename << std::endl;
+            std::cout << "          · File: " << m_strDownwardBoundaryConditionFilename << std::endl;
         }
         print_time_series_summary("", *this, m_vDownwardBoundaryConditionTime, m_vDownwardBoundaryConditionValue, units);
 
@@ -684,7 +684,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         std::cout << "        " << section_label << ") Hydrographs loaded: " << m_nHydrographsNumber << std::endl;
         if (!reader.m_strHydroFilename.empty()) {
-            std::cout << "          - File: " << reader.m_strHydroFilename << std::endl;
+            std::cout << "          · File: " << reader.m_strHydroFilename << std::endl;
         }
         if (have_any) {
             std::cout << "          - t: [" << format_datetime_from_sim_start(*this, t_min)
