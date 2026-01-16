@@ -203,9 +203,6 @@ CSimulation::CSimulation() {
     m_dNextDownwardBoundaryValue = 0.0;
     m_nEquationSedimentTransport = 0;
 
-    // Tide and geometry parameters
-    m_dMaxAstronomicalTide = 0.0;
-
     // Simulation start date/time (default: 2024-01-01 00:00:00)
     m_nSimStartYear = 2024;
     m_nSimStartMonth = 1;
@@ -1967,8 +1964,8 @@ void CSimulation::calculateBoundaryConditions() {
                                                           m_vEstuaryAreas[1]);
     }
     
-    // Upstream boundary (condition type 3/4 = discharge prescribed from time series)
-    if ((nGetUpwardEstuarineCondition() == 3 || nGetUpwardEstuarineCondition() == 4) && !m_vUpwardBoundaryConditionTime.empty()) {
+    // Upstream boundary (condition type 3 = discharge prescribed from time series)
+    if ((nGetUpwardEstuarineCondition() == 3)) {
         // Interpolate discharge from time series at current time
         m_dUpwardBoundaryValue = linearInterpolation1d(m_dCurrentTime, 
                                                        m_vUpwardBoundaryConditionTime, 
@@ -2223,7 +2220,7 @@ void CSimulation::calculate_GS_A_terms() {
             if (m_bManningDependsOnLevel) {
                 // Use the *active* water depth already computed by calculateHydraulicParameters()
                 // (current state in predictor, predicted state in corrector).
-                neta = pow(n_eta(m_vCrossSectionWaterDepth[i], m_dMaxAstronomicalTide), 2.0);
+                neta = pow(n_eta(m_vCrossSectionWaterDepth[i]), 2.0);
             }
             
             // Friction slope: Sf = (n²*η*|Q|*Q) / (A²*R^(4/3))
@@ -2252,7 +2249,7 @@ void CSimulation::calculate_GS_A_terms() {
             if (m_nPredictor == 1) {
                 double neta = 1.0;
                 if (m_bManningDependsOnLevel) {
-                    neta = pow(n_eta(m_vCrossSectionWaterDepth[i], m_dMaxAstronomicalTide), 2.0);
+                    neta = pow(n_eta(m_vCrossSectionWaterDepth[i]), 2.0);
                 }
                 if (m_vCrossSectionArea[i] > DRY_AREA && m_vCrossSectionHydraulicRadius[i] > 1e-6) {
                     // ⚡ OPTIMIZATION: Precalculate repeated terms
@@ -2272,7 +2269,7 @@ void CSimulation::calculate_GS_A_terms() {
             else {
                 double neta = 1.0;
                 if (m_bManningDependsOnLevel) {
-                    neta = pow(n_eta(m_vCrossSectionWaterDepth[i], m_dMaxAstronomicalTide), 2.0);
+                    neta = pow(n_eta(m_vCrossSectionWaterDepth[i]), 2.0);
                 }
                 if (m_vPredictedCrossSectionArea[i] > DRY_AREA && m_vCrossSectionHydraulicRadius[i] > 1e-6) {
                     // ⚡ OPTIMIZATION: Precalculate repeated terms
@@ -2563,12 +2560,6 @@ void CSimulation::applyBoundariesToCurrentState() {
         m_vCrossSectionQ[0] = m_vCrossSectionArea[0] * sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                              pow(R, 2.0/3.0) * sign_S0 / (m_vCrossSectionManningNumber[0] + 1e-10);
     }
-    else if (nGetUpwardEstuarineCondition() == 4) {
-        // Type 4: Dam release + reflective head.
-        // Prescribe inflow discharge but keep a reflective elevation closure (dη/dx≈0 → A[0]=A[1]).
-        m_vCrossSectionQ[0] = m_dUpwardBoundaryValue;
-        m_vCrossSectionArea[0] = std::max(DRY_AREA, m_vCrossSectionArea[1]);
-    }
     else {  // Type 3: prescribed discharge (characteristic compatibility)
         // Prescribe Q and obtain A from the outgoing characteristic (R- from node 1).
         // This reduces tidal reflection at the head compared to a pure zero-gradient A.
@@ -2691,11 +2682,6 @@ void CSimulation::applyBoundariesToPredictorState() {
         double sign_S0 = (m_vCrossSectionBedSlope[0] >= 0) ? 1.0 : -1.0;
         m_vPredictedCrossSectionQ[0] = m_vPredictedCrossSectionArea[0] * sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                        pow(R, 2.0/3.0) * sign_S0 / (m_vCrossSectionManningNumber[0] + 1e-10);
-    }
-    else if (nGetUpwardEstuarineCondition() == 4) {
-        // Type 4: Dam release + reflective head (predictor state)
-        m_vPredictedCrossSectionQ[0] = m_dUpwardBoundaryValue;
-        m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
     }
     else {  // Type 3: prescribed discharge (characteristic compatibility)
         const double Qin = m_dUpwardBoundaryValue;
@@ -2830,11 +2816,6 @@ void CSimulation::updatePredictorBoundaries() {
                                       sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                       pow(m_vCrossSectionHydraulicRadius[0], 2.0/3.0) * 
                                       sign_S0 / (m_vCrossSectionManningNumber[0] + 1e-10);
-    }
-    else if (nGetUpwardEstuarineCondition() == 4) {
-        // Type 4: Dam release + reflective head
-        m_vPredictedCrossSectionQ[0] = m_dUpwardBoundaryValue;
-        m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA, m_vCrossSectionArea[1]);
     }
     else {
         // Type 3: Prescribed discharge (characteristic compatibility)
@@ -2982,11 +2963,6 @@ void CSimulation::updateCorrectorBoundaries() {
                                       sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                       pow(m_vCrossSectionHydraulicRadius[0], 2.0/3.0) * 
                                       sign_S0 / (m_vCrossSectionManningNumber[0] + 1e-10);
-    }
-    else if (nGetUpwardEstuarineCondition() == 4) {
-        // Type 4: Dam release + reflective head
-        m_vCorrectedCrossSectionQ[0] = m_dUpwardBoundaryValue;
-        m_vCorrectedCrossSectionArea[0] = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
     }
     else {
         // Type 3: Prescribed discharge (characteristic compatibility)
@@ -4133,31 +4109,6 @@ void CSimulation::smoothSolution() {
     }
 }
 
-/**
- * @brief Read tides.csv and extract maximum astronomical tide level
- * 
- * Parses CSV file with format: time,elevation
- * 
- * @param tidesFile Path to tides.csv file
- * @return Maximum tide elevation (m), or 0.0 if file not found/invalid
- */
-double CSimulation::getMaxAstronomicalTide(const std::string& tidesFile) {
-    std::ifstream file(tidesFile);
-    if (!file.is_open()) return 0.0;
-    double maxTide = -1e9;
-    std::string line;
-    while (std::getline(file, line)) {
-        if (line.empty()) continue;
-        size_t comma = line.find(',');
-        if (comma == std::string::npos) continue;
-        try {
-            double value = std::stod(line.substr(comma + 1));
-            if (value > maxTide) maxTide = value;
-        } catch (...) { continue; }
-    }
-    file.close();
-    return maxTide;
-}
 
 /**
  * @brief Accessor for simulation state variables (for post-processing, NetCDF output, debugging)
