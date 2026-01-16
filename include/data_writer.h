@@ -39,6 +39,11 @@ public:
 private:
     mutable int m_ncId = -1;  // Make m_ncId mutable to allow modification in const methods
 
+    // IDs for static (x-only) variables written once per file
+    mutable int m_nVarIdManningX = -1;   // n(x)
+    mutable int m_nVarIdStorageSfX = -1; // Sf(x)
+    mutable bool m_bWroteStaticX = false;
+
     //! Ids for x and t and NetCDF file
     int n_XId, n_TId;
 

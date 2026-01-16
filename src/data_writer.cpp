@@ -94,6 +94,10 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["n"]["longname"] = "manning coefficient";
     m_mVariableDefinitions["n"]["units"] = "s/m^(1/3)";
 
+    m_mVariableDefinitions["Sf"]["description"] = "Lateral storage factor S (dimensionless, >=1)";
+    m_mVariableDefinitions["Sf"]["longname"] = "lateral storage factor";
+    m_mVariableDefinitions["Sf"]["units"] = "";
+
     m_mVariableDefinitions["level"]["description"] = "Water depth";
     m_mVariableDefinitions["level"]["longname"] = "water depth";
     m_mVariableDefinitions["level"]["units"] = "m";
@@ -249,7 +253,44 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
     for (const auto & m_vOutputVariable : m_pSimulation->m_vOutputVariables) {
         const char *outputVariableName = m_vOutputVariable.c_str();
         int varId;  // Variable local para cada variable
-        
+
+        // Special case: Manning n is constant in time → store as 1D n(x)
+        if (m_vOutputVariable == "n") {
+            const int x_dim = n_XId;
+            status = nc_def_var(m_ncId, outputVariableName, NC_FLOAT, 1, &x_dim, &varId);
+            if (status != NC_NOERR) {
+                std::cerr << "Error defining variable '" << outputVariableName
+                          << "': " << nc_strerror(status) << std::endl;
+                continue;
+            }
+
+            // Compression for 1D variable is optional but harmless
+            status = nc_def_var_deflate(m_ncId, varId, 1, 1, 5);
+            if (status != NC_NOERR) {
+                std::cerr << "Warning: Could not enable compression for '" << outputVariableName
+                          << "': " << nc_strerror(status) << std::endl;
+            }
+
+            // Chunking for 1D variable
+            size_t chunks[1] = {static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber)};
+            status = nc_def_var_chunking(m_ncId, varId, NC_CHUNKED, chunks);
+            if (status != NC_NOERR) {
+                std::cerr << "Warning: Could not set chunking for '" << outputVariableName
+                          << "': " << nc_strerror(status) << std::endl;
+            }
+
+            std::string longname = strGetVariableMetadata(outputVariableName, "longname");
+            std::string units = strGetVariableMetadata(outputVariableName, "units");
+            std::string description = strGetVariableMetadata(outputVariableName, "description");
+            if (!longname.empty()) nc_put_att_text(m_ncId, varId, "long_name", longname.length(), longname.c_str());
+            if (!units.empty()) nc_put_att_text(m_ncId, varId, "units", units.length(), units.c_str());
+            if (!description.empty()) nc_put_att_text(m_ncId, varId, "description", description.length(), description.c_str());
+
+            m_mVariableIds[outputVariableName] = varId;
+            m_nVarIdManningX = varId;
+            continue;
+        }
+
         status = nc_def_var(m_ncId, outputVariableName, NC_FLOAT, 2, n_DimensionsIds, &varId);
         if (status != NC_NOERR) {
             std::cerr << "Error defining variable '" << outputVariableName 
@@ -299,6 +340,47 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
 
         //! Store the specific ID for each variable
         m_mVariableIds[outputVariableName] = varId;
+    }
+
+    // Also store static (x-only) profiles for variables that are constant in time.
+    // - n(x): Manning roughness profile
+    // - Sf(x): lateral storage factor profile
+    // These are always defined if their names are not already used by 2D outputs.
+    {
+        const int x_dim = n_XId;
+
+        if (m_mVariableIds.find("n") == m_mVariableIds.end()) {
+            int varId = -1;
+            status = nc_def_var(m_ncId, "n", NC_FLOAT, 1, &x_dim, &varId);
+            if (status == NC_NOERR) {
+                const std::string longname = strGetVariableMetadata("n", "longname");
+                const std::string units = strGetVariableMetadata("n", "units");
+                const std::string description = strGetVariableMetadata("n", "description");
+                if (!longname.empty()) nc_put_att_text(m_ncId, varId, "long_name", longname.length(), longname.c_str());
+                if (!units.empty()) nc_put_att_text(m_ncId, varId, "units", units.length(), units.c_str());
+                if (!description.empty()) nc_put_att_text(m_ncId, varId, "description", description.length(), description.c_str());
+                m_mVariableIds["n"] = varId;
+                m_nVarIdManningX = varId;
+            } else {
+                std::cerr << "Warning: could not define static variable 'n': " << nc_strerror(status) << std::endl;
+            }
+        }
+
+        if (m_mVariableIds.find("Sf") == m_mVariableIds.end()) {
+            int varId = -1;
+            status = nc_def_var(m_ncId, "Sf", NC_FLOAT, 1, &x_dim, &varId);
+            if (status == NC_NOERR) {
+                const std::string longname = strGetVariableMetadata("Sf", "longname");
+                const std::string units = strGetVariableMetadata("Sf", "units");
+                const std::string description = strGetVariableMetadata("Sf", "description");
+                if (!longname.empty()) nc_put_att_text(m_ncId, varId, "long_name", longname.length(), longname.c_str());
+                if (!units.empty()) nc_put_att_text(m_ncId, varId, "units", units.length(), units.c_str());
+                if (!description.empty()) nc_put_att_text(m_ncId, varId, "description", description.length(), description.c_str());
+                m_nVarIdStorageSfX = varId;
+            } else {
+                std::cerr << "Warning: could not define static variable 'Sf': " << nc_strerror(status) << std::endl;
+            }
+        }
     }
 
     //! Include global attributes - use actual length
@@ -424,6 +506,43 @@ string CDataWriter::strGetVariableMetadata(const string& strVariable, const stri
 void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
 
     int status = 0;
+
+    // Write static (x-only) variables once.
+    if (!m_bWroteStaticX) {
+        const int N = m_pSimulation->m_nCrossSectionsNumber;
+        if (N > 0) {
+            if (m_nVarIdManningX >= 0) {
+                vector<float> n_x(static_cast<size_t>(N), 0.0f);
+                // Prefer geometry-defined Manning profile if available.
+                if (static_cast<int>(m_pSimulation->estuary.size()) >= N) {
+                    for (int i = 0; i < N; ++i) {
+                        n_x[static_cast<size_t>(i)] = static_cast<float>(m_pSimulation->estuary[i].dGetManningNumber());
+                    }
+                } else if (m_pSimulation->m_vCrossSectionManningNumber.size() == static_cast<size_t>(N)) {
+                    for (int i = 0; i < N; ++i) {
+                        n_x[static_cast<size_t>(i)] = static_cast<float>(m_pSimulation->m_vCrossSectionManningNumber[static_cast<size_t>(i)]);
+                    }
+                }
+                status = nc_put_var_float(m_ncId, m_nVarIdManningX, n_x.data());
+                if (status != NC_NOERR) {
+                    std::cerr << "Error writing static variable 'n': " << nc_strerror(status) << std::endl;
+                }
+            }
+
+            if (m_nVarIdStorageSfX >= 0) {
+                vector<float> sf_x(static_cast<size_t>(N), 1.0f);
+                for (int i = 0; i < N; ++i) {
+                    sf_x[static_cast<size_t>(i)] = static_cast<float>(m_pSimulation->dGetLateralStorageFactor(i));
+                }
+                status = nc_put_var_float(m_ncId, m_nVarIdStorageSfX, sf_x.data());
+                if (status != NC_NOERR) {
+                    std::cerr << "Error writing static variable 'Sf': " << nc_strerror(status) << std::endl;
+                }
+            }
+        }
+        m_bWroteStaticX = true;
+    }
+
     //! Choose to save all timestep if m_nLogFileDetail == 2 or only when indicated
     size_t start[2] = {static_cast<size_t>(m_pSimulation->m_nTimeId), 0};
     if (m_pSimulation->m_nLogFileDetail == 2 || m_pSimulation->bGetSaveAllTimesteps()) {
@@ -443,6 +562,11 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
 
     //! Write variable data
     for (const auto& strOutputVariable : m_pSimulation->m_vOutputVariables) {
+        // n is stored as 1D n(x) (static) and already written above.
+        if (strOutputVariable == "n" && m_nVarIdManningX >= 0) {
+            continue;
+        }
+
         if (m_mVariableIds.find(strOutputVariable) == m_mVariableIds.end()) {
             std::cerr << "Variable ID for '" << strOutputVariable << "' not found!" << std::endl;
             continue;
