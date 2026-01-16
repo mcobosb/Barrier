@@ -189,6 +189,13 @@ public:
     
     //! Smooth solution (regularization) during simulation?
     bool m_bDoSmoothSolution{false};
+
+    //! Auto-smoothing trigger threshold computed from upstream discharge time series (|Q|, m3/s).
+    //! 0 means "not available" (e.g., upstream BC is not type 3 or no time series loaded).
+    double m_dAutoSmoothAbsQThreshold{0.0};
+
+    //! Per-timestep marker: smoothing was auto-enabled this timestep (for log "*")
+    bool m_bAutoSmoothAppliedThisStep{false};
     
     //! Save at every computational timestep (for debugging)?
     bool m_bSaveAllTimesteps{false};

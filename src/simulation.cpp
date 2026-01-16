@@ -91,6 +91,15 @@ MinMax compute_minmax(const std::vector<double>& v) {
     return MinMax{*it_min, *it_max, true};
 }
 
+double quantile_copy(std::vector<double> v, double q) {
+    if (v.empty()) return 0.0;
+    if (q <= 0.0) return *std::min_element(v.begin(), v.end());
+    if (q >= 1.0) return *std::max_element(v.begin(), v.end());
+    const size_t k = static_cast<size_t>(std::floor(q * static_cast<double>(v.size() - 1)));
+    std::nth_element(v.begin(), v.begin() + static_cast<std::ptrdiff_t>(k), v.end());
+    return v[k];
+}
+
 void print_time_series_summary(const char* prefix,
                               const CSimulation& sim,
                               const std::vector<double>& t,
@@ -494,6 +503,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         LogStream << "  - Surface gradient method: " << (m_bDoSurfaceGradientMethod ? "YES" : "NO") << "\n";
         LogStream << "  - Source term balance: " << (m_bDoSourceTermBalance ? "YES" : "NO") << "\n";
         LogStream << "  - Solution regularization: " << (m_bDoSmoothSolution ? "YES" : "NO") << "\n";
+        LogStream << "  - Auto regularization on extreme Q: AUTO (runtime-detected; marked with '*')\n";
         if (m_bDoSmoothSolution) {
             LogStream << "    • Passes: " << m_nSolutionSmoothingPasses << "\n";
             LogStream << "    • Alpha: " << m_dSolutionSmoothingAlpha << "\n";
@@ -515,10 +525,37 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     }
     if (m_nUpwardEstuarineCondition > 1) {
         CDataReader::bReadUpwardBoundaryConditionFile(this);
-        const char* kind = (m_nUpwardEstuarineCondition == 3) ? "discharge" : "level";
-        const char* units = (m_nUpwardEstuarineCondition == 3) ? "m3/s" : "m";
+        const bool upstream_is_discharge = (m_nUpwardEstuarineCondition == 3 || m_nUpwardEstuarineCondition == 4);
+        const char* kind = upstream_is_discharge ? "discharge" : "level";
+        const char* units = upstream_is_discharge ? "m3/s" : "m";
         std::cout << "        b) Upstream hydrodynamic BC (" << kind << "): " << std::endl;
         print_time_series_summary("", *this, m_vUpwardBoundaryConditionTime, m_vUpwardBoundaryConditionValue, units);
+
+        // Auto-detect an "extreme discharge" threshold from the upstream discharge time series.
+        // This avoids relying on config.yaml while still being data-adaptive.
+        m_dAutoSmoothAbsQThreshold = 0.0;
+        if ((m_nUpwardEstuarineCondition == 3 || m_nUpwardEstuarineCondition == 4) && !m_vUpwardBoundaryConditionValue.empty()) {
+            std::vector<double> absq;
+            absq.reserve(m_vUpwardBoundaryConditionValue.size());
+            for (double q : m_vUpwardBoundaryConditionValue) absq.push_back(std::fabs(q));
+
+            const double q99 = quantile_copy(absq, 0.99);
+            const double q995 = quantile_copy(absq, 0.995);
+            const double qmax = *std::max_element(absq.begin(), absq.end());
+
+            // Use an upper-tail quantile (robust to single spikes). If the record is short,
+            // q99~qmax anyway. Prefer the more selective of q99 and q995 when available.
+            const double q_ext = std::max(q99, q995);
+            m_dAutoSmoothAbsQThreshold = (q_ext > 0.0) ? q_ext : qmax;
+
+            if (m_nLogFileDetail >= 1) {
+                std::ofstream LogStream(m_strLogFile.c_str(), std::ios_base::app);
+                LogStream << std::fixed << std::setprecision(3);
+                LogStream << "Auto extreme-Q threshold (computed): |Q| >= " << m_dAutoSmoothAbsQThreshold
+                          << " m3/s (q99=" << q99 << ", q99.5=" << q995 << ", max=" << qmax << ")\n";
+                LogStream.flush();
+            }
+        }
     }
     if (m_nDownwardEstuarineCondition > 1) {
         CDataReader::bReadDownwardBoundaryConditionFile(this);
@@ -802,7 +839,27 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         m_nPredictor = 0;
         if (bGetDoDryBed()) dryArea();
-        if (bGetDoSmoothSolution()) smoothSolution();
+        // Reset per-timestep auto-smoothing marker (used by hourly log '*').
+        m_bAutoSmoothAppliedThisStep = false;
+
+        // Runtime solution smoothing (regularization):
+        // - If enabled in config: always apply.
+        // - If disabled: auto-enable only under runtime-detected extreme conditions.
+        if (bGetDoSmoothSolution()) {
+            smoothSolution();
+        } else {
+            bool extreme = m_bExtremeFlowConditions;
+            if (!extreme && m_nUpwardEstuarineCondition == 3 && m_dAutoSmoothAbsQThreshold > 0.0 && m_nCrossSectionsNumber > 0) {
+                extreme = (fabs(m_vCrossSectionQ[0]) >= m_dAutoSmoothAbsQThreshold);
+            }
+            if (extreme) {
+                // Ensure smoothing parameters are meaningful even if user didn't set them.
+                if (m_nSolutionSmoothingPasses <= 0) m_nSolutionSmoothingPasses = 1;
+                if (m_dSolutionSmoothingAlpha <= 0.0) m_dSolutionSmoothingAlpha = 0.10;
+                smoothSolution();
+                m_bAutoSmoothAppliedThisStep = true;
+            }
+        }
 
         // Smoothing updates interior nodes (including those adjacent to boundaries).
         // Re-apply boundary conditions so stage/discharge closures remain consistent.
@@ -1910,8 +1967,8 @@ void CSimulation::calculateBoundaryConditions() {
                                                           m_vEstuaryAreas[1]);
     }
     
-    // Upstream boundary (condition type 3 = discharge prescribed from time series)
-    if (nGetUpwardEstuarineCondition() == 3 && !m_vUpwardBoundaryConditionTime.empty()) {
+    // Upstream boundary (condition type 3/4 = discharge prescribed from time series)
+    if ((nGetUpwardEstuarineCondition() == 3 || nGetUpwardEstuarineCondition() == 4) && !m_vUpwardBoundaryConditionTime.empty()) {
         // Interpolate discharge from time series at current time
         m_dUpwardBoundaryValue = linearInterpolation1d(m_dCurrentTime, 
                                                        m_vUpwardBoundaryConditionTime, 
@@ -2494,12 +2551,10 @@ void CSimulation::applyBoundariesToCurrentState() {
         }
     }
     else if (nGetUpwardEstuarineCondition() == 1) {
+        // Type 1: Reflective / solid-wall boundary.
+        // For a closed end, enforce u=0 (Q=0) and a free-surface antinode (dη/dx≈0 → A[0]=A[1]).
         m_vCrossSectionQ[0] = 0.0;
-        const double dA = m_vCrossSectionArea[2] - m_vCrossSectionArea[1];
-        m_vCrossSectionArea[0] = m_vCrossSectionArea[1] - dA;
-        if (m_vCrossSectionArea[0] < DRY_AREA) {
-            m_vCrossSectionArea[0] = m_vCrossSectionArea[1];
-        }
+        m_vCrossSectionArea[0] = std::max(DRY_AREA, m_vCrossSectionArea[1]);
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
         m_vCrossSectionArea[0] = m_dUpwardBoundaryValue;
@@ -2507,6 +2562,12 @@ void CSimulation::applyBoundariesToCurrentState() {
         double sign_S0 = (m_vCrossSectionBedSlope[0] >= 0) ? 1.0 : -1.0;
         m_vCrossSectionQ[0] = m_vCrossSectionArea[0] * sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                              pow(R, 2.0/3.0) * sign_S0 / (m_vCrossSectionManningNumber[0] + 1e-10);
+    }
+    else if (nGetUpwardEstuarineCondition() == 4) {
+        // Type 4: Dam release + reflective head.
+        // Prescribe inflow discharge but keep a reflective elevation closure (dη/dx≈0 → A[0]=A[1]).
+        m_vCrossSectionQ[0] = m_dUpwardBoundaryValue;
+        m_vCrossSectionArea[0] = std::max(DRY_AREA, m_vCrossSectionArea[1]);
     }
     else {  // Type 3: prescribed discharge (characteristic compatibility)
         // Prescribe Q and obtain A from the outgoing characteristic (R- from node 1).
@@ -2620,12 +2681,9 @@ void CSimulation::applyBoundariesToPredictorState() {
         }
     }
     else if (nGetUpwardEstuarineCondition() == 1) {
+        // Type 1: Reflective / solid-wall boundary (predictor state)
         m_vPredictedCrossSectionQ[0] = 0.0;
-        const double dA = m_vPredictedCrossSectionArea[2] - m_vPredictedCrossSectionArea[1];
-        m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1] - dA;
-        if (m_vPredictedCrossSectionArea[0] < DRY_AREA) {
-            m_vPredictedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1];
-        }
+        m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
         m_vPredictedCrossSectionArea[0] = m_dUpwardBoundaryValue;
@@ -2633,6 +2691,11 @@ void CSimulation::applyBoundariesToPredictorState() {
         double sign_S0 = (m_vCrossSectionBedSlope[0] >= 0) ? 1.0 : -1.0;
         m_vPredictedCrossSectionQ[0] = m_vPredictedCrossSectionArea[0] * sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                        pow(R, 2.0/3.0) * sign_S0 / (m_vCrossSectionManningNumber[0] + 1e-10);
+    }
+    else if (nGetUpwardEstuarineCondition() == 4) {
+        // Type 4: Dam release + reflective head (predictor state)
+        m_vPredictedCrossSectionQ[0] = m_dUpwardBoundaryValue;
+        m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
     }
     else {  // Type 3: prescribed discharge (characteristic compatibility)
         const double Qin = m_dUpwardBoundaryValue;
@@ -2748,15 +2811,9 @@ void CSimulation::updatePredictorBoundaries() {
         // Type 1: Reflective/wall boundary - no-flow condition (solid wall)
         // Imposes zero velocity (Q=0), extrapolates water level from interior
         m_vPredictedCrossSectionQ[0] = 0.0;
-        
-        // Extrapolate area maintaining interior gradient
-        const double dA = m_vCrossSectionArea[2] - m_vCrossSectionArea[1];
-        m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[1] - dA;
-        
-        // Enforce minimum area threshold
-        if (m_vPredictedCrossSectionArea[0] < DRY_AREA) {
-            m_vPredictedCrossSectionArea[0] = m_vCrossSectionArea[1];
-        }
+
+        // Closed end: enforce dη/dx≈0 → A[0]=A[1] (more reflective than gradient extrapolation)
+        m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA, m_vCrossSectionArea[1]);
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
         // Type 2: Prescribed water surface elevation
@@ -2773,6 +2830,11 @@ void CSimulation::updatePredictorBoundaries() {
                                       sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                       pow(m_vCrossSectionHydraulicRadius[0], 2.0/3.0) * 
                                       sign_S0 / (m_vCrossSectionManningNumber[0] + 1e-10);
+    }
+    else if (nGetUpwardEstuarineCondition() == 4) {
+        // Type 4: Dam release + reflective head
+        m_vPredictedCrossSectionQ[0] = m_dUpwardBoundaryValue;
+        m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA, m_vCrossSectionArea[1]);
     }
     else {
         // Type 3: Prescribed discharge (characteristic compatibility)
@@ -2902,14 +2964,9 @@ void CSimulation::updateCorrectorBoundaries() {
     else if (nGetUpwardEstuarineCondition() == 1) {
         // Type 1: Reflective/wall boundary (Q=0)
         m_vCorrectedCrossSectionQ[0] = 0.0;
-        
-        // Extrapolate area from predicted interior state
-        const double dA = m_vPredictedCrossSectionArea[2] - m_vPredictedCrossSectionArea[1];
-        m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1] - dA;
-        
-        if (m_vCorrectedCrossSectionArea[0] < DRY_AREA) {
-            m_vCorrectedCrossSectionArea[0] = m_vPredictedCrossSectionArea[1];
-        }
+
+        // Closed end: enforce dη/dx≈0 → A[0]=A[1]
+        m_vCorrectedCrossSectionArea[0] = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
         // Type 2: Prescribed elevation - impose area, compute Q with Manning
@@ -2925,6 +2982,11 @@ void CSimulation::updateCorrectorBoundaries() {
                                       sqrt(fabs(m_vCrossSectionBedSlope[0]) + 1e-10) * 
                                       pow(m_vCrossSectionHydraulicRadius[0], 2.0/3.0) * 
                                       sign_S0 / (m_vCrossSectionManningNumber[0] + 1e-10);
+    }
+    else if (nGetUpwardEstuarineCondition() == 4) {
+        // Type 4: Dam release + reflective head
+        m_vCorrectedCrossSectionQ[0] = m_dUpwardBoundaryValue;
+        m_vCorrectedCrossSectionArea[0] = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
     }
     else {
         // Type 3: Prescribed discharge (characteristic compatibility)
@@ -4512,6 +4574,10 @@ void CSimulation::writePeriodicStatistics() {
                   << std::setw(10) << S_max;
     }
 
+    // Mark auto-activated smoothing on extreme discharge with a trailing '*'
+    if (m_bAutoSmoothAppliedThisStep) {
+        LogStream << " *";
+    }
     LogStream << "\n";
 
     // Snapshot at key nodes (0, mid, n) + running amplitude (max-min) for eta.
