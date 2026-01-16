@@ -507,7 +507,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         if (m_bDoLateralStorage) {
             if (have_storage_stats) {
-                std::cout << "          - Lateral storage: ENABLED; S = [" << std::setprecision(8) << storage_s_min
+                std::cout << "          - Lateral storage: ENABLED; Sf = [" << std::setprecision(8) << storage_s_min
                           << " .. " << storage_s_max << "]" << std::endl;
             } else {
                 std::cout << "          - Lateral storage: ENABLED" << std::endl;
@@ -535,7 +535,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         }
         if (m_bDoLateralStorage) {
             if (have_storage_stats) {
-                LogStream << "  - Lateral storage: YES (S in [" << std::setprecision(8) << storage_s_min
+                LogStream << "  - Lateral storage: YES (Sf in [" << std::setprecision(8) << storage_s_min
                           << " .. " << storage_s_max << "])\n";
             } else {
                 LogStream << "  - Lateral storage: YES\n";
@@ -1765,8 +1765,8 @@ void CSimulation::calculateTimestep() {
             m_vCrossSectionU[i] = u_dry;
 
             // Wave celerity for dry zone using minimum depth: h_dry = A_dry / B
-            const double S = dGetLateralStorageFactor(i);
-            const double h_dry = DRY_AREA / (m_vCrossSectionWidth[i] * S);
+            const double Sf = dGetLateralStorageFactor(i);
+            const double h_dry = DRY_AREA / (m_vCrossSectionWidth[i] * Sf);
             const double c_dry = sqrt_G * sqrt(h_dry);
             m_vCrossSectionC[i] = c_dry;
 
@@ -1784,12 +1784,12 @@ void CSimulation::calculateTimestep() {
     for (int i : {0, m_nCrossSectionsNumber-1}) {
         if (m_vCrossSectionArea[i] != DRY_AREA) {
             m_vCrossSectionU[i] = m_vCrossSectionQ[i] / m_vCrossSectionArea[i];
-            const double S = dGetLateralStorageFactor(i);
-            m_vCrossSectionC[i] = sqrt_G * sqrt(m_vCrossSectionArea[i] / (m_vCrossSectionWidth[i] * S));
+            const double Sf = dGetLateralStorageFactor(i);
+            m_vCrossSectionC[i] = sqrt_G * sqrt(m_vCrossSectionArea[i] / (m_vCrossSectionWidth[i] * Sf));
         } else {
             m_vCrossSectionU[i] = DRY_Q / DRY_AREA;
-            const double S = dGetLateralStorageFactor(i);
-            const double h_dry = DRY_AREA / (m_vCrossSectionWidth[i] * S);
+            const double Sf = dGetLateralStorageFactor(i);
+            const double h_dry = DRY_AREA / (m_vCrossSectionWidth[i] * Sf);
             m_vCrossSectionC[i] = sqrt_G * sqrt(h_dry);
         }
     }
@@ -2486,12 +2486,12 @@ void CSimulation::calculatePredictor() {
 
     const int n = m_nCrossSectionsNumber - 1;
     for (int i = 1; i < n; i++) {
-        const double invS = 1.0 / dGetLateralStorageFactor(i);
+        const double invSf = 1.0 / dGetLateralStorageFactor(i);
         // Continuity equation: ∂A/∂t + ∂Q/∂x = G0
         // Predictor: A* = A - λ(F0[i+1] - F0[i]) + Δt·G0[i]
         m_vPredictedCrossSectionArea[i] = m_vCrossSectionArea[i] - 
-            (m_dLambda * invS) * (m_vCrossSectionF0[i+1] - m_vCrossSectionF0[i]) + 
-            (m_dTimestep * invS) * m_vCrossSectionGv0[i];  // G0 = lateral inflow (usually 0)
+            (m_dLambda * invSf) * (m_vCrossSectionF0[i+1] - m_vCrossSectionF0[i]) + 
+            (m_dTimestep * invSf) * m_vCrossSectionGv0[i];  // G0 = lateral inflow (usually 0)
 
         // Momentum equation: ∂Q/∂t + ∂F1/∂x = G1
         // Predictor: Q* = Q - λ(F1[i+1] - F1[i]) + Δt·G1[i]
@@ -2533,11 +2533,11 @@ void CSimulation::calculateCorrector() {
 
     const int n = m_nCrossSectionsNumber - 1;
     for (int i = 1; i < n; i++) {
-        const double invS = 1.0 / dGetLateralStorageFactor(i);
+        const double invSf = 1.0 / dGetLateralStorageFactor(i);
         // Continuity equation corrector: A^(n+1) = A* - λ(F0*[i] - F0*[i-1]) + Δt·G0*[i]
         m_vCorrectedCrossSectionArea[i] = m_vPredictedCrossSectionArea[i] - 
-            (m_dLambda * invS) * (m_vCrossSectionF0[i] - m_vCrossSectionF0[i-1]) + 
-            (m_dTimestep * invS) * m_vCrossSectionGv0[i];  // G0 = lateral inflow
+            (m_dLambda * invSf) * (m_vCrossSectionF0[i] - m_vCrossSectionF0[i-1]) + 
+            (m_dTimestep * invSf) * m_vCrossSectionGv0[i];  // G0 = lateral inflow
 
         // Momentum equation corrector: Q^(n+1) = Q* - λ(F1*[i] - F1*[i-1]) + Δt·G1*[i]
         // G1 includes: friction, bed slope, pressure gradients, and baroclinic term
