@@ -456,9 +456,10 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     reader.bReadCrossSectionGeometryFile(this);
 
     // Lateral storage summary (one-time, startup)
+    // Note: this runs before initializeVectors(); the vector may still be empty if the along-channel
+    // file doesn't provide storage factors. Use a safe fallback of S=1.
     double storage_s_min = 1.0;
     double storage_s_max = 1.0;
-    bool have_storage_stats = false;
     if (!m_vLateralStorageFactor.empty()) {
         storage_s_min = 1e300;
         storage_s_max = -1e300;
@@ -467,8 +468,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             storage_s_min = std::min(storage_s_min, sc);
             storage_s_max = std::max(storage_s_max, sc);
         }
-        have_storage_stats = (storage_s_min < 1e200 && storage_s_max > -1e200);
-        if (!have_storage_stats) {
+        if (!(storage_s_min < 1e200 && storage_s_max > -1e200)) {
             storage_s_min = 1.0;
             storage_s_max = 1.0;
         }
@@ -506,12 +506,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         }
 
         if (m_bDoLateralStorage) {
-            if (have_storage_stats) {
-                std::cout << "          - Lateral storage: ENABLED; Sf = [" << std::setprecision(8) << storage_s_min
-                          << " .. " << storage_s_max << "]" << std::endl;
-            } else {
-                std::cout << "          - Lateral storage: ENABLED" << std::endl;
-            }
+            std::cout << "          - Lateral storage: Sf = [" << std::setprecision(8) << storage_s_min
+                      << " .. " << storage_s_max << "]" << std::endl;
         }
     }
     
@@ -534,12 +530,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             LogStream << "    • Alpha: " << m_dSolutionSmoothingAlpha << "\n";
         }
         if (m_bDoLateralStorage) {
-            if (have_storage_stats) {
-                LogStream << "  - Lateral storage: YES (Sf in [" << std::setprecision(8) << storage_s_min
-                          << " .. " << storage_s_max << "])\n";
-            } else {
-                LogStream << "  - Lateral storage: YES\n";
-            }
+            LogStream << "  - Lateral storage: YES (Sf in [" << std::setprecision(8) << storage_s_min
+                      << " .. " << storage_s_max << "])\n";
         } else {
             LogStream << "  - Lateral storage: NO\n";
         }
@@ -915,10 +907,11 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         // === Salt mass balance diagnostics ===
         if (m_bDoWaterSalinity && LogStream.is_open() && m_nLogFileDetail >= 1) {
-            // Compute total salt mass in domain
+            // Compute total salt mass in domain (effective storage = S * A)
             double total_salt = 0.0;
             for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
-                total_salt += m_vCrossSectionArea[i] * m_vCrossSectionSalinity[i];
+                const double S = dGetLateralStorageFactor(i);
+                total_salt += (S * m_vCrossSectionArea[i]) * m_vCrossSectionSalinity[i];
             }
             // Compute salt fluxes at boundaries (kg/s)
             double salt_in = 0.0, salt_out = 0.0;
@@ -3329,9 +3322,13 @@ void CSimulation::calculate_salinity_predictor() {
             d_Fd_dx = (Fd_R - Fd_L) / dxCV;
         }
 
-        // Update: Δ(A·S) = dt * [ -∂(Q·S)/∂x - ∂(Fd)/∂x ]
-        // because ∂/∂x(Kh·A·∂S/∂x) = -∂Fd/∂x.
-        m_vCrossSectionSalinityASt[i] = m_dTimestep * (-d_QS_dx - d_Fd_dx);
+        // Lateral storage consistency:
+        // If enabled, hydrodynamics uses: S·∂A/∂t + ∂Q/∂x = ql.
+        // For a well-mixed scalar in the (channel + storage) volume:
+        //   S·∂(A·C)/∂t + ∂(Q·C)/∂x = diffusion + sources.
+        // Therefore: Δ(A·C) = (dt/S) * RHS.
+        const double invS = 1.0 / dGetLateralStorageFactor(i);
+        m_vCrossSectionSalinityASt[i] = (m_dTimestep * invS) * (-d_QS_dx - d_Fd_dx);
     }
 
     // Update salinity conserving salt mass: S_new = (A·S_old + Δ(A·S))/A_new
@@ -3473,7 +3470,8 @@ void CSimulation::calculate_salinity_corrector() {
             d_Fd_dx = (Fd_R - Fd_L) / dxCV;
         }
 
-        m_vCrossSectionSalinityASt[i] = m_dTimestep * (-d_QS_dx - d_Fd_dx);
+        const double invS = 1.0 / dGetLateralStorageFactor(i);
+        m_vCrossSectionSalinityASt[i] = (m_dTimestep * invS) * (-d_QS_dx - d_Fd_dx);
     }
 
     // Update salinity conserving salt mass: S_new = (A·S_old + Δ(A·S))/A_new
@@ -3540,8 +3538,9 @@ void CSimulation::calculate_temperature_predictor() {
         // Surface heat flux contribution: Q_net/(ρ·Cp·h)
         double Qnet = m_vCrossSectionTemperatureASt[i];
         double dTdt = adv + diff + Qnet / (WATER_DENSITY * WATER_SPECIFIC_HEAT * m_vCrossSectionWaterDepth[i]);
-        
-        m_vPredictedCrossSectionT[i] = m_vCrossSectionTemperature[i] + m_dTimestep * dTdt;
+
+        const double invS = 1.0 / dGetLateralStorageFactor(i);
+        m_vPredictedCrossSectionT[i] = m_vCrossSectionTemperature[i] + (m_dTimestep * invS) * dTdt;
     }
     
     // Boundary conditions
@@ -3596,7 +3595,8 @@ void CSimulation::calculate_temperature_corrector() {
         double diff = m_dThermalDispersion * (m_vPredictedCrossSectionT[i+1] - 2*m_vPredictedCrossSectionT[i] + m_vPredictedCrossSectionT[i-1]) / (dx*dx);
         double Qnet = m_vCrossSectionTemperatureASt[i];
         double dTdt = adv + diff + Qnet / (WATER_DENSITY * WATER_SPECIFIC_HEAT * m_vCrossSectionWaterDepth[i]);
-        m_vCorrectedCrossSectionT[i] = m_vPredictedCrossSectionT[i] + m_dTimestep * dTdt;
+        const double invS = 1.0 / dGetLateralStorageFactor(i);
+        m_vCorrectedCrossSectionT[i] = m_vPredictedCrossSectionT[i] + (m_dTimestep * invS) * dTdt;
     }
     // Fronteras
     if (m_nUpwardTemperatureCondition == 1) {
