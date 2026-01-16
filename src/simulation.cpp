@@ -454,6 +454,25 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     std::cout << "      2. Reading input data files" << std::endl;
     reader.bReadAlongChannelDataFile(this);
     reader.bReadCrossSectionGeometryFile(this);
+
+    // Lateral storage summary (one-time, startup)
+    double storage_s_min = 1.0;
+    double storage_s_max = 1.0;
+    bool have_storage_stats = false;
+    if (!m_vLateralStorageFactor.empty()) {
+        storage_s_min = 1e300;
+        storage_s_max = -1e300;
+        for (double s : m_vLateralStorageFactor) {
+            const double sc = (s >= 1.0) ? s : 1.0;
+            storage_s_min = std::min(storage_s_min, sc);
+            storage_s_max = std::max(storage_s_max, sc);
+        }
+        have_storage_stats = (storage_s_min < 1e200 && storage_s_max > -1e200);
+        if (!have_storage_stats) {
+            storage_s_min = 1.0;
+            storage_s_max = 1.0;
+        }
+    }
     {
         // Cross-section summary (one-time, startup)
         const MinMax x_mm = compute_minmax(m_vCrossSectionX);
@@ -485,6 +504,15 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         if (have_n) {
             std::cout << "          - Manning n = [" << std::setprecision(8) << n_min << " .. " << n_max << "]" << std::endl;
         }
+
+        if (m_bDoLateralStorage) {
+            if (have_storage_stats) {
+                std::cout << "          - Lateral storage: ENABLED; S = [" << std::setprecision(8) << storage_s_min
+                          << " .. " << storage_s_max << "]" << std::endl;
+            } else {
+                std::cout << "          - Lateral storage: ENABLED" << std::endl;
+            }
+        }
     }
     
     // Print geometry and configuration summary AFTER reading geometry
@@ -504,6 +532,16 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         if (m_bDoSmoothSolution) {
             LogStream << "    • Passes: " << m_nSolutionSmoothingPasses << "\n";
             LogStream << "    • Alpha: " << m_dSolutionSmoothingAlpha << "\n";
+        }
+        if (m_bDoLateralStorage) {
+            if (have_storage_stats) {
+                LogStream << "  - Lateral storage: YES (S in [" << std::setprecision(8) << storage_s_min
+                          << " .. " << storage_s_max << "])\n";
+            } else {
+                LogStream << "  - Lateral storage: YES\n";
+            }
+        } else {
+            LogStream << "  - Lateral storage: NO\n";
         }
         LogStream << "\nBoundary conditions:\n";
         LogStream << "  - Upstream hydrodynamic: Type " << m_nUpwardEstuarineCondition << "\n";
@@ -1084,6 +1122,15 @@ void CSimulation::initializeVectors() {
     const int nTimestepsNumber = static_cast<int>(m_dSimDuration / m_dSimTimestep) + 1;
     m_vOutputTimesIds.resize(nTimestepsNumber);
     m_vOutputTimes.resize(nTimestepsNumber);
+
+    // Lateral storage factor (keep values if already loaded from along-channel file)
+    if (m_vLateralStorageFactor.size() != static_cast<size_t>(nCrossSectionsNumber)) {
+        m_vLateralStorageFactor.assign(static_cast<size_t>(nCrossSectionsNumber), 1.0);
+    } else {
+        for (double& s : m_vLateralStorageFactor) {
+            if (s < 1.0) s = 1.0;
+        }
+    }
 
     for (int i = 0; i < nTimestepsNumber; i++) {
         m_vOutputTimesIds[i] = i;
@@ -1681,8 +1728,11 @@ void CSimulation::calculateTimestep() {
             // Mean flow velocity: u = Q / A
             const double u = m_vCrossSectionQ[i] / m_vCrossSectionArea[i];
             m_vCrossSectionU[i] = u;
-            // Shallow water wave celerity: c = sqrt(g·A/B) = sqrt(g·h) where h=A/B is mean depth
-            const double c = sqrt_G * sqrt(m_vCrossSectionArea[i] / m_vCrossSectionWidth[i]);
+            // Shallow water wave celerity with optional lateral storage:
+            // Base: c = sqrt(g·A/B) = sqrt(g·h) where h=A/B.
+            // With storage factor S>=1 in continuity: c_eff ≈ c / sqrt(S).
+            const double S = dGetLateralStorageFactor(i);
+            const double c = sqrt_G * sqrt(m_vCrossSectionArea[i] / (m_vCrossSectionWidth[i] * S));
             m_vCrossSectionC[i] = c;
             // Additional stability constraint for density-driven flows (baroclinic adjustment)
             if (m_bDoWaterDensity) {
@@ -1715,7 +1765,8 @@ void CSimulation::calculateTimestep() {
             m_vCrossSectionU[i] = u_dry;
 
             // Wave celerity for dry zone using minimum depth: h_dry = A_dry / B
-            const double h_dry = DRY_AREA / m_vCrossSectionWidth[i];
+            const double S = dGetLateralStorageFactor(i);
+            const double h_dry = DRY_AREA / (m_vCrossSectionWidth[i] * S);
             const double c_dry = sqrt_G * sqrt(h_dry);
             m_vCrossSectionC[i] = c_dry;
 
@@ -1733,10 +1784,12 @@ void CSimulation::calculateTimestep() {
     for (int i : {0, m_nCrossSectionsNumber-1}) {
         if (m_vCrossSectionArea[i] != DRY_AREA) {
             m_vCrossSectionU[i] = m_vCrossSectionQ[i] / m_vCrossSectionArea[i];
-            m_vCrossSectionC[i] = sqrt_G * sqrt(m_vCrossSectionArea[i] / m_vCrossSectionWidth[i]);
+            const double S = dGetLateralStorageFactor(i);
+            m_vCrossSectionC[i] = sqrt_G * sqrt(m_vCrossSectionArea[i] / (m_vCrossSectionWidth[i] * S));
         } else {
             m_vCrossSectionU[i] = DRY_Q / DRY_AREA;
-            const double h_dry = DRY_AREA / m_vCrossSectionWidth[i];
+            const double S = dGetLateralStorageFactor(i);
+            const double h_dry = DRY_AREA / (m_vCrossSectionWidth[i] * S);
             m_vCrossSectionC[i] = sqrt_G * sqrt(h_dry);
         }
     }
@@ -2433,11 +2486,12 @@ void CSimulation::calculatePredictor() {
 
     const int n = m_nCrossSectionsNumber - 1;
     for (int i = 1; i < n; i++) {
+        const double invS = 1.0 / dGetLateralStorageFactor(i);
         // Continuity equation: ∂A/∂t + ∂Q/∂x = G0
         // Predictor: A* = A - λ(F0[i+1] - F0[i]) + Δt·G0[i]
         m_vPredictedCrossSectionArea[i] = m_vCrossSectionArea[i] - 
-            m_dLambda * (m_vCrossSectionF0[i+1] - m_vCrossSectionF0[i]) + 
-            m_dTimestep * m_vCrossSectionGv0[i];  // G0 = lateral inflow (usually 0)
+            (m_dLambda * invS) * (m_vCrossSectionF0[i+1] - m_vCrossSectionF0[i]) + 
+            (m_dTimestep * invS) * m_vCrossSectionGv0[i];  // G0 = lateral inflow (usually 0)
 
         // Momentum equation: ∂Q/∂t + ∂F1/∂x = G1
         // Predictor: Q* = Q - λ(F1[i+1] - F1[i]) + Δt·G1[i]
@@ -2479,10 +2533,11 @@ void CSimulation::calculateCorrector() {
 
     const int n = m_nCrossSectionsNumber - 1;
     for (int i = 1; i < n; i++) {
+        const double invS = 1.0 / dGetLateralStorageFactor(i);
         // Continuity equation corrector: A^(n+1) = A* - λ(F0*[i] - F0*[i-1]) + Δt·G0*[i]
         m_vCorrectedCrossSectionArea[i] = m_vPredictedCrossSectionArea[i] - 
-            m_dLambda * (m_vCrossSectionF0[i] - m_vCrossSectionF0[i-1]) + 
-            m_dTimestep * m_vCrossSectionGv0[i];  // G0 = lateral inflow
+            (m_dLambda * invS) * (m_vCrossSectionF0[i] - m_vCrossSectionF0[i-1]) + 
+            (m_dTimestep * invS) * m_vCrossSectionGv0[i];  // G0 = lateral inflow
 
         // Momentum equation corrector: Q^(n+1) = Q* - λ(F1*[i] - F1*[i-1]) + Δt·G1*[i]
         // G1 includes: friction, bed slope, pressure gradients, and baroclinic term
@@ -2568,11 +2623,11 @@ void CSimulation::applyBoundariesToCurrentState() {
 
         const double A1 = std::max(DRY_AREA, m_vCrossSectionArea[1]);
         const double u1 = m_vCrossSectionQ[1] / A1;
-        const double c1 = celerityFromArea(m_vEstuaryAreas[1], m_vWidth[1], A1);
+        const double c1 = celerityFromArea(m_vEstuaryAreas[1], m_vWidth[1], A1) / std::sqrt(dGetLateralStorageFactor(1));
         const double Rminus = u1 - 2.0 * c1;
 
         auto f = [&](double A0) {
-            const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], A0);
+            const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], A0) / std::sqrt(dGetLateralStorageFactor(0));
             return (Qin / std::max(DRY_AREA, A0)) - 2.0 * c0 - Rminus;
         };
 
@@ -2631,10 +2686,10 @@ void CSimulation::applyBoundariesToCurrentState() {
 
         const double Ai = std::max(DRY_AREA, m_vCrossSectionArea[n - 1]);
         const double ui = m_vCrossSectionQ[n - 1] / Ai;
-        const double ci = celerityFromArea(m_vEstuaryAreas[n - 1], m_vWidth[n - 1], Ai);
+        const double ci = celerityFromArea(m_vEstuaryAreas[n - 1], m_vWidth[n - 1], Ai) / std::sqrt(dGetLateralStorageFactor(n - 1));
         const double Rplus = ui + 2.0 * ci;
 
-        const double cbc = celerityFromArea(m_vEstuaryAreas[n], m_vWidth[n], Abc);
+        const double cbc = celerityFromArea(m_vEstuaryAreas[n], m_vWidth[n], Abc) / std::sqrt(dGetLateralStorageFactor(n));
         const double ubc = Rplus - 2.0 * cbc;
         m_vCrossSectionQ[n] = ubc * Abc;
     }
@@ -2689,11 +2744,11 @@ void CSimulation::applyBoundariesToPredictorState() {
 
         const double A1 = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
         const double u1 = m_vPredictedCrossSectionQ[1] / A1;
-        const double c1 = celerityFromArea(m_vEstuaryAreas[1], m_vWidth[1], A1);
+        const double c1 = celerityFromArea(m_vEstuaryAreas[1], m_vWidth[1], A1) / std::sqrt(dGetLateralStorageFactor(1));
         const double Rminus = u1 - 2.0 * c1;
 
         auto f = [&](double A0) {
-            const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], A0);
+            const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], A0) / std::sqrt(dGetLateralStorageFactor(0));
             return (Qin / std::max(DRY_AREA, A0)) - 2.0 * c0 - Rminus;
         };
 
@@ -2750,10 +2805,10 @@ void CSimulation::applyBoundariesToPredictorState() {
 
         const double Ai = std::max(DRY_AREA, m_vPredictedCrossSectionArea[n - 1]);
         const double ui = m_vPredictedCrossSectionQ[n - 1] / Ai;
-        const double ci = celerityFromArea(m_vEstuaryAreas[n - 1], m_vWidth[n - 1], Ai);
+        const double ci = celerityFromArea(m_vEstuaryAreas[n - 1], m_vWidth[n - 1], Ai) / std::sqrt(dGetLateralStorageFactor(n - 1));
         const double Rplus = ui + 2.0 * ci;
 
-        const double cbc = celerityFromArea(m_vEstuaryAreas[n], m_vWidth[n], Abc);
+        const double cbc = celerityFromArea(m_vEstuaryAreas[n], m_vWidth[n], Abc) / std::sqrt(dGetLateralStorageFactor(n));
         const double ubc = Rplus - 2.0 * cbc;
         m_vPredictedCrossSectionQ[n] = ubc * Abc;
     }
@@ -2824,11 +2879,11 @@ void CSimulation::updatePredictorBoundaries() {
 
         const double A1 = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
         const double u1 = m_vPredictedCrossSectionQ[1] / A1;
-        const double c1 = celerityFromArea(m_vEstuaryAreas[1], m_vWidth[1], A1);
+        const double c1 = celerityFromArea(m_vEstuaryAreas[1], m_vWidth[1], A1) / std::sqrt(dGetLateralStorageFactor(1));
         const double Rminus = u1 - 2.0 * c1;
 
         auto f = [&](double A0) {
-            const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], A0);
+            const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], A0) / std::sqrt(dGetLateralStorageFactor(0));
             return (Qin / std::max(DRY_AREA, A0)) - 2.0 * c0 - Rminus;
         };
 
@@ -2905,10 +2960,10 @@ void CSimulation::updatePredictorBoundaries() {
 
         const double Ai = std::max(DRY_AREA, m_vPredictedCrossSectionArea[n - 1]);
         const double ui = m_vPredictedCrossSectionQ[n - 1] / Ai;
-        const double ci = celerityFromArea(m_vEstuaryAreas[n - 1], m_vWidth[n - 1], Ai);
+        const double ci = celerityFromArea(m_vEstuaryAreas[n - 1], m_vWidth[n - 1], Ai) / std::sqrt(dGetLateralStorageFactor(n - 1));
         const double Rplus = ui + 2.0 * ci;
 
-        const double cbc = celerityFromArea(m_vEstuaryAreas[n], m_vWidth[n], Abc);
+        const double cbc = celerityFromArea(m_vEstuaryAreas[n], m_vWidth[n], Abc) / std::sqrt(dGetLateralStorageFactor(n));
         const double ubc = Rplus - 2.0 * cbc;
         m_vPredictedCrossSectionQ[n] = ubc * Abc;
     }
@@ -2971,11 +3026,11 @@ void CSimulation::updateCorrectorBoundaries() {
 
         const double A1 = std::max(DRY_AREA, m_vCorrectedCrossSectionArea[1]);
         const double u1 = m_vCorrectedCrossSectionQ[1] / A1;
-        const double c1 = celerityFromArea(m_vEstuaryAreas[1], m_vWidth[1], A1);
+        const double c1 = celerityFromArea(m_vEstuaryAreas[1], m_vWidth[1], A1) / std::sqrt(dGetLateralStorageFactor(1));
         const double Rminus = u1 - 2.0 * c1;
 
         auto f = [&](double A0) {
-            const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], A0);
+            const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], A0) / std::sqrt(dGetLateralStorageFactor(0));
             return (Qin / std::max(DRY_AREA, A0)) - 2.0 * c0 - Rminus;
         };
 
@@ -3050,10 +3105,10 @@ void CSimulation::updateCorrectorBoundaries() {
 
         const double Ai = std::max(DRY_AREA, m_vCorrectedCrossSectionArea[n - 1]);
         const double ui = m_vCorrectedCrossSectionQ[n - 1] / Ai;
-        const double ci = celerityFromArea(m_vEstuaryAreas[n - 1], m_vWidth[n - 1], Ai);
+        const double ci = celerityFromArea(m_vEstuaryAreas[n - 1], m_vWidth[n - 1], Ai) / std::sqrt(dGetLateralStorageFactor(n - 1));
         const double Rplus = ui + 2.0 * ci;
 
-        const double cbc = celerityFromArea(m_vEstuaryAreas[n], m_vWidth[n], Abc);
+        const double cbc = celerityFromArea(m_vEstuaryAreas[n], m_vWidth[n], Abc) / std::sqrt(dGetLateralStorageFactor(n));
         const double ubc = Rplus - 2.0 * cbc;
         m_vCorrectedCrossSectionQ[n] = ubc * Abc;
     }
@@ -4566,9 +4621,9 @@ void CSimulation::writePeriodicStatistics() {
         etam_min = std::min(etam_min, etam); etam_max = std::max(etam_max, etam);
         etan_min = std::min(etan_min, etan); etan_max = std::max(etan_max, etan);
 
-        const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], m_vCrossSectionArea[0]);
-        const double cMid = celerityFromArea(m_vEstuaryAreas[mid], m_vWidth[mid], m_vCrossSectionArea[mid]);
-        const double cN = celerityFromArea(m_vEstuaryAreas[last], m_vWidth[last], m_vCrossSectionArea[last]);
+        const double c0 = celerityFromArea(m_vEstuaryAreas[0], m_vWidth[0], m_vCrossSectionArea[0]) / std::sqrt(dGetLateralStorageFactor(0));
+        const double cMid = celerityFromArea(m_vEstuaryAreas[mid], m_vWidth[mid], m_vCrossSectionArea[mid]) / std::sqrt(dGetLateralStorageFactor(mid));
+        const double cN = celerityFromArea(m_vEstuaryAreas[last], m_vWidth[last], m_vCrossSectionArea[last]) / std::sqrt(dGetLateralStorageFactor(last));
 
         // Approximate gravity-wave travel time from downstream to upstream using current c(x): T ≈ ∑ dx / c.
         // This is a diagnostic (not a solver constraint) to compare against the observed phase lag.
@@ -4576,7 +4631,7 @@ void CSimulation::writePeriodicStatistics() {
         for (int i = 1; i < last; ++i) {
             const double dx = m_vCrossSectionDX[i];
             if (dx <= 0.0) continue;
-            const double ci = celerityFromArea(m_vEstuaryAreas[i], m_vWidth[i], m_vCrossSectionArea[i]);
+            const double ci = celerityFromArea(m_vEstuaryAreas[i], m_vWidth[i], m_vCrossSectionArea[i]) / std::sqrt(dGetLateralStorageFactor(i));
             travel_s += dx / std::max(1e-6, ci);
         }
         const double L = m_vCrossSectionX[last] - m_vCrossSectionX[0];

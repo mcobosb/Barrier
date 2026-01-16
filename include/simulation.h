@@ -190,6 +190,13 @@ public:
     //! Smooth solution (regularization) during simulation?
     bool m_bDoSmoothSolution{false};
 
+    //! Enable lateral storage (floodplain/tidal flats) via a per-node storage factor S>=1.
+    //! When enabled, continuity behaves as: S * dA/dt + dQ/dx = ql.
+    bool m_bDoLateralStorage{false};
+
+    //! Per-node lateral storage factor S>=1 (size = nCrossSections). Default = 1.
+    std::vector<double> m_vLateralStorageFactor;
+
     //! Auto-smoothing trigger threshold computed from upstream discharge time series (|Q|, m3/s).
     //! 0 means "not available" (e.g., upstream BC is not type 3 or no time series loaded).
     double m_dAutoSmoothAbsQThreshold{0.0};
@@ -908,6 +915,17 @@ public:
     [[nodiscard]] bool bGetDoSmoothSolution() const { return m_bDoSmoothSolution; }
     //! Method for setting smooth solution flag
     void bSetDoSmoothSolution(bool doSmoothSolution) { m_bDoSmoothSolution = doSmoothSolution; }
+
+    //! Lateral storage
+    [[nodiscard]] bool bGetDoLateralStorage() const { return m_bDoLateralStorage; }
+    void bSetDoLateralStorage(bool doLateralStorage) { m_bDoLateralStorage = doLateralStorage; }
+
+    [[nodiscard]] double dGetLateralStorageFactor(const int i) const {
+        if (!m_bDoLateralStorage) return 1.0;
+        if (i < 0 || static_cast<size_t>(i) >= m_vLateralStorageFactor.size()) return 1.0;
+        const double s = m_vLateralStorageFactor[static_cast<size_t>(i)];
+        return (s >= 1.0) ? s : 1.0;
+    }
 
     //! Method for getting save all timesteps flag
     [[nodiscard]] bool bGetSaveAllTimesteps() const { return m_bSaveAllTimesteps; }

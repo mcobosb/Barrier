@@ -417,6 +417,24 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
     if (node["courant_number"]) {
         m_pSimulation->dSetCourantNumber(node["courant_number"].as<double>());
     }
+
+    // Lateral storage (optional)
+    // Accept either:
+    //   lateral_storage: true/false
+    // or
+    //   lateral_storage: { enabled: true/false }
+    if (node["lateral_storage"]) {
+        const auto& ls = node["lateral_storage"];
+        try {
+            if (ls.IsScalar()) {
+                m_pSimulation->bSetDoLateralStorage(ls.as<bool>());
+            } else if (ls["enabled"]) {
+                m_pSimulation->bSetDoLateralStorage(ls["enabled"].as<bool>());
+            }
+        } catch (...) {
+            // Ignore malformed lateral_storage
+        }
+    }
     
     // TVD limiter
     if (node["tvd_limiter"]) {

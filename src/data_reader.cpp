@@ -106,7 +106,7 @@ void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
  * @brief Read along-channel geometry CSV file
  * 
  * CSV format (no header):
- *   X, Z, Manning_n, UTM_X, UTM_Y, RightAngle, LeftAngle, Beta
+ *   X, Z, Manning_n, UTM_X, UTM_Y, RightAngle, LeftAngle, Beta, StorageFactor(optional)
  * 
  * Columns:
  * 1. X: Along-channel coordinate (m, must be monotonic increasing)
@@ -117,6 +117,7 @@ void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
  * 6. RightAngle: Right bank azimuth (degrees from north)
  * 7. LeftAngle: Left bank azimuth (degrees from north)
  * 8. Beta: Momentum correction coefficient (typically 1.0-1.1)
+ * 9. StorageFactor (optional): Lateral storage factor S>=1 (dimensionless). If omitted, S=1.
  * 
  * Actions:
  * - Creates CCrossSection objects (one per row)
@@ -160,6 +161,7 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 			m_pSimulation->AddCrossSection();
 			// Update section number
 			m_pSimulation->estuary[nCrossSectionNumber].nSetSectionNumber(nCrossSectionNumber);
+			double storageFactor = 1.0;
 			// Obtain the new line
 			stringstream strLine(strRec);
 			string token;
@@ -191,6 +193,11 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 				}
 				if (j == 7) {
 					m_pSimulation->estuary[nCrossSectionNumber].dSetBeta(dValue);
+				}
+				if (j == 8) {
+					// Optional: lateral storage factor S>=1
+					storageFactor = (dValue >= 1.0) ? dValue : 1.0;
+					m_pSimulation->m_vLateralStorageFactor.push_back(storageFactor);
 				}
 				// Increment counter
 				j++;
