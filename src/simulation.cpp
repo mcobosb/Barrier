@@ -113,21 +113,21 @@ void print_time_series_summary(const char* prefix,
 
     const MinMax t_mm = compute_minmax(t);
     const MinMax v_mm = compute_minmax(v);
-    std::cout << "          - N = " << v.size();
+    std::cout << "          - N: " << v.size();
     if (t.size() != v.size()) {
         std::cout << " (time points=" << t.size() << ")";
     }
     std::cout << std::endl;
 
     if (t_mm.valid) {
-        std::cout << "          - t = [" << format_datetime_from_sim_start(sim, t_mm.min)
+        std::cout << "          - t: [" << format_datetime_from_sim_start(sim, t_mm.min)
                   << " .. " << format_datetime_from_sim_start(sim, t_mm.max)
                   << "]";
     }
     std::cout << std::endl;
     if (v_mm.valid) {
-        std::cout << "          - min = " << std::setprecision(8) << v_mm.min
-                  << ", max = " << std::setprecision(8) << v_mm.max;
+        std::cout << "          - min: " << std::setprecision(8) << v_mm.min
+                  << ", max: " << std::setprecision(8) << v_mm.max;
         if (units && *units) {
             std::cout << " " << units;
         }
@@ -473,6 +473,10 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             storage_s_max = 1.0;
         }
     }
+
+    // Section label for console summaries (a), b), c)...
+    // Increment only when a section is actually printed to avoid gaps.
+    char section_label = 'a';
     {
         // Cross-section summary (one-time, startup)
         const MinMax x_mm = compute_minmax(m_vCrossSectionX);
@@ -494,22 +498,29 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             }
         }
 
-        std::cout << "        a) Cross-sections loaded: " << m_nCrossSectionsNumber << std::endl;
+        std::cout << "        " << section_label << ") Cross-sections loaded: " << m_nCrossSectionsNumber << std::endl;
+        if (!reader.m_strAlongChannelDataFilename.empty()) {
+            std::cout << "          - Along-channel file: " << reader.m_strAlongChannelDataFilename << std::endl;
+        }
+        if (!reader.m_strCrossSectionsFilename.empty()) {
+            std::cout << "          - Cross-sections file: " << reader.m_strCrossSectionsFilename << std::endl;
+        }
         if (x_mm.valid) {
-            std::cout << "          - X = [ " << std::setprecision(8) << x_mm.min << " .. " << x_mm.max << "] m" << std::endl;
+            std::cout << "          - X: [ " << std::setprecision(8) << x_mm.min << " .. " << x_mm.max << "] m" << std::endl;
         }
         if (have_z) {
-            std::cout << "          - Zbed = [" << std::setprecision(8) << z_min << " .. " << z_max << "] m" << std::endl;
+            std::cout << "          - Zbed: [" << std::setprecision(8) << z_min << " .. " << z_max << "] m" << std::endl;
         }
         if (have_n) {
-            std::cout << "          - Manning n = [" << std::setprecision(8) << n_min << " .. " << n_max << "]" << std::endl;
+            std::cout << "          - Manning n: [" << std::setprecision(8) << n_min << " .. " << n_max << "]" << std::endl;
         }
 
         if (m_bDoLateralStorage) {
-            std::cout << "          - Lateral storage: Sf = [" << std::setprecision(8) << storage_s_min
+            std::cout << "          - Lateral storage Sf: [" << std::setprecision(8) << storage_s_min
                       << " .. " << storage_s_max << "]" << std::endl;
         }
     }
+    ++section_label;
     
     // Print geometry and configuration summary AFTER reading geometry
     if (m_nLogFileDetail >= 1) {
@@ -555,8 +566,13 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         const bool upstream_is_discharge = (m_nUpwardEstuarineCondition == 3 || m_nUpwardEstuarineCondition == 4);
         const char* kind = upstream_is_discharge ? "discharge" : "level";
         const char* units = upstream_is_discharge ? "m3/s" : "m";
-        std::cout << "        b) Upstream hydrodynamic BC (" << kind << "): " << std::endl;
+        std::cout << "        " << section_label << ") Upstream hydrodynamic BC (" << kind << "): " << std::endl;
+        if (!m_strUpwardBoundaryConditionFilename.empty()) {
+            std::cout << "          - File: " << m_strUpwardBoundaryConditionFilename << std::endl;
+        }
         print_time_series_summary("", *this, m_vUpwardBoundaryConditionTime, m_vUpwardBoundaryConditionValue, units);
+
+        ++section_label;
 
         // Auto-detect an "extreme discharge" threshold from the upstream discharge time series.
         // This avoids relying on config.yaml while still being data-adaptive.
@@ -588,8 +604,13 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         CDataReader::bReadDownwardBoundaryConditionFile(this);
         const char* kind = (m_nDownwardEstuarineCondition == 3) ? "discharge" : "level";
         const char* units = (m_nDownwardEstuarineCondition == 3) ? "m3/s" : "m";
-        std::cout << "        c) Downstream hydrodynamic BC (" << kind << "): " << std::endl;
+        std::cout << "        " << section_label << ") Downstream hydrodynamic BC (" << kind << "): " << std::endl;
+        if (!m_strDownwardBoundaryConditionFilename.empty()) {
+            std::cout << "          - File: " << m_strDownwardBoundaryConditionFilename << std::endl;
+        }
         print_time_series_summary("", *this, m_vDownwardBoundaryConditionTime, m_vDownwardBoundaryConditionValue, units);
+
+        ++section_label;
     }
     // === Temperature: Boundary conditions and forcing ===
     if (m_bDoWaterTemperature) {
@@ -661,14 +682,19 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             }
         }
 
-        std::cout << "        d) Hydrographs loaded: " << m_nHydrographsNumber << std::endl;
+        std::cout << "        " << section_label << ") Hydrographs loaded: " << m_nHydrographsNumber << std::endl;
+        if (!reader.m_strHydroFilename.empty()) {
+            std::cout << "          - File: " << reader.m_strHydroFilename << std::endl;
+        }
         if (have_any) {
-            std::cout << "          - t = [" << format_datetime_from_sim_start(*this, t_min)
+            std::cout << "          - t: [" << format_datetime_from_sim_start(*this, t_min)
                       << " .. " << format_datetime_from_sim_start(*this, t_max)
                       << "]" << std::endl;
-            std::cout << "          - Q min = " << std::setprecision(8) << q_min
-                      << ", Q max = " << std::setprecision(8) << q_max << " m3/s" << std::endl;
+            std::cout << "          - Q min: " << std::setprecision(8) << q_min
+                      << ", Q max: " << std::setprecision(8) << q_max << " m3/s" << std::endl;
         }
+
+        ++section_label;
     }
 
     // Initialize simulation vectors
