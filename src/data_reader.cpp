@@ -118,6 +118,7 @@ void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
  * 7. LeftAngle: Left bank azimuth (degrees from north)
  * 8. Beta: Momentum correction coefficient (typically 1.0-1.1)
  * 9. StorageFactor (optional): Lateral storage factor S>=1 (dimensionless). If omitted, S=1.
+ * 10. Kh (optional): Longitudinal dispersion coefficient (m2/s). If omitted, uses YAML constant.
  * 
  * Actions:
  * - Creates CCrossSection objects (one per row)
@@ -162,6 +163,7 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 			// Update section number
 			m_pSimulation->estuary[nCrossSectionNumber].nSetSectionNumber(nCrossSectionNumber);
 			double storageFactor = 1.0;
+			double khValue = -1.0;
 			// Obtain the new line
 			stringstream strLine(strRec);
 			string token;
@@ -198,6 +200,11 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 					// Optional: lateral storage factor S>=1
 					storageFactor = (dValue >= 1.0) ? dValue : 1.0;
 					m_pSimulation->m_vLateralStorageFactor.push_back(storageFactor);
+				}
+				if (j == 9) {
+					// Optional: longitudinal dispersion Kh (m2/s)
+					khValue = (dValue > 0.0) ? dValue : 0.0;
+					m_pSimulation->m_vLongitudinalDispersion.push_back(khValue);
 				}
 				// Increment counter
 				j++;

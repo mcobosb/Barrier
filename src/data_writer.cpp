@@ -98,6 +98,10 @@ CDataWriter::CDataWriter() {
     m_mVariableDefinitions["Sf"]["longname"] = "lateral storage factor";
     m_mVariableDefinitions["Sf"]["units"] = "";
 
+    m_mVariableDefinitions["Kh"]["description"] = "Longitudinal dispersion coefficient for salinity";
+    m_mVariableDefinitions["Kh"]["longname"] = "salinity dispersion (Kh)";
+    m_mVariableDefinitions["Kh"]["units"] = "m2/s";
+
     m_mVariableDefinitions["level"]["description"] = "Water depth";
     m_mVariableDefinitions["level"]["longname"] = "water depth";
     m_mVariableDefinitions["level"]["units"] = "m";
@@ -291,6 +295,41 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
             continue;
         }
 
+        // Special case: Kh is constant in time → store as 1D Kh(x)
+        if (m_vOutputVariable == "Kh") {
+            const int x_dim = n_XId;
+            status = nc_def_var(m_ncId, outputVariableName, NC_FLOAT, 1, &x_dim, &varId);
+            if (status != NC_NOERR) {
+                std::cerr << "Error defining variable '" << outputVariableName
+                          << "': " << nc_strerror(status) << std::endl;
+                continue;
+            }
+
+            status = nc_def_var_deflate(m_ncId, varId, 1, 1, 5);
+            if (status != NC_NOERR) {
+                std::cerr << "Warning: Could not enable compression for '" << outputVariableName
+                          << "': " << nc_strerror(status) << std::endl;
+            }
+
+            size_t chunks[1] = {static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber)};
+            status = nc_def_var_chunking(m_ncId, varId, NC_CHUNKED, chunks);
+            if (status != NC_NOERR) {
+                std::cerr << "Warning: Could not set chunking for '" << outputVariableName
+                          << "': " << nc_strerror(status) << std::endl;
+            }
+
+            std::string longname = strGetVariableMetadata(outputVariableName, "longname");
+            std::string units = strGetVariableMetadata(outputVariableName, "units");
+            std::string description = strGetVariableMetadata(outputVariableName, "description");
+            if (!longname.empty()) nc_put_att_text(m_ncId, varId, "long_name", longname.length(), longname.c_str());
+            if (!units.empty()) nc_put_att_text(m_ncId, varId, "units", units.length(), units.c_str());
+            if (!description.empty()) nc_put_att_text(m_ncId, varId, "description", description.length(), description.c_str());
+
+            m_mVariableIds[outputVariableName] = varId;
+            m_nVarIdSaltKhX = varId;
+            continue;
+        }
+
         status = nc_def_var(m_ncId, outputVariableName, NC_FLOAT, 2, n_DimensionsIds, &varId);
         if (status != NC_NOERR) {
             std::cerr << "Error defining variable '" << outputVariableName 
@@ -379,6 +418,29 @@ void CDataWriter::nDefineNetCDFFile(const CSimulation* m_pSimulation) {
                 m_nVarIdStorageSfX = varId;
             } else {
                 std::cerr << "Warning: could not define static variable 'Sf': " << nc_strerror(status) << std::endl;
+            }
+        }
+
+        // Define Kh(x) only when salinity dispersion is configured.
+        // - If along-channel Kh profile exists, write that.
+        // - Otherwise, write the configured constant dispersion_kh.
+        // This keeps NetCDF tidy unless Kh is actually meaningful.
+        const bool has_kh = (m_pSimulation->dGetLongitudinalDispersionConstant() > 0.0) ||
+                            m_pSimulation->bHasLongitudinalDispersionProfile();
+        if (has_kh && m_mVariableIds.find("Kh") == m_mVariableIds.end()) {
+            int varId = -1;
+            status = nc_def_var(m_ncId, "Kh", NC_FLOAT, 1, &x_dim, &varId);
+            if (status == NC_NOERR) {
+                const std::string longname = strGetVariableMetadata("Kh", "longname");
+                const std::string units = strGetVariableMetadata("Kh", "units");
+                const std::string description = strGetVariableMetadata("Kh", "description");
+                if (!longname.empty()) nc_put_att_text(m_ncId, varId, "long_name", longname.length(), longname.c_str());
+                if (!units.empty()) nc_put_att_text(m_ncId, varId, "units", units.length(), units.c_str());
+                if (!description.empty()) nc_put_att_text(m_ncId, varId, "description", description.length(), description.c_str());
+                m_mVariableIds["Kh"] = varId;
+                m_nVarIdSaltKhX = varId;
+            } else {
+                std::cerr << "Warning: could not define static variable 'Kh': " << nc_strerror(status) << std::endl;
             }
         }
     }
@@ -539,6 +601,17 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
                     std::cerr << "Error writing static variable 'Sf': " << nc_strerror(status) << std::endl;
                 }
             }
+
+            if (m_nVarIdSaltKhX >= 0) {
+                vector<float> kh_x(static_cast<size_t>(N), 0.0f);
+                for (int i = 0; i < N; ++i) {
+                    kh_x[static_cast<size_t>(i)] = static_cast<float>(m_pSimulation->dGetLongitudinalDispersion(i));
+                }
+                status = nc_put_var_float(m_ncId, m_nVarIdSaltKhX, kh_x.data());
+                if (status != NC_NOERR) {
+                    std::cerr << "Error writing static variable 'Kh': " << nc_strerror(status) << std::endl;
+                }
+            }
         }
         m_bWroteStaticX = true;
     }
@@ -564,6 +637,11 @@ void CDataWriter::nSetOutputData(CSimulation *m_pSimulation) const {
     for (const auto& strOutputVariable : m_pSimulation->m_vOutputVariables) {
         // n is stored as 1D n(x) (static) and already written above.
         if (strOutputVariable == "n" && m_nVarIdManningX >= 0) {
+            continue;
+        }
+
+        // Kh is stored as 1D Kh(x) (static) and already written above.
+        if (strOutputVariable == "Kh" && m_nVarIdSaltKhX >= 0) {
             continue;
         }
 

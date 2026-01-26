@@ -42,6 +42,7 @@ private:
     // IDs for static (x-only) variables written once per file
     mutable int m_nVarIdManningX = -1;   // n(x)
     mutable int m_nVarIdStorageSfX = -1; // Sf(x)
+    mutable int m_nVarIdSaltKhX = -1;    // Kh(x) (salinity longitudinal dispersion)
     mutable bool m_bWroteStaticX = false;
 
     //! Ids for x and t and NetCDF file

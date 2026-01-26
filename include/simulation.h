@@ -407,6 +407,10 @@ public:
 
     //! The longitudinal dispersion, kh [if compute water salinity]
     double m_dLongitudinalDispersion{};
+    
+    //! Optional along-channel longitudinal dispersion profile Kh(x) [if compute water salinity]
+    //! If provided (size == number of cross-sections), it overrides the constant value.
+    vector<double> m_vLongitudinalDispersion;
 
     //! The upward estuarine condition
     int m_nUpwardEstuarineCondition{};
@@ -830,6 +834,19 @@ public:
     [[nodiscard]] double dGetLongitudinalDispersionConstant() const { return m_dLongitudinalDispersion; }
     //! Method for setting the along channel constant elevation
     void dSetLongitudinalDispersionConstant(double longitudinalDispersion) { m_dLongitudinalDispersion = longitudinalDispersion; }
+    
+    [[nodiscard]] bool bHasLongitudinalDispersionProfile() const {
+        return !m_vLongitudinalDispersion.empty() &&
+               static_cast<int>(m_vLongitudinalDispersion.size()) == m_nCrossSectionsNumber;
+    }
+    
+    [[nodiscard]] double dGetLongitudinalDispersion(int i) const {
+        if (bHasLongitudinalDispersionProfile() && i >= 0 && i < m_nCrossSectionsNumber) {
+            const double kh = m_vLongitudinalDispersion[static_cast<size_t>(i)];
+            return (kh > 0.0) ? kh : 0.0;
+        }
+        return (m_dLongitudinalDispersion > 0.0) ? m_dLongitudinalDispersion : 0.0;
+    }
 
     //! Method for getting the upward estuarine condition
     [[nodiscard]] int nGetUpwardEstuarineCondition() const { return m_nUpwardEstuarineCondition; }

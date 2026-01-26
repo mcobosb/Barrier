@@ -126,7 +126,7 @@ bool CYAMLReader::loadConfiguration(const std::string& filepath, CSimulation* si
  * @note Either 'duration' or 'end_date' must be specified (not both)
  * @note output_variables="full" includes:
  *       A, Ap, Ac, Q, Qp, Qc, Rh, B, eta, level, rho, U, c, S, T,
- *       Qb, Qs, Qt, xl, xr, UTM coordinates
+ *       Qb, Qs, Qt, xl, xr, UTM coordinates, n(x), Kh(x)
  */
 void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimulation) {
     // Output file names
@@ -236,11 +236,13 @@ void CYAMLReader::parseRunSection(const YAML::Node& node, CSimulation* m_pSimula
                 m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", 
                                            "eta", "level", "rho", "U", "c", "S", "T", 
                                            "Qb", "Qs", "Qt", "xl", "xr", "xl_utm_x", 
-                                           "xl_utm_y", "xr_utm_x", "xr_utm_y"};
+                                           "xl_utm_y", "xr_utm_x", "xr_utm_y", "n", "Kh"};
             }
         } else if (node["output_variables"].IsSequence()) {
             for (const auto& var : node["output_variables"]) {
-                m_pSimulation->strAddOutputVariable(var.as<std::string>());
+                std::string name = var.as<std::string>();
+                if (name == "kh") name = "Kh";
+                m_pSimulation->strAddOutputVariable(name);
             }
         }
     }
@@ -351,6 +353,7 @@ void CYAMLReader::parseHydrodynamicsSection(const YAML::Node& node, CSimulation*
                     else if (type == "reflective") m_pSimulation->nSetUpwardEstuarineCondition(1);
                     else if (type == "elevation") m_pSimulation->nSetUpwardEstuarineCondition(2);
                     else if (type == "discharge") m_pSimulation->nSetUpwardEstuarineCondition(3);
+                    // (type "dam" removed)
                 }
             }
         }
