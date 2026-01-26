@@ -734,7 +734,7 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
         if (salinity["initial_file"]) {
             std::string filename = salinity["initial_file"].as<std::string>();
             if (!filename.empty()) {
-                m_strSalinityFilename = m_strInputPath + filename;
+                m_pSimulation->m_strInitialSalinityConditionFilename = m_strInputPath + filename;
             }
         }
         
