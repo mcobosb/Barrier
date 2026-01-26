@@ -372,48 +372,56 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         // - TVD-McCormack with Superbee: CFL_safe ≈ 0.15 (sharp fronts, needs restriction)
         // - TVD-McCormack with Van Leer/Van Albada: CFL_safe ≈ 0.2
         
-        // Determine practical safe CFL for coupled shallow water system
+        // Determine a *cap* (maximum allowed CFL) and a conservative *auto default*.
+        // NOTE: Very low CFL increases numerical diffusion and can over-damp smooth long
+        // waves (e.g. tides). We keep the default conservative, but allow the user to
+        // request a higher CFL (up to the cap) when they want less damping.
+        double cfl_cap = 0.2;
+        double cfl_auto_conservative_max = 0.2;
         if (!m_bDoMcCormackLimiterFlux || m_nEquationMcCormackLimiterFlux == 0) {
-            // No TVD: first-order upwind (most stable)
-            m_dCourantNumberMaxTheoretical = 0.5;
+            // No TVD: first-order upwind (robust)
+            cfl_cap = 0.9;
+            cfl_auto_conservative_max = 0.5; // legacy conservative default
         } else {
-            // TVD active: conservative limits for coupled system
             switch (m_nEquationMcCormackLimiterFlux) {
-                case 1:  // MinMod - most stable, good for smooth solutions
-                    m_dCourantNumberMaxTheoretical = 0.25;
+                case 1:  // MinMod
+                    cfl_cap = 0.6;
+                    cfl_auto_conservative_max = 0.25;
                     break;
-                case 2:  // Superbee - captures sharp fronts but very restrictive
-                    m_dCourantNumberMaxTheoretical = 0.15;
+                case 2:  // Superbee
+                    cfl_cap = 0.4;
+                    cfl_auto_conservative_max = 0.15;
                     break;
-                case 3:  // Van Leer - balanced performance
-                    m_dCourantNumberMaxTheoretical = 0.2;
+                case 3:  // Van Leer
+                    cfl_cap = 0.6;
+                    cfl_auto_conservative_max = 0.2;
                     break;
-                case 4:  // Van Albada - similar to Van Leer
-                    m_dCourantNumberMaxTheoretical = 0.2;
+                case 4:  // Van Albada
+                    cfl_cap = 0.6;
+                    cfl_auto_conservative_max = 0.2;
                     break;
                 default:
-                    m_dCourantNumberMaxTheoretical = 0.2;
+                    cfl_cap = 0.5;
+                    cfl_auto_conservative_max = 0.2;
             }
         }
+        m_dCourantNumberMaxTheoretical = cfl_cap;
         
-        // Apply minimal safety margin: use 90% of empirically-determined maximum
-        // Already very conservative based on shallow water coupling requirements
+        // Apply minimal safety margin for the automatic (conservative) default.
         const double SAFETY_FACTOR = 0.9;
-        m_dCourantNumberOptimal = SAFETY_FACTOR * m_dCourantNumberMaxTheoretical;
+        m_dCourantNumberOptimal = SAFETY_FACTOR * cfl_auto_conservative_max;
         
-        // User-provided Courant is treated as optional upper limit
-        // Model uses minimum of (optimal, user_provided) ensuring stability
-        // WARNING: User values higher than optimal will be IGNORED for safety
+        // User-provided Courant is treated as a requested target.
+        // If it exceeds the scheme cap, we clamp to the cap.
         if (m_dCourantNumber > 0.0) {
-            if (m_dCourantNumber < m_dCourantNumberOptimal) {
+            if (m_dCourantNumber <= m_dCourantNumberMaxTheoretical) {
                 m_dCourantNumberOptimal = m_dCourantNumber;
-                LogStream << "⚠️  User CFL=" << m_dCourantNumber << " < Auto-calculated CFL=" 
-                          << SAFETY_FACTOR * m_dCourantNumberMaxTheoretical
-                          << " (using user value)\n";
-            } else if (m_dCourantNumber > m_dCourantNumberOptimal * 1.1) {
-                LogStream << "⚠️  User CFL=" << m_dCourantNumber << " EXCEEDS safe limit=" 
-                          << m_dCourantNumberOptimal << "\n";
-                LogStream << "    → IGNORED for stability (would cause oscillations)\n";
+                LogStream << "ℹ️  User CFL=" << m_dCourantNumber
+                          << " (requested target within cap=" << m_dCourantNumberMaxTheoretical << ")\n";
+            } else {
+                LogStream << "⚠️  User CFL=" << m_dCourantNumber << " exceeds cap="
+                          << m_dCourantNumberMaxTheoretical << " (clamping)\n";
+                m_dCourantNumberOptimal = m_dCourantNumberMaxTheoretical;
             }
         }
         
@@ -445,8 +453,9 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             }
         }
         LogStream << "CFL_active: " << m_dCourantNumberCurrent << "\n";
-        LogStream << "\nNote: Higher CFL causes elevation oscillations and\n";
-        LogStream << "      spurious diffusion in coupled hyperbolic systems.\n";
+        LogStream << "\nNote: Very low CFL increases numerical diffusion (can over-damp tides).\n";
+        LogStream << "      Higher CFL reduces numerical diffusion but may trigger oscillations;\n";
+        LogStream << "      adaptive CFL will reduce it if needed.\n";
         LogStream << "===================================\n\n";
         LogStream.flush();
     }
@@ -483,18 +492,24 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         double z_min = 0.0, z_max = 0.0;
         double n_min = 0.0, n_max = 0.0;
+        double beta_min = 0.0, beta_max = 0.0;
         bool have_z = false;
         bool have_n = false;
+        bool have_beta = false;
         if (m_nCrossSectionsNumber > 0 && static_cast<int>(estuary.size()) >= m_nCrossSectionsNumber) {
             z_min = z_max = estuary[0].dGetZ();
             n_min = n_max = estuary[0].dGetManningNumber();
+            beta_min = beta_max = estuary[0].dGetBeta();
             have_z = true;
             have_n = true;
+            have_beta = true;
             for (int i = 1; i < m_nCrossSectionsNumber; ++i) {
                 z_min = std::min(z_min, estuary[i].dGetZ());
                 z_max = std::max(z_max, estuary[i].dGetZ());
                 n_min = std::min(n_min, estuary[i].dGetManningNumber());
                 n_max = std::max(n_max, estuary[i].dGetManningNumber());
+                beta_min = std::min(beta_min, estuary[i].dGetBeta());
+                beta_max = std::max(beta_max, estuary[i].dGetBeta());
             }
         }
 
@@ -513,6 +528,27 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         }
         if (have_n) {
             std::cout << "          - Manning n: [" << std::setprecision(8) << n_min << " .. " << n_max << "]" << std::endl;
+        }
+        if (have_beta) {
+            std::cout << "          - Momentum coefficient beta: [" << std::setprecision(8) << beta_min << " .. " << beta_max << "]" << std::endl;
+        }
+
+        if (m_bDoWaterSalinity) {
+            if (bHasLongitudinalDispersionProfile()) {
+                double kh_min = 1e300;
+                double kh_max = -1e300;
+                for (double kh : m_vLongitudinalDispersion) {
+                    kh_min = std::min(kh_min, kh);
+                    kh_max = std::max(kh_max, kh);
+                }
+                if (kh_min < 1e200 && kh_max > -1e200) {
+                    std::cout << "          - Dispersion Kh(x): [" << std::setprecision(8) << kh_min
+                              << " .. " << kh_max << "] m^2/s" << std::endl;
+                }
+            } else {
+                const double kh_const = dGetLongitudinalDispersionConstant();
+                std::cout << "          - Dispersion Kh: " << std::setprecision(8) << kh_const << " m^2/s" << std::endl;
+            }
         }
 
         if (m_bDoLateralStorage) {
@@ -563,7 +599,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     }
     if (m_nUpwardEstuarineCondition > 1) {
         CDataReader::bReadUpwardBoundaryConditionFile(this);
-        const bool upstream_is_discharge = (m_nUpwardEstuarineCondition == 3 || m_nUpwardEstuarineCondition == 4);
+        const bool upstream_is_discharge = (m_nUpwardEstuarineCondition == 3);
         const char* kind = upstream_is_discharge ? "discharge" : "level";
         const char* units = upstream_is_discharge ? "m3/s" : "m";
         std::cout << "        " << section_label << ") Upstream hydrodynamic BC (" << kind << "): " << std::endl;
@@ -577,7 +613,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         // Auto-detect an "extreme discharge" threshold from the upstream discharge time series.
         // This avoids relying on config.yaml while still being data-adaptive.
         m_dAutoSmoothAbsQThreshold = 0.0;
-        if ((m_nUpwardEstuarineCondition == 3 || m_nUpwardEstuarineCondition == 4) && !m_vUpwardBoundaryConditionValue.empty()) {
+        if ((m_nUpwardEstuarineCondition == 3) && !m_vUpwardBoundaryConditionValue.empty()) {
             std::vector<double> absq;
             absq.reserve(m_vUpwardBoundaryConditionValue.size());
             for (double q : m_vUpwardBoundaryConditionValue) absq.push_back(std::fabs(q));
@@ -612,6 +648,42 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         ++section_label;
     }
+
+    // === Salinity: Boundary conditions summary ===
+    if (m_bDoWaterSalinity) {
+        std::cout << "        " << section_label << ") Salinity BCs:" << std::endl;
+        const char* s_types[] = {"free", "null", "ocean"};
+        const int up_t = std::max(0, std::min(2, m_nUpwardSalinityCondition));
+        const int dn_t = std::max(0, std::min(2, m_nDownwardSalinityCondition));
+
+        std::cout << "          - Upstream: type " << m_nUpwardSalinityCondition
+                  << " (" << s_types[up_t] << ")";
+        if (!m_strUpwardSalinityBoundaryConditionFilename.empty()) {
+            std::cout << ", file=" << m_strUpwardSalinityBoundaryConditionFilename;
+        } else {
+            std::cout << ", value=" << std::setprecision(8) << m_dUpwardSalinityBoundaryValue;
+        }
+        std::cout << std::endl;
+
+        std::cout << "          - Downstream: type " << m_nDownwardSalinityCondition
+                  << " (" << s_types[dn_t] << ")";
+        if (!m_strDownwardSalinityBoundaryConditionFilename.empty()) {
+            std::cout << ", file=" << m_strDownwardSalinityBoundaryConditionFilename;
+        } else {
+            std::cout << ", value=" << std::setprecision(8) << m_dDownwardSalinityBoundaryValue;
+        }
+        std::cout << std::endl;
+
+        // Common misconfiguration: ocean boundary enabled but salinity left at default 0.
+        if (m_nDownwardSalinityCondition == 2 && m_strDownwardSalinityBoundaryConditionFilename.empty() &&
+            std::fabs(m_dDownwardSalinityBoundaryValue) < 1e-12) {
+            std::cout << "          ⚠️  Downstream salinity is set to 'ocean' but value is ~0. "
+                      << "This makes the mouth effectively fresh; salt can then only come from initial/restart fields." << std::endl;
+        }
+
+        ++section_label;
+    }
+
     // === Temperature: Boundary conditions and forcing ===
     if (m_bDoWaterTemperature) {
         if (bIsGivenTemperature()) {
@@ -700,6 +772,33 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     // Initialize simulation vectors
     initializeVectors();
     precomputeEstuaryData();
+
+    // Sanity-check: ensure cached beta profile (m_vBeta) matches geometry (estuary[].beta)
+    // This catches cases where inputs are updated but caches are stale or overwritten.
+    if (m_nCrossSectionsNumber > 0 && static_cast<int>(estuary.size()) >= m_nCrossSectionsNumber &&
+        static_cast<int>(m_vBeta.size()) == m_nCrossSectionsNumber) {
+        double beta_geom_min = estuary[0].dGetBeta();
+        double beta_geom_max = estuary[0].dGetBeta();
+        double beta_cache_min = m_vBeta[0];
+        double beta_cache_max = m_vBeta[0];
+        for (int i = 1; i < m_nCrossSectionsNumber; ++i) {
+            beta_geom_min = std::min(beta_geom_min, estuary[i].dGetBeta());
+            beta_geom_max = std::max(beta_geom_max, estuary[i].dGetBeta());
+            beta_cache_min = std::min(beta_cache_min, m_vBeta[i]);
+            beta_cache_max = std::max(beta_cache_max, m_vBeta[i]);
+        }
+        if (m_nLogFileDetail >= 1) {
+            std::ofstream LogStream(m_strLogFile.c_str(), std::ios_base::app);
+            LogStream << std::fixed << std::setprecision(8);
+            LogStream << "Beta profile (geometry): [" << beta_geom_min << " .. " << beta_geom_max << "]\n";
+            LogStream << "Beta profile (cached)  : [" << beta_cache_min << " .. " << beta_cache_max << "]\n";
+            if (fabs(beta_geom_min - beta_cache_min) > 1e-12 || fabs(beta_geom_max - beta_cache_max) > 1e-12) {
+                LogStream << "⚠️  Beta mismatch between geometry and cached arrays. "
+                          << "Solver uses cached m_vBeta; check initialization order or restart restore.\n";
+            }
+            LogStream.flush();
+        }
+    }
 
     // For reservoir temperature mode (type 3), initialize upstream temperature
     if (m_bDoWaterTemperature && !bIsGivenTemperature() && m_nUpwardTemperatureCondition == 3) {
@@ -1328,9 +1427,9 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
                 // Calculate Manning factor: Q*n/sqrt(|S0|)
                 double dManningFactor = 0.0;
                 if (m_vCrossSectionBedSlope[i] == 0.0) {
-                    dManningFactor = m_vCrossSectionQ[i] * estuary[i].dGetManningNumber() / sqrt(1e-3);
+                    dManningFactor = fabs(m_vCrossSectionQ[i]) * estuary[i].dGetManningNumber() / sqrt(1e-3);
                 } else {
-                    dManningFactor = m_vCrossSectionQ[i] * estuary[i].dGetManningNumber() / sqrt(fabs(m_vCrossSectionBedSlope[i]));
+                    dManningFactor = fabs(m_vCrossSectionQ[i]) * estuary[i].dGetManningNumber() / sqrt(fabs(m_vCrossSectionBedSlope[i]));
                 }
                 vector<double> vCrossSectionAreaTmp = estuary[i].vGetArea();
                 vector<double> vCrossSectionHydraulicRadiusTmp = estuary[i].vGetHydraulicRadius();
@@ -1600,6 +1699,13 @@ void CSimulation::calculateHydraulicParameters() {
         }
         
         m_vCrossSectionWaterElevation[i] = m_vCrossSectionWaterDepth[i] + m_vBedZ[i];
+
+        // Keep the predicted-depth vector consistent when running the corrector.
+        // Several source terms (e.g., baroclinic) reference m_vPredictedCrossSectionWaterDepth,
+        // while hydraulics are computed into the active vectors for performance.
+        if (m_nPredictor == 2 && static_cast<int>(m_vPredictedCrossSectionWaterDepth.size()) == nCrossSections) {
+            m_vPredictedCrossSectionWaterDepth[i] = m_vCrossSectionWaterDepth[i];
+        }
     }
 }
 
@@ -1741,9 +1847,12 @@ void CSimulation::calculateTimestep() {
     static const double sqrt_G = sqrt(G);
     
     // Compute timestep based on interior nodes only (exclude boundaries i=0 and i=n-1)
+    // IMPORTANT for non-uniform grids: use the local minimum spacing around node i.
     for (int i=1; i < m_nCrossSectionsNumber-1; i++) {
         if (m_vCrossSectionArea[i] > DRY_AREA) {
-            const double dX = m_vCrossSectionDX[i];
+            const double dxL = m_vPositionX[i] - m_vPositionX[i - 1];
+            const double dxR = m_vPositionX[i + 1] - m_vPositionX[i];
+            const double dX = (dxL > 0.0 && dxR > 0.0) ? std::min(dxL, dxR) : std::max(dxL, dxR);
             // Mean flow velocity: u = Q / A
             const double u = m_vCrossSectionQ[i] / m_vCrossSectionArea[i];
             m_vCrossSectionU[i] = u;
@@ -1755,7 +1864,7 @@ void CSimulation::calculateTimestep() {
             m_vCrossSectionC[i] = c;
             // Additional stability constraint for density-driven flows (baroclinic adjustment)
             if (m_bDoWaterDensity) {
-                dWaterDensityFactor = m_dCourantNumber * dX / (m_vCrossSectionWidth[i] * m_dBetaSalinityConstant);
+                dWaterDensityFactor = m_dCourantNumberCurrent * dX / (m_vCrossSectionWidth[i] * m_dBetaSalinityConstant);
             }
             // ⚡ OPTIMIZATION: Precalculate characteristic speeds to avoid recomputing in max()
             // CFL timestep: Δt = C·Δx / max(|u+c|, |u-c|)
@@ -1768,7 +1877,7 @@ void CSimulation::calculateTimestep() {
                 max_local_cfl = local_cfl;
                 critical_section_idx = i;
             }
-            if (const double dTimestepTmp = m_dCourantNumber * dX / max_lambda; 
+            if (const double dTimestepTmp = m_dCourantNumberCurrent * dX / max_lambda; 
                 dTimestepTmp < dMinTimestep) {
                 dMinTimestep = dTimestepTmp;
             }
@@ -1779,7 +1888,9 @@ void CSimulation::calculateTimestep() {
         }
         else {
             // Handle dry/nearly-dry nodes using minimum threshold values
-            const double dX = m_vCrossSectionDX[i];
+            const double dxL = m_vPositionX[i] - m_vPositionX[i - 1];
+            const double dxR = m_vPositionX[i + 1] - m_vPositionX[i];
+            const double dX = (dxL > 0.0 && dxR > 0.0) ? std::min(dxL, dxR) : std::max(dxL, dxR);
             const double u_dry = DRY_Q / DRY_AREA;
             m_vCrossSectionU[i] = u_dry;
 
@@ -1792,7 +1903,7 @@ void CSimulation::calculateTimestep() {
             // ⚡ OPTIMIZATION: Precalculate characteristic speeds
             const double lambda_plus = fabs(u_dry + c_dry);
             const double lambda_minus = fabs(u_dry - c_dry);
-            const double dTimestepTmp = m_dCourantNumber * dX / std::max(lambda_plus, lambda_minus);
+            const double dTimestepTmp = m_dCourantNumberCurrent * dX / std::max(lambda_plus, lambda_minus);
             
             if (dTimestepTmp < dMinTimestep) {
                 dMinTimestep = dTimestepTmp;
@@ -1872,17 +1983,25 @@ void CSimulation::calculateTimestep() {
     // Diffusion stability (Fourier condition): Δt ≤ α·Δx² / (2·Kh)
     // where α = stability factor (0.4-0.5 for explicit schemes)
     // Physical basis: diffusive time scale τ_diff = Δx²/Kh must be resolved
-    if (m_bDoWaterSalinity && m_dLongitudinalDispersion > 0.0) {
+    if (m_bDoWaterSalinity) {
         const double DIFFUSION_SAFETY_FACTOR = 0.4;  // Conservative: 0.4 < 0.5 (stability limit)
         double min_Pe = 1e10;  // Track minimum Péclet number (diagnostic)
+        bool any_diffusion = false;
         
         for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
             if (m_vCrossSectionArea[i] > DRY_AREA) {
-                const double dX = m_vCrossSectionDX[i];
+                const double dxL = m_vPositionX[i] - m_vPositionX[i - 1];
+                const double dxR = m_vPositionX[i + 1] - m_vPositionX[i];
+                const double dX = (dxL > 0.0 && dxR > 0.0) ? std::min(dxL, dxR) : std::max(dxL, dxR);
                 const double u = fabs(m_vCrossSectionU[i]);
+                const double Kh = dGetLongitudinalDispersion(i);
+                if (Kh <= 0.0) {
+                    continue;
+                }
+                any_diffusion = true;
                 
                 // Diffusion stability: Δt ≤ α·Δx²/Kh
-                const double dt_diffusion = DIFFUSION_SAFETY_FACTOR * dX * dX / m_dLongitudinalDispersion;
+                const double dt_diffusion = DIFFUSION_SAFETY_FACTOR * dX * dX / Kh;
                 if (dt_diffusion < m_dTimestep) {
                     m_dTimestep = dt_diffusion;
                     // Log only if extremely restrictive (Δt < 10s) and high detail level
@@ -1899,7 +2018,7 @@ void CSimulation::calculateTimestep() {
                 // Pe << 1: diffusion-dominated (smooth profiles, can use larger Δt)
                 // Pe >> 1: advection-dominated (sharp fronts, TVD limiters essential)
                 // Pe ≈ 2: balanced advection-diffusion (optimal for accuracy)
-                const double Pe = u * dX / m_dLongitudinalDispersion;
+                const double Pe = u * dX / Kh;
                 min_Pe = std::min(min_Pe, Pe);
             }
         }
@@ -1907,7 +2026,7 @@ void CSimulation::calculateTimestep() {
         // Warning: Only if Pe is extremely low and might cause performance issues
         // Log once per simulated hour maximum
         static double last_Pe_warning_time = -3600.0;
-        if (min_Pe < 0.05 && m_nLogFileDetail >= 3 && 
+        if (any_diffusion && min_Pe < 0.05 && m_nLogFileDetail >= 3 && 
             (m_dCurrentTime - last_Pe_warning_time) > 3600.0) {
             std::ofstream LogStream(m_strLogFile.c_str(), std::ios_base::app);
             LogStream << "ℹ️ Very low Péclet (Pe=" << std::fixed << std::setprecision(3) 
@@ -2201,8 +2320,23 @@ void CSimulation::dryTerms() {
 void CSimulation::doMurilloCondition() {
     if (m_nPredictor != 1) {
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
+            // Non-uniform grid: Murillo's criterion depends on local spacing.
+            double dx_local = 0.0;
+            if (m_nCrossSectionsNumber >= 2) {
+                if (i == 0) {
+                    dx_local = m_vPositionX[1] - m_vPositionX[0];
+                } else if (i == m_nCrossSectionsNumber - 1) {
+                    dx_local = m_vPositionX[i] - m_vPositionX[i - 1];
+                } else {
+                    const double dxL = m_vPositionX[i] - m_vPositionX[i - 1];
+                    const double dxR = m_vPositionX[i + 1] - m_vPositionX[i];
+                    dx_local = (dxL > 0.0 && dxR > 0.0) ? std::min(dxL, dxR) : std::max(dxL, dxR);
+                }
+            }
+            dx_local = std::max(1e-12, dx_local);
+
             const double dValue = CDX_MURILLO * sqrt(
-                                      2 * pow(m_vCrossSectionHydraulicRadius[i], 2.0 / 3.0) / (G * m_vCrossSectionDX[i]));
+                                      2 * pow(m_vCrossSectionHydraulicRadius[i], 2.0 / 3.0) / (G * dx_local));
 
             // Murillo criterion: if n is too large for local depth/spacing, clamp to n_crit.
             // Compare against the CURRENT Manning used by the solver, not the original geometry value.
@@ -2252,26 +2386,46 @@ void CSimulation::calculate_GS_A_terms() {
         // Predictor: average with i+1 (forward), Corrector: average with i-1 (backward)
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             double dMeanArea, dMeanQ, dMeanHydraulicRadius;
+            double manning2_mean = m_vManningNumberSquared[i];
+            double neta_mean = 1.0;
             
             if (m_nPredictor == 1) {
                 if (i < m_nCrossSectionsNumber - 1) {
                     dMeanArea = (m_vCrossSectionArea[i] + m_vCrossSectionArea[i+1]) / 2.0;
                     dMeanQ = (m_vCrossSectionQ[i] + m_vCrossSectionQ[i+1]) / 2.0;
                     dMeanHydraulicRadius = (m_vCrossSectionHydraulicRadius[i] + m_vCrossSectionHydraulicRadius[i+1]) / 2.0;
+                    manning2_mean = 0.5 * (m_vManningNumberSquared[i] + m_vManningNumberSquared[i + 1]);
+                    if (m_bManningDependsOnLevel) {
+                        const double eta_i = pow(n_eta(m_vCrossSectionWaterDepth[i]), 2.0);
+                        const double eta_j = pow(n_eta(m_vCrossSectionWaterDepth[i + 1]), 2.0);
+                        neta_mean = 0.5 * (eta_i + eta_j);
+                    }
                 } else {
                     dMeanArea = m_vCrossSectionArea[i];
                     dMeanQ = m_vCrossSectionQ[i];
                     dMeanHydraulicRadius = m_vCrossSectionHydraulicRadius[i];
+                    if (m_bManningDependsOnLevel) {
+                        neta_mean = pow(n_eta(m_vCrossSectionWaterDepth[i]), 2.0);
+                    }
                 }
             } else {
                 if (i > 0) {
                     dMeanArea = (m_vPredictedCrossSectionArea[i] + m_vPredictedCrossSectionArea[i-1]) / 2.0;
                     dMeanQ = (m_vPredictedCrossSectionQ[i] + m_vPredictedCrossSectionQ[i-1]) / 2.0;
                     dMeanHydraulicRadius = (m_vCrossSectionHydraulicRadius[i] + m_vCrossSectionHydraulicRadius[i-1]) / 2.0;
+                    manning2_mean = 0.5 * (m_vManningNumberSquared[i] + m_vManningNumberSquared[i - 1]);
+                    if (m_bManningDependsOnLevel) {
+                        const double eta_i = pow(n_eta(m_vCrossSectionWaterDepth[i]), 2.0);
+                        const double eta_j = pow(n_eta(m_vCrossSectionWaterDepth[i - 1]), 2.0);
+                        neta_mean = 0.5 * (eta_i + eta_j);
+                    }
                 } else {
                     dMeanArea = m_vPredictedCrossSectionArea[i];
                     dMeanQ = m_vPredictedCrossSectionQ[i];
                     dMeanHydraulicRadius = m_vCrossSectionHydraulicRadius[i];
+                    if (m_bManningDependsOnLevel) {
+                        neta_mean = pow(n_eta(m_vCrossSectionWaterDepth[i]), 2.0);
+                    }
                 }
             }
             
@@ -2287,14 +2441,6 @@ void CSimulation::calculate_GS_A_terms() {
             // Bed slope source term: gAS0 = g * A * S0
             m_vCrossSection_gAS0[i] = G * dMeanArea * S0_to_use;
             
-            // Water-level-dependent Manning coefficient correction (if enabled)
-            double neta = 1.0;
-            if (m_bManningDependsOnLevel) {
-                // Use the *active* water depth already computed by calculateHydraulicParameters()
-                // (current state in predictor, predicted state in corrector).
-                neta = pow(n_eta(m_vCrossSectionWaterDepth[i]), 2.0);
-            }
-            
             // Friction slope: Sf = (n²*η*|Q|*Q) / (A²*R^(4/3))
             // Friction term: gASf = g*A*Sf
             if (dMeanArea > DRY_AREA && dMeanHydraulicRadius > 1e-6) {
@@ -2303,7 +2449,7 @@ void CSimulation::calculate_GS_A_terms() {
                 const double Rh_power = pow(dMeanHydraulicRadius, 4.0/3.0);
                 const double Q_abs_Q = dMeanQ * fabs(dMeanQ);
                 
-                m_vCrossSectionFrictionSlope[i] = m_vManningNumberSquared[i] * neta *
+                m_vCrossSectionFrictionSlope[i] = manning2_mean * neta_mean *
                                                  Q_abs_Q / (A_squared * Rh_power);
                 m_vCrossSection_gASf[i] = G * dMeanArea * m_vCrossSectionFrictionSlope[i];
             } else {
@@ -2455,11 +2601,14 @@ void CSimulation::calculateSourceTerms() {
 
     // 3. Assemble total source terms
     for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
-        // Grid spacing (use appropriate Δx for each node)
-        const double inv_dx = (i < m_nCrossSectionsNumber - 1) ? m_vInvDX[i] : m_vInvDX[i-1];
-        
-        // Continuity source: lateral inflow distributed over grid cell
-        m_vCrossSectionGv0[i] = m_vLateralSourcesAtT[i] * inv_dx;
+        // Control-volume length for non-uniform grids: Δx_CV = 0.5[(x_i-x_{i-1}) + (x_{i+1}-x_i)]
+        const double dxL = m_vPositionX[i] - m_vPositionX[i - 1];
+        const double dxR = m_vPositionX[i + 1] - m_vPositionX[i];
+        const double dxCV = 0.5 * (dxL + dxR);
+        const double inv_dxCV = (dxCV > 1e-12) ? (1.0 / dxCV) : 0.0;
+
+        // Continuity source: lateral inflow distributed over control volume
+        m_vCrossSectionGv0[i] = m_vLateralSourcesAtT[i] * inv_dxCV;
         
         // Get current state variables
         const double area_to_use = area_to_use_vec[i];
@@ -2505,18 +2654,23 @@ void CSimulation::calculatePredictor() {
 
     const int n = m_nCrossSectionsNumber - 1;
     for (int i = 1; i < n; i++) {
+        // Local forward spacing for non-uniform grids: Δx_i = x[i+1] - x[i]
+        const double dx_forward = m_vPositionX[i + 1] - m_vPositionX[i];
+        const double lambda_forward = (dx_forward > 1e-12) ? (m_dTimestep / dx_forward) : 0.0;
+
         const double invSf = 1.0 / dGetLateralStorageFactor(i);
-        // Continuity equation: ∂A/∂t + ∂Q/∂x = G0
-        // Predictor: A* = A - λ(F0[i+1] - F0[i]) + Δt·G0[i]
-        m_vPredictedCrossSectionArea[i] = m_vCrossSectionArea[i] - 
-            (m_dLambda * invSf) * (m_vCrossSectionF0[i+1] - m_vCrossSectionF0[i]) + 
-            (m_dTimestep * invSf) * m_vCrossSectionGv0[i];  // G0 = lateral inflow (usually 0)
+
+        // Continuity equation: ∂A/∂t + (1/Sf)∂Q/∂x = (1/Sf)G0
+        // Predictor: A* = A - (Δt/Δx_i)(1/Sf)(F0[i+1] - F0[i]) + Δt(1/Sf)·G0[i]
+        m_vPredictedCrossSectionArea[i] = m_vCrossSectionArea[i] -
+            (lambda_forward * invSf) * (m_vCrossSectionF0[i + 1] - m_vCrossSectionF0[i]) +
+            (m_dTimestep * invSf) * m_vCrossSectionGv0[i];
 
         // Momentum equation: ∂Q/∂t + ∂F1/∂x = G1
-        // Predictor: Q* = Q - λ(F1[i+1] - F1[i]) + Δt·G1[i]
-        m_vPredictedCrossSectionQ[i] = m_vCrossSectionQ[i] - 
-            m_dLambda * (m_vCrossSectionF1[i+1] - m_vCrossSectionF1[i]) + 
-            m_dTimestep * m_vCrossSectionGv1[i];  // G1 = pressure gradient + friction + baroclinic
+        // Predictor: Q* = Q - (Δt/Δx_i)(F1[i+1] - F1[i]) + Δt·G1[i]
+        m_vPredictedCrossSectionQ[i] = m_vCrossSectionQ[i] -
+            lambda_forward * (m_vCrossSectionF1[i + 1] - m_vCrossSectionF1[i]) +
+            m_dTimestep * m_vCrossSectionGv1[i];
     }
 
     // Convert predicted cross-sectional area to water depth using geometry tables
@@ -2552,16 +2706,20 @@ void CSimulation::calculateCorrector() {
 
     const int n = m_nCrossSectionsNumber - 1;
     for (int i = 1; i < n; i++) {
-        const double invSf = 1.0 / dGetLateralStorageFactor(i);
-        // Continuity equation corrector: A^(n+1) = A* - λ(F0*[i] - F0*[i-1]) + Δt·G0*[i]
-        m_vCorrectedCrossSectionArea[i] = m_vPredictedCrossSectionArea[i] - 
-            (m_dLambda * invSf) * (m_vCrossSectionF0[i] - m_vCrossSectionF0[i-1]) + 
-            (m_dTimestep * invSf) * m_vCrossSectionGv0[i];  // G0 = lateral inflow
+        // Local backward spacing for non-uniform grids: Δx_{i-1} = x[i] - x[i-1]
+        const double dx_backward = m_vPositionX[i] - m_vPositionX[i - 1];
+        const double lambda_backward = (dx_backward > 1e-12) ? (m_dTimestep / dx_backward) : 0.0;
 
-        // Momentum equation corrector: Q^(n+1) = Q* - λ(F1*[i] - F1*[i-1]) + Δt·G1*[i]
-        // G1 includes: friction, bed slope, pressure gradients, and baroclinic term
-        m_vCorrectedCrossSectionQ[i] = m_vPredictedCrossSectionQ[i] - 
-            m_dLambda * (m_vCrossSectionF1[i] - m_vCrossSectionF1[i-1]) + 
+        const double invSf = 1.0 / dGetLateralStorageFactor(i);
+
+        // Continuity corrector: A^(n+1) = A* - (Δt/Δx_{i-1})(1/Sf)(F0*[i] - F0*[i-1]) + Δt(1/Sf)·G0*[i]
+        m_vCorrectedCrossSectionArea[i] = m_vPredictedCrossSectionArea[i] -
+            (lambda_backward * invSf) * (m_vCrossSectionF0[i] - m_vCrossSectionF0[i - 1]) +
+            (m_dTimestep * invSf) * m_vCrossSectionGv0[i];
+
+        // Momentum corrector: Q^(n+1) = Q* - (Δt/Δx_{i-1})(F1*[i] - F1*[i-1]) + Δt·G1*[i]
+        m_vCorrectedCrossSectionQ[i] = m_vPredictedCrossSectionQ[i] -
+            lambda_backward * (m_vCrossSectionF1[i] - m_vCrossSectionF1[i - 1]) +
             m_dTimestep * m_vCrossSectionGv1[i];
     }
 }
@@ -2623,9 +2781,17 @@ void CSimulation::applyBoundariesToCurrentState() {
     }
     else if (nGetUpwardEstuarineCondition() == 1) {
         // Type 1: Reflective / solid-wall boundary.
-        // For a closed end, enforce u=0 (Q=0) and a free-surface antinode (dη/dx≈0 → A[0]=A[1]).
+        // For a closed end, enforce u=0 (Q=0) and a free-surface antinode (dη/dx≈0).
+        // IMPORTANT: dη/dx≈0 means η[0]≈η[1], NOT A[0]≈A[1] when cross-sections differ.
         m_vCrossSectionQ[0] = 0.0;
-        m_vCrossSectionArea[0] = std::max(DRY_AREA, m_vCrossSectionArea[1]);
+        {
+            const double A1 = std::max(DRY_AREA, m_vCrossSectionArea[1]);
+            const double h1 = linearInterpolation1d(A1, m_vEstuaryAreas[1], m_vEstuaryWaterDepths[1]);
+            const double eta1 = h1 + m_vBedZ[1];
+            const double h0 = std::max(0.0, eta1 - m_vBedZ[0]);
+            m_vCrossSectionArea[0] = std::max(DRY_AREA,
+                linearInterpolation1d(h0, m_vEstuaryWaterDepths[0], m_vEstuaryAreas[0]));
+        }
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
         m_vCrossSectionArea[0] = m_dUpwardBoundaryValue;
@@ -2695,7 +2861,7 @@ void CSimulation::applyBoundariesToCurrentState() {
     }
     else if (nGetDownwardEstuarineCondition() == 1) {
         m_vCrossSectionQ[n] = m_dDownwardBoundaryValue;
-        double dManningFactor = m_vCrossSectionQ[n] * m_vCrossSectionManningNumber[n] / (sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10));
+        double dManningFactor = fabs(m_vCrossSectionQ[n]) * m_vCrossSectionManningNumber[n] / (sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10));
         m_vCrossSectionArea[n] = linearInterpolation1d(dManningFactor, m_vPrecalculatedSecondTerm[n], m_vEstuaryAreas[n]);
     }
     else {  // Type 2: tidal elevation (characteristic compatibility)
@@ -2748,7 +2914,14 @@ void CSimulation::applyBoundariesToPredictorState() {
     else if (nGetUpwardEstuarineCondition() == 1) {
         // Type 1: Reflective / solid-wall boundary (predictor state)
         m_vPredictedCrossSectionQ[0] = 0.0;
-        m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
+        {
+            const double A1 = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
+            const double h1 = linearInterpolation1d(A1, m_vEstuaryAreas[1], m_vEstuaryWaterDepths[1]);
+            const double eta1 = h1 + m_vBedZ[1];
+            const double h0 = std::max(0.0, eta1 - m_vBedZ[0]);
+            m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA,
+                linearInterpolation1d(h0, m_vEstuaryWaterDepths[0], m_vEstuaryAreas[0]));
+        }
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
         m_vPredictedCrossSectionArea[0] = m_dUpwardBoundaryValue;
@@ -2815,7 +2988,7 @@ void CSimulation::applyBoundariesToPredictorState() {
     }
     else if (nGetDownwardEstuarineCondition() == 1) {
         m_vPredictedCrossSectionQ[n] = m_dDownwardBoundaryValue;
-        double dManningFactor = m_vPredictedCrossSectionQ[n] * m_vCrossSectionManningNumber[n] / (sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10));
+        double dManningFactor = fabs(m_vPredictedCrossSectionQ[n]) * m_vCrossSectionManningNumber[n] / (sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10));
         m_vPredictedCrossSectionArea[n] = linearInterpolation1d(dManningFactor, m_vPrecalculatedSecondTerm[n], m_vEstuaryAreas[n]);
     }
     else {  // Type 2: tidal elevation (characteristic compatibility)
@@ -2872,8 +3045,15 @@ void CSimulation::updatePredictorBoundaries() {
         // Imposes zero velocity (Q=0), extrapolates water level from interior
         m_vPredictedCrossSectionQ[0] = 0.0;
 
-        // Closed end: enforce dη/dx≈0 → A[0]=A[1] (more reflective than gradient extrapolation)
-        m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA, m_vCrossSectionArea[1]);
+        // Closed end: enforce dη/dx≈0 → η[0]≈η[1]
+        {
+            const double A1 = std::max(DRY_AREA, m_vCrossSectionArea[1]);
+            const double h1 = linearInterpolation1d(A1, m_vEstuaryAreas[1], m_vEstuaryWaterDepths[1]);
+            const double eta1 = h1 + m_vBedZ[1];
+            const double h0 = std::max(0.0, eta1 - m_vBedZ[0]);
+            m_vPredictedCrossSectionArea[0] = std::max(DRY_AREA,
+                linearInterpolation1d(h0, m_vEstuaryWaterDepths[0], m_vEstuaryAreas[0]));
+        }
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
         // Type 2: Prescribed water surface elevation
@@ -2964,7 +3144,7 @@ void CSimulation::updatePredictorBoundaries() {
         m_vPredictedCrossSectionQ[n] = m_dDownwardBoundaryValue;
         
         // Compute area using inverse Manning equation
-        double dManningFactor = m_vPredictedCrossSectionQ[n] * m_vCrossSectionManningNumber[n] / 
+        double dManningFactor = fabs(m_vPredictedCrossSectionQ[n]) * m_vCrossSectionManningNumber[n] / 
                               (sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10));
         
         m_vPredictedCrossSectionArea[n] = linearInterpolation1d(
@@ -3020,8 +3200,15 @@ void CSimulation::updateCorrectorBoundaries() {
         // Type 1: Reflective/wall boundary (Q=0)
         m_vCorrectedCrossSectionQ[0] = 0.0;
 
-        // Closed end: enforce dη/dx≈0 → A[0]=A[1]
-        m_vCorrectedCrossSectionArea[0] = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
+        // Closed end: enforce dη/dx≈0 → η[0]≈η[1]
+        {
+            const double A1 = std::max(DRY_AREA, m_vPredictedCrossSectionArea[1]);
+            const double h1 = linearInterpolation1d(A1, m_vEstuaryAreas[1], m_vEstuaryWaterDepths[1]);
+            const double eta1 = h1 + m_vBedZ[1];
+            const double h0 = std::max(0.0, eta1 - m_vBedZ[0]);
+            m_vCorrectedCrossSectionArea[0] = std::max(DRY_AREA,
+                linearInterpolation1d(h0, m_vEstuaryWaterDepths[0], m_vEstuaryAreas[0]));
+        }
     }
     else if (nGetUpwardEstuarineCondition() == 2) {
         // Type 2: Prescribed elevation - impose area, compute Q with Manning
@@ -3109,7 +3296,7 @@ void CSimulation::updateCorrectorBoundaries() {
         // Type 1: Prescribed discharge
         m_vCorrectedCrossSectionQ[n] = m_dDownwardBoundaryValue;
         
-        const double dManningFactor = m_vCorrectedCrossSectionQ[n] * m_vCrossSectionManningNumber[n] / 
+        const double dManningFactor = fabs(m_vCorrectedCrossSectionQ[n]) * m_vCrossSectionManningNumber[n] / 
                                      (sqrt(fabs(m_vCrossSectionBedSlope[n]) + 1e-10));
         
         m_vCorrectedCrossSectionArea[n] = linearInterpolation1d(
@@ -3340,12 +3527,16 @@ void CSimulation::calculate_salinity_predictor() {
         // Diffusion divergence in flux form.
         // Define diffusive flux at faces: Fd = -Kh * A_face * (ΔS/Δx)
         double d_Fd_dx = 0.0;
-        if (m_dLongitudinalDispersion > 0.0) {
+        {
+            const double Kh_L = 0.5 * (dGetLongitudinalDispersion(i - 1) + dGetLongitudinalDispersion(i));
+            const double Kh_R = 0.5 * (dGetLongitudinalDispersion(i) + dGetLongitudinalDispersion(i + 1));
+            if (Kh_L > 0.0 || Kh_R > 0.0) {
             const double A_L = 0.5 * (m_vCrossSectionArea[i - 1] + m_vCrossSectionArea[i]);
             const double A_R = 0.5 * (m_vCrossSectionArea[i] + m_vCrossSectionArea[i + 1]);
-            const double Fd_L = -m_dLongitudinalDispersion * A_L * (tracer_bc[i] - tracer_bc[i - 1]) / dxL;
-            const double Fd_R = -m_dLongitudinalDispersion * A_R * (tracer_bc[i + 1] - tracer_bc[i]) / dxR;
+            const double Fd_L = -Kh_L * A_L * (tracer_bc[i] - tracer_bc[i - 1]) / dxL;
+            const double Fd_R = -Kh_R * A_R * (tracer_bc[i + 1] - tracer_bc[i]) / dxR;
             d_Fd_dx = (Fd_R - Fd_L) / dxCV;
+            }
         }
 
         // Lateral storage consistency:
@@ -3488,12 +3679,16 @@ void CSimulation::calculate_salinity_corrector() {
         const double d_QS_dx = (tvd_flux[i + 1] - tvd_flux[i]) / dxCV;
 
         double d_Fd_dx = 0.0;
-        if (m_dLongitudinalDispersion > 0.0) {
+        {
+            const double Kh_L = 0.5 * (dGetLongitudinalDispersion(i - 1) + dGetLongitudinalDispersion(i));
+            const double Kh_R = 0.5 * (dGetLongitudinalDispersion(i) + dGetLongitudinalDispersion(i + 1));
+            if (Kh_L > 0.0 || Kh_R > 0.0) {
             const double A_L = 0.5 * (m_vPredictedCrossSectionArea[i - 1] + m_vPredictedCrossSectionArea[i]);
             const double A_R = 0.5 * (m_vPredictedCrossSectionArea[i] + m_vPredictedCrossSectionArea[i + 1]);
-            const double Fd_L = -m_dLongitudinalDispersion * A_L * (tracer_bc[i] - tracer_bc[i - 1]) / dxL;
-            const double Fd_R = -m_dLongitudinalDispersion * A_R * (tracer_bc[i + 1] - tracer_bc[i]) / dxR;
+            const double Fd_L = -Kh_L * A_L * (tracer_bc[i] - tracer_bc[i - 1]) / dxL;
+            const double Fd_R = -Kh_R * A_R * (tracer_bc[i + 1] - tracer_bc[i]) / dxR;
             d_Fd_dx = (Fd_R - Fd_L) / dxCV;
+            }
         }
 
         const double invS = 1.0 / dGetLateralStorageFactor(i);
@@ -3548,18 +3743,28 @@ void CSimulation::calculate_temperature_predictor() {
     
     for (int i = 1; i < N-1; ++i) {
         double adv = 0.0;
-        double u = m_vCrossSectionU[i];
-        double dx = m_vCrossSectionDX[i];
-        
-        // Upwind advection
-        if (u > 0) {
-            adv = -u * (m_vCrossSectionTemperature[i] - m_vCrossSectionTemperature[i-1]) / dx;
-        } else {
-            adv = -u * (m_vCrossSectionTemperature[i+1] - m_vCrossSectionTemperature[i]) / dx;
+        const double u = m_vCrossSectionU[i];
+        const double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+        const double dxR = m_vCrossSectionX[i + 1] - m_vCrossSectionX[i];
+        const double dxCV = 0.5 * (dxL + dxR);
+
+        if (dxL <= 1e-12 || dxR <= 1e-12 || dxCV <= 1e-12) {
+            m_vPredictedCrossSectionT[i] = m_vCrossSectionTemperature[i];
+            continue;
         }
         
-        // Centered diffusion
-        double diff = m_dThermalDispersion * (m_vCrossSectionTemperature[i+1] - 2*m_vCrossSectionTemperature[i] + m_vCrossSectionTemperature[i-1]) / (dx*dx);
+        // Upwind advection on non-uniform grid
+        if (u > 0.0) {
+            adv = -u * (m_vCrossSectionTemperature[i] - m_vCrossSectionTemperature[i - 1]) / dxL;
+        } else {
+            adv = -u * (m_vCrossSectionTemperature[i + 1] - m_vCrossSectionTemperature[i]) / dxR;
+        }
+        
+        // Non-uniform second derivative (conservative Laplacian form)
+        const double d2Tdx2 = (2.0 / (dxL + dxR)) *
+                              ((m_vCrossSectionTemperature[i + 1] - m_vCrossSectionTemperature[i]) / dxR -
+                               (m_vCrossSectionTemperature[i] - m_vCrossSectionTemperature[i - 1]) / dxL);
+        const double diff = m_dThermalDispersion * d2Tdx2;
         
         // Surface heat flux contribution: Q_net/(ρ·Cp·h)
         double Qnet = m_vCrossSectionTemperatureASt[i];
@@ -3611,16 +3816,29 @@ void CSimulation::calculate_temperature_corrector() {
     
     for (int i = 1; i < N-1; ++i) {
         double adv = 0.0;
-        double u = m_vCrossSectionU[i];
-        double dx = m_vCrossSectionDX[i];
-        if (u > 0) {
-            adv = -u * (m_vPredictedCrossSectionT[i] - m_vPredictedCrossSectionT[i-1]) / dx;
-        } else {
-            adv = -u * (m_vPredictedCrossSectionT[i+1] - m_vPredictedCrossSectionT[i]) / dx;
+        const double u = m_vCrossSectionU[i];
+        const double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+        const double dxR = m_vCrossSectionX[i + 1] - m_vCrossSectionX[i];
+        const double dxCV = 0.5 * (dxL + dxR);
+
+        if (dxL <= 1e-12 || dxR <= 1e-12 || dxCV <= 1e-12) {
+            m_vCorrectedCrossSectionT[i] = m_vPredictedCrossSectionT[i];
+            continue;
         }
-        double diff = m_dThermalDispersion * (m_vPredictedCrossSectionT[i+1] - 2*m_vPredictedCrossSectionT[i] + m_vPredictedCrossSectionT[i-1]) / (dx*dx);
-        double Qnet = m_vCrossSectionTemperatureASt[i];
-        double dTdt = adv + diff + Qnet / (WATER_DENSITY * WATER_SPECIFIC_HEAT * m_vCrossSectionWaterDepth[i]);
+
+        if (u > 0.0) {
+            adv = -u * (m_vPredictedCrossSectionT[i] - m_vPredictedCrossSectionT[i - 1]) / dxL;
+        } else {
+            adv = -u * (m_vPredictedCrossSectionT[i + 1] - m_vPredictedCrossSectionT[i]) / dxR;
+        }
+
+        const double d2Tdx2 = (2.0 / (dxL + dxR)) *
+                              ((m_vPredictedCrossSectionT[i + 1] - m_vPredictedCrossSectionT[i]) / dxR -
+                               (m_vPredictedCrossSectionT[i] - m_vPredictedCrossSectionT[i - 1]) / dxL);
+        const double diff = m_dThermalDispersion * d2Tdx2;
+
+        const double Qnet = m_vCrossSectionTemperatureASt[i];
+        const double dTdt = adv + diff + Qnet / (WATER_DENSITY * WATER_SPECIFIC_HEAT * m_vCrossSectionWaterDepth[i]);
         const double invS = 1.0 / dGetLateralStorageFactor(i);
         m_vCorrectedCrossSectionT[i] = m_vPredictedCrossSectionT[i] + (m_dTimestep * invS) * dTdt;
     }
@@ -3964,9 +4182,13 @@ void CSimulation::mergePredictorCorrector() {
         // - (1 - λ|a|): CFL-based weight
         // - (1 - φ): anti-diffusive component (φ=0 for 1st order, φ=1 for TVD)
         for (int i = 0; i < m_nCrossSectionsNumber-1; i++) {
+            // Local interface spacing for non-uniform grids (between i and i+1)
+            const double dx_interface = m_vPositionX[i + 1] - m_vPositionX[i];
+            const double lambda_interface = (dx_interface > 1e-12) ? (m_dTimestep / dx_interface) : 0.0;
+
             // Anti-diffusive flux for each characteristic
-            vFactor1[i] = alfa1_med[i]*psi1_med[i]*(1-m_dLambda*fabs(a1_med[i]))*(1-fi1_med[i]);
-            vFactor2[i] = alfa2_med[i]*psi2_med[i]*(1-m_dLambda*fabs(a2_med[i]))*(1-fi2_med[i]);
+            vFactor1[i] = alfa1_med[i]*psi1_med[i]*(1 - lambda_interface*fabs(a1_med[i]))*(1-fi1_med[i]);
+            vFactor2[i] = alfa2_med[i]*psi2_med[i]*(1 - lambda_interface*fabs(a2_med[i]))*(1-fi2_med[i]);
 
             // Project back to physical variables: D1 for continuity, D2 for momentum
             m_vCrossSectionD1Factor[i+1] = 0.5*(vFactor1[i] + vFactor2[i]);
@@ -3982,9 +4204,17 @@ void CSimulation::mergePredictorCorrector() {
         // U^{n+1} = 0.5*(U_pred + U_corr) + TVD_correction
         // Only interior nodes - boundaries set by BC
         for (int i = 1; i < m_nCrossSectionsNumber - 1; i++) {
-            m_vCrossSectionArea[i] = 0.5 * (m_vPredictedCrossSectionArea[i] + m_vCorrectedCrossSectionArea[i]) + m_dLambda *
-                (m_vCrossSectionD1Factor[i + 1] - m_vCrossSectionD1Factor[i]);
-            m_vCrossSectionQ[i] = 0.5*(m_vPredictedCrossSectionQ[i] + m_vCorrectedCrossSectionQ[i]) +m_dLambda*(m_vCrossSectionD2Factor[i+1] - m_vCrossSectionD2Factor[i]);
+            // Cell length associated with node i is half the distance between neighbors:
+            // Δx_cell ≈ 0.5*(x[i+1]-x[i-1]) = 0.5*(dx_left + dx_right)
+            const double dx_sum = m_vPositionX[i + 1] - m_vPositionX[i - 1];
+            const double lambda_cell = (dx_sum > 1e-12) ? (2.0 * m_dTimestep / dx_sum) : 0.0;
+
+            const double invSf = 1.0 / dGetLateralStorageFactor(i);
+
+            m_vCrossSectionArea[i] = 0.5 * (m_vPredictedCrossSectionArea[i] + m_vCorrectedCrossSectionArea[i]) +
+                (lambda_cell * invSf) * (m_vCrossSectionD1Factor[i + 1] - m_vCrossSectionD1Factor[i]);
+            m_vCrossSectionQ[i] = 0.5 * (m_vPredictedCrossSectionQ[i] + m_vCorrectedCrossSectionQ[i]) +
+                lambda_cell * (m_vCrossSectionD2Factor[i + 1] - m_vCrossSectionD2Factor[i]);
         }
         
         //! Apply final boundary conditions after merge
@@ -4486,9 +4716,12 @@ void CSimulation::writePeriodicStatistics() {
             const double u_abs = fabs(Q / (A + 1e-10));
             if (u_abs > U_max) U_max = u_abs;
 
-            // CFL estimate (interior only)
-            if (i > 0 && i < m_nCrossSectionsNumber - 1 && m_vCrossSectionDX[i] > 0) {
-                double cfl = m_dTimestep * (u_abs + m_vCrossSectionC[i]) / m_vCrossSectionDX[i];
+            // CFL estimate (interior only) using local min spacing for non-uniform grids
+            if (i > 0 && i < m_nCrossSectionsNumber - 1) {
+                const double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+                const double dxR = m_vCrossSectionX[i + 1] - m_vCrossSectionX[i];
+                const double dx_local = (dxL > 0.0 && dxR > 0.0) ? std::min(dxL, dxR) : std::max(dxL, dxR);
+                double cfl = (dx_local > 0.0) ? (m_dTimestep * (u_abs + m_vCrossSectionC[i]) / dx_local) : 0.0;
                 if (cfl > CFL_max) CFL_max = cfl;
             }
 
@@ -4654,10 +4887,13 @@ void CSimulation::writePeriodicStatistics() {
         // Approximate gravity-wave travel time from downstream to upstream using current c(x): T ≈ ∑ dx / c.
         // This is a diagnostic (not a solver constraint) to compare against the observed phase lag.
         double travel_s = 0.0;
-        for (int i = 1; i < last; ++i) {
-            const double dx = m_vCrossSectionDX[i];
+        for (int i = 1; i <= last; ++i) {
+            const double dx = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
             if (dx <= 0.0) continue;
-            const double ci = celerityFromArea(m_vEstuaryAreas[i], m_vWidth[i], m_vCrossSectionArea[i]) / std::sqrt(dGetLateralStorageFactor(i));
+            // Use celerity at the segment midpoint via averaging endpoint celerities (diagnostic only).
+            const double cL = celerityFromArea(m_vEstuaryAreas[i - 1], m_vWidth[i - 1], m_vCrossSectionArea[i - 1]) / std::sqrt(dGetLateralStorageFactor(i - 1));
+            const double cR = celerityFromArea(m_vEstuaryAreas[i], m_vWidth[i], m_vCrossSectionArea[i]) / std::sqrt(dGetLateralStorageFactor(i));
+            const double ci = 0.5 * (cL + cR);
             travel_s += dx / std::max(1e-6, ci);
         }
         const double L = m_vCrossSectionX[last] - m_vCrossSectionX[0];
@@ -4667,6 +4903,34 @@ void CSimulation::writePeriodicStatistics() {
                   << "n0=" << std::fixed << std::setprecision(4) << m_vCrossSectionManningNumber[0]
                   << " nMid=" << m_vCrossSectionManningNumber[mid]
                   << " nN=" << m_vCrossSectionManningNumber[last]
+                  << "  beta[0,mid,n]=" << std::fixed << std::setprecision(6)
+                  << (m_vBeta.empty() ? 0.0 : m_vBeta[0]) << ","
+                  << (m_vBeta.empty() ? 0.0 : m_vBeta[mid]) << ","
+                  << (m_vBeta.empty() ? 0.0 : m_vBeta[last])
+                  << "  Fr[0,mid,n]=";
+
+        auto safe_Froude = [&](int i, double c) {
+            const double A = std::max(DRY_AREA, m_vCrossSectionArea[i]);
+            const double u = m_vCrossSectionQ[i] / A;
+            return std::fabs(u) / std::max(1e-6, c);
+        };
+        const double Fr0 = safe_Froude(0, c0);
+        const double FrM = safe_Froude(mid, cMid);
+        const double FrN = safe_Froude(last, cN);
+        LogStream << std::fixed << std::setprecision(3) << Fr0 << "," << FrM << "," << FrN;
+
+        auto safe_advF1 = [&](int i) {
+            const double A = std::max(DRY_AREA, m_vCrossSectionArea[i]);
+            const double Q = m_vCrossSectionQ[i];
+            const double beta = (m_vBeta.empty() ? 1.0 : m_vBeta[i]);
+            return beta * (Q * Q) / A;
+        };
+        const double adv0 = safe_advF1(0);
+        const double advM = safe_advF1(mid);
+        const double advN = safe_advF1(last);
+
+        LogStream << "  advF1=βQ²/A[0,mid,n]=" << std::scientific << std::setprecision(3)
+                  << adv0 << "," << advM << "," << advN << std::defaultfloat
                   << "  SfMid=" << std::scientific << std::setprecision(3) << Sf_from_state(mid) << std::defaultfloat
                   << "  c[0,mid,n]=" << std::fixed << std::setprecision(2) << c0 << "," << cMid << "," << cN
                   << "  Ttravel≈" << std::fixed << std::setprecision(2) << (travel_s / 3600.0) << "h"
@@ -4674,6 +4938,63 @@ void CSimulation::writePeriodicStatistics() {
                   << "  etaAmp[0,mid,n]=" << std::fixed << std::setprecision(3)
                   << (eta0_max - eta0_min) << "," << (etam_max - etam_min) << "," << (etan_max - etan_min)
                   << "\n";
+
+        // Phase diagnostic: estimate best lag between eta at x0 and xN using cross-correlation
+        // over the last ~72 output samples (matching the typical hourly output cadence).
+        // Positive lag means eta(x0) lags eta(xN).
+        static std::vector<double> eta0_hist;
+        static std::vector<double> etan_hist;
+        static bool hist_init = false;
+        if (!hist_init) {
+            eta0_hist.reserve(256);
+            etan_hist.reserve(256);
+            hist_init = true;
+        }
+        eta0_hist.push_back(eta0);
+        etan_hist.push_back(etan);
+        const size_t max_keep = 256;
+        if (eta0_hist.size() > max_keep) {
+            eta0_hist.erase(eta0_hist.begin(), eta0_hist.begin() + (eta0_hist.size() - max_keep));
+            etan_hist.erase(etan_hist.begin(), etan_hist.begin() + (etan_hist.size() - max_keep));
+        }
+
+        // Compute lag only when we have enough samples.
+        const size_t Nsamples = eta0_hist.size();
+        if (Nsamples >= 12) {
+            const size_t window = std::min<size_t>(72, Nsamples);
+            const size_t start = Nsamples - window;
+
+            // Detrend by removing mean over the window.
+            double m0 = 0.0, mn = 0.0;
+            for (size_t k = start; k < Nsamples; ++k) {
+                m0 += eta0_hist[k];
+                mn += etan_hist[k];
+            }
+            m0 /= static_cast<double>(window);
+            mn /= static_cast<double>(window);
+
+            // Search lags in +/-12 samples (scaled to hours using output interval).
+            const int max_lag_samples = 12;
+            int best_lag = 0;
+            double best_score = -1e300;
+            for (int lag = -max_lag_samples; lag <= max_lag_samples; ++lag) {
+                double sum = 0.0;
+                for (size_t k = start; k < Nsamples; ++k) {
+                    const long j = static_cast<long>(k) + lag;
+                    if (j < static_cast<long>(start) || j >= static_cast<long>(Nsamples)) continue;
+                    sum += (eta0_hist[k] - m0) * (etan_hist[static_cast<size_t>(j)] - mn);
+                }
+                if (sum > best_score) {
+                    best_score = sum;
+                    best_lag = lag;
+                }
+            }
+
+            const double dt_out_h = m_dSimTimestep / 3600.0;
+            LogStream << "PhaseLag: bestLag=" << std::fixed << std::setprecision(2)
+                      << (static_cast<double>(best_lag) * dt_out_h)
+                      << " h (eta0 relative to etaN, window=" << window << ")\n";
+        }
     }
 
     // Boundary-condition diagnostics (stage vs simulated at the last two nodes)
@@ -4731,10 +5052,11 @@ void CSimulation::writePeriodicStatistics() {
         for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
             if (m_vCrossSectionArea[i] > DRY_AREA) {
                 advective_flux += fabs(m_vCrossSectionU[i] * m_vCrossSectionSalinity[i] * m_vCrossSectionArea[i]);
-                if (m_dLongitudinalDispersion > 0.0) {
+                const double Kh = dGetLongitudinalDispersion(i);
+                if (Kh > 0.0) {
                     double dS_dx = (m_vCrossSectionSalinity[i+1] - m_vCrossSectionSalinity[i-1]) /
                                    (m_vCrossSectionX[i+1] - m_vCrossSectionX[i-1]);
-                    diffusive_flux += fabs(m_dLongitudinalDispersion * dS_dx * m_vCrossSectionArea[i]);
+                    diffusive_flux += fabs(Kh * dS_dx * m_vCrossSectionArea[i]);
                 }
                 n_active++;
             }
@@ -4748,10 +5070,12 @@ void CSimulation::writePeriodicStatistics() {
         double numerical_diffusion = 0.0;
         for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
             if (m_vCrossSectionArea[i] > DRY_AREA && m_vCrossSectionU[i] > 0.1) {
-                double dx = m_vCrossSectionDX[i];
+                const double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+                const double dxR = m_vCrossSectionX[i + 1] - m_vCrossSectionX[i];
+                const double dx = 0.5 * (dxL + dxR);
                 double u = fabs(m_vCrossSectionU[i]);
-                double Pe = (m_dLongitudinalDispersion > 0.0) ?
-                           (u * dx / m_dLongitudinalDispersion) : 1e10;
+                const double Kh = dGetLongitudinalDispersion(i);
+                double Pe = (Kh > 0.0) ? (u * dx / Kh) : 1e10;
                 if (Pe < Pe_min) Pe_min = Pe;
                 numerical_diffusion = std::max(numerical_diffusion, u * dx * 0.5);
             }
@@ -4771,9 +5095,21 @@ void CSimulation::writePeriodicStatistics() {
             LogStream << " (Ratio=" << std::setprecision(2) << diffusive_flux/advective_flux << ")";
         }
         LogStream << "\n";
-        LogStream << "  • Dispersion coefficient: K_physical=" << std::setprecision(1) << m_dLongitudinalDispersion
-                  << " m²/s, K_numerical≈" << numerical_diffusion << " m²/s";
-        if (numerical_diffusion > m_dLongitudinalDispersion * 0.1) {
+        double kh_ref = std::max(0.0, m_dLongitudinalDispersion);
+        if (bHasLongitudinalDispersionProfile()) {
+            double kh_min = 1e300, kh_max = -1e300;
+            for (double kh : m_vLongitudinalDispersion) {
+                kh_min = std::min(kh_min, kh);
+                kh_max = std::max(kh_max, kh);
+            }
+            kh_ref = std::max(0.0, kh_max);
+            LogStream << "  • Dispersion coefficient: Kh(x) in [" << std::setprecision(2) << kh_min
+                      << " .. " << kh_max << "] m²/s, K_numerical≈" << numerical_diffusion << " m²/s";
+        } else {
+            LogStream << "  • Dispersion coefficient: K_physical=" << std::setprecision(1) << m_dLongitudinalDispersion
+                      << " m²/s, K_numerical≈" << numerical_diffusion << " m²/s";
+        }
+        if (kh_ref > 0.0 && numerical_diffusion > kh_ref * 0.1) {
             LogStream << " ⚠️ HIGH";
         }
         LogStream << "\n";
@@ -4824,10 +5160,11 @@ void CSimulation::writePeriodicStatistics() {
                     advective_flux += fabs(m_vCrossSectionU[i] * m_vCrossSectionSalinity[i] * m_vCrossSectionArea[i]);
                     
                     // Diffusive transport: K * dS/dx * A
-                    if (m_dLongitudinalDispersion > 0.0) {
+                    const double Kh = dGetLongitudinalDispersion(i);
+                    if (Kh > 0.0) {
                         double dS_dx = (m_vCrossSectionSalinity[i+1] - m_vCrossSectionSalinity[i-1]) / 
                                        (m_vCrossSectionX[i+1] - m_vCrossSectionX[i-1]);
-                        diffusive_flux += fabs(m_dLongitudinalDispersion * dS_dx * m_vCrossSectionArea[i]);
+                        diffusive_flux += fabs(Kh * dS_dx * m_vCrossSectionArea[i]);
                     }
                     n_active++;
                 }
@@ -4842,10 +5179,12 @@ void CSimulation::writePeriodicStatistics() {
             double numerical_diffusion = 0.0;
             for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
                 if (m_vCrossSectionArea[i] > DRY_AREA && m_vCrossSectionU[i] > 0.1) {
-                    double dx = m_vCrossSectionDX[i];
+                    const double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+                    const double dxR = m_vCrossSectionX[i + 1] - m_vCrossSectionX[i];
+                    const double dx = 0.5 * (dxL + dxR);
                     double u = fabs(m_vCrossSectionU[i]);
-                    double Pe = (m_dLongitudinalDispersion > 0.0) ? 
-                               (u * dx / m_dLongitudinalDispersion) : 1e10;
+                    const double Kh = dGetLongitudinalDispersion(i);
+                    double Pe = (Kh > 0.0) ? (u * dx / Kh) : 1e10;
                     if (Pe < Pe_min) Pe_min = Pe;
                     
                     // Numerical diffusion from upwind: K_num ~ u*dx/2
@@ -4869,8 +5208,18 @@ void CSimulation::writePeriodicStatistics() {
                 LogStream << " ; diff/adv=" << std::setprecision(3) << (diffusive_flux / advective_flux);
             }
             LogStream << "\n";
-            LogStream << "  - K_physical=" << std::setprecision(2) << m_dLongitudinalDispersion
-                      << " m^2/s ; K_numerical≈" << std::setprecision(2) << numerical_diffusion << " m^2/s\n";
+            if (bHasLongitudinalDispersionProfile()) {
+                double kh_min = 1e300, kh_max = -1e300;
+                for (double kh : m_vLongitudinalDispersion) {
+                    kh_min = std::min(kh_min, kh);
+                    kh_max = std::max(kh_max, kh);
+                }
+                LogStream << "  - Kh(x) in [" << std::setprecision(2) << kh_min << " .. " << kh_max
+                          << "] m^2/s ; K_numerical≈" << std::setprecision(2) << numerical_diffusion << " m^2/s\n";
+            } else {
+                LogStream << "  - K_physical=" << std::setprecision(2) << dGetLongitudinalDispersionConstant()
+                          << " m^2/s ; K_numerical≈" << std::setprecision(2) << numerical_diffusion << " m^2/s\n";
+            }
             if (Pe_min < 2.0) {
                 LogStream << "  - WARNING: Low Peclet (min Pe=" << std::setprecision(2) << Pe_min << ")\n";
             }
@@ -5412,11 +5761,28 @@ void CSimulation::calculate_density()
         const double T = m_vCrossSectionTemperature[i];
         const double rhow = rho_base * (1.0 + betaS * S - betaT * (T - T_ref));
         if (m_bDoSedimentTransport) {
+            // Use control-volume length for non-uniform grids
+            double dxCV = 0.0;
+            if (m_nCrossSectionsNumber >= 2) {
+                if (i == 0) {
+                    dxCV = m_vCrossSectionX[1] - m_vCrossSectionX[0];
+                } else if (i == m_nCrossSectionsNumber - 1) {
+                    dxCV = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+                } else {
+                    const double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+                    const double dxR = m_vCrossSectionX[i + 1] - m_vCrossSectionX[i];
+                    dxCV = 0.5 * (dxL + dxR);
+                }
+            }
+            dxCV = std::max(1e-12, dxCV);
+
             if (m_nPredictor == 1) {
-                m_vPredictedCrossSectionDensity[i] =  rhow + (1 - rhow/1000.0/m_vCrossSectionRhos[i])*m_vCrossSectionQt[i]/(m_vCrossSectionArea[i]*m_vCrossSectionDX[i])*m_dTimestep;
+                m_vPredictedCrossSectionDensity[i] =  rhow + (1 - rhow/1000.0/m_vCrossSectionRhos[i])*
+                                                     m_vCrossSectionQt[i]/(m_vCrossSectionArea[i]*dxCV)*m_dTimestep;
             }
             else 
-                m_vCrossSectionDensity[i] = rhow + (1 - rhow/1000.0/m_vCrossSectionRhos[i])*m_vCrossSectionQt[i]/(m_vCrossSectionArea[i]*m_vCrossSectionDX[i])*m_dTimestep;
+                m_vCrossSectionDensity[i] = rhow + (1 - rhow/1000.0/m_vCrossSectionRhos[i])*
+                                            m_vCrossSectionQt[i]/(m_vCrossSectionArea[i]*dxCV)*m_dTimestep;
             }
         else {
             if (m_nPredictor == 1) {
@@ -5512,6 +5878,10 @@ void CSimulation::precomputeEstuaryData() {
             m_vPrecalculatedSecondTerm[i][j] = areas[j] * pow(hydraulicRadius[j], 2.0/3.0);
         }
     }
+
+    // Some modules (e.g., tracer transport) use m_vCrossSectionX explicitly.
+    // Keep it defined and consistent with the main geometry x-coordinate.
+    m_vCrossSectionX = m_vPositionX;
 }
 
 /**
