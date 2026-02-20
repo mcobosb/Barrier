@@ -156,6 +156,10 @@ public:
     
     //! Compute water salinity?
     bool m_bDoWaterSalinity{false};
+
+    //! Include baroclinic pressure-gradient forcing in momentum when salinity is enabled?
+    //! (This affects hydrodynamics via Gv1; it does NOT directly change tracer advection.)
+    bool m_bDoBaroclinicPressure{true};
     
     //! Compute water density?
     bool m_bDoWaterDensity{false};
@@ -811,6 +815,11 @@ public:
     //! Method for setting the compute water salinity
     void bSetDoWaterSalinity(bool doWaterSalinity) { m_bDoWaterSalinity = doWaterSalinity; }
 
+    //! Method for getting whether baroclinic pressure forcing is enabled
+    [[nodiscard]] bool bGetDoBaroclinicPressure() const { return m_bDoBaroclinicPressure; }
+    //! Method for setting whether baroclinic pressure forcing is enabled
+    void bSetDoBaroclinicPressure(bool doBaroclinic) { m_bDoBaroclinicPressure = doBaroclinic; }
+
     //! Method for getting the compute water salinity
     [[nodiscard]] int nGetUpwardSalinityCondition() const { return m_nUpwardSalinityCondition; }
     //! Method for setting the compute water salinity
@@ -982,6 +991,7 @@ public:
     void getLastHydraulicParameters(int nCrossSection);
     void calculateTimestep();
     void calculateBoundaryConditions();
+    void calculateBoundaryConditions(double t_bc);
     void dryArea();
     void dryTerms();
     void doMurilloCondition();
@@ -990,12 +1000,12 @@ public:
     void calculate_GS_A_terms();
     void calculateFlowTerms();
     void calculateSourceTerms();
-    void applyBoundariesToCurrentState();
-    void applyBoundariesToPredictorState();
+    void applyBoundariesToCurrentState(double t_bc);
+    void applyBoundariesToPredictorState(double t_bc);
     void calculatePredictor();
     void calculateCorrector();
-    void updatePredictorBoundaries();
-    void updateCorrectorBoundaries();
+    void updatePredictorBoundaries(double t_bc);
+    void updateCorrectorBoundaries(double t_bc);
     void mergePredictorCorrector();
     void mergeTracerPredictorCorrector();
     void smoothSolution();
