@@ -789,6 +789,13 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
         if (salinity["dispersion_kh"]) {
             m_pSimulation->dSetLongitudinalDispersionConstant(salinity["dispersion_kh"].as<double>());
         }
+
+        // Optional: enable/disable baroclinic pressure-gradient forcing in momentum
+        // (keeps salinity transport enabled, but removes density-driven circulation term).
+        if (salinity["baroclinic"]) {
+            try { m_pSimulation->bSetDoBaroclinicPressure(salinity["baroclinic"].as<bool>()); }
+            catch (...) {}
+        }
     }
 
     // Sediment transport

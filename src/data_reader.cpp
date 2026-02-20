@@ -148,6 +148,9 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 	}
 
 	int nCrossSectionNumber = 0;
+	int expected_cols = -1;
+	double prev_x = -std::numeric_limits<double>::infinity();
+	int nDataLine = 0;
 	// int i = 0;
 	// size_t nPos;
 	string strRec, strErr;
@@ -158,56 +161,71 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 		strRec = strTrim(&strRec);
 		// If it is a blank line or a comment then ignore it
 		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			nDataLine++;
+			std::vector<double> values;
+			values.reserve(12);
+			{
+				std::stringstream tmp(strRec);
+				std::string tok;
+				while (std::getline(tmp, tok, ',')) {
+					values.push_back(strtod(tok.c_str(), nullptr));
+				}
+			}
+			if (expected_cols < 0) {
+				expected_cols = static_cast<int>(values.size());
+			} else if (static_cast<int>(values.size()) != expected_cols) {
+				throw std::runtime_error(
+					"Inconsistent column count in along-channel file '" + m_strAlongChannelDataFilename +
+					"' at data line " + std::to_string(nDataLine) +
+					" (expected " + std::to_string(expected_cols) +
+					", got " + std::to_string(values.size()) + ")"
+				);
+			}
+			if (values.size() < 3) {
+				throw std::runtime_error(
+					"Along-channel file '" + m_strAlongChannelDataFilename +
+					"' has too few columns at data line " + std::to_string(nDataLine) +
+					" (need at least X,Z,Manning_n)"
+				);
+			}
+			const double x = values[0];
+			if (nDataLine > 1 && !(x > prev_x)) {
+				throw std::runtime_error(
+					"Along-channel X must be strictly increasing. Found X=" + std::to_string(x) +
+					" after X=" + std::to_string(prev_x) +
+					" in file '" + m_strAlongChannelDataFilename +
+					"' at data line " + std::to_string(nDataLine)
+				);
+			}
+			prev_x = x;
+			const double manning = values[2];
+			if (!(manning > 0.0)) {
+				throw std::runtime_error(
+					"Invalid Manning_n (<=0) in file '" + m_strAlongChannelDataFilename +
+					"' at data line " + std::to_string(nDataLine)
+				);
+			}
+
 			// Create a new cross-section object and append to estuary
 			m_pSimulation->AddCrossSection();
 			// Update section number
 			m_pSimulation->estuary[nCrossSectionNumber].nSetSectionNumber(nCrossSectionNumber);
-			double storageFactor = 1.0;
-			double khValue = -1.0;
-			// Obtain the new line
-			stringstream strLine(strRec);
-			string token;
-			int j = 0;
-			// Using get line for splitting the string line by commas
-			while (getline(strLine, token, ',')) {
-				double dValue = strtod(token.c_str(), nullptr);
-				if (j == 0) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetX(dValue);
-					m_pSimulation->m_vCrossSectionX.push_back(dValue);
-				}
-				if (j == 1) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetZ(dValue);
-				}
-				if (j == 2) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetManningNumber(dValue);
-				}
-				if (j == 3) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetX_UTM(dValue);
-				}
-				if (j == 4) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetY_UTM(dValue);
-				}
-				if (j == 5) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetRightRBAngle(dValue);
-				}
-				if (j == 6) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(dValue);
-				}
-				if (j == 7) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetBeta(dValue);
-				}
-				if (j == 8) {
-					// Optional: lateral storage factor S>=1
-					storageFactor = (dValue >= 1.0) ? dValue : 1.0;
-					m_pSimulation->m_vLateralStorageFactor.push_back(storageFactor);
-				}
-				if (j == 9) {
-					// Optional: longitudinal dispersion Kh (m2/s)
-					khValue = (dValue > 0.0) ? dValue : 0.0;
-					m_pSimulation->m_vLongitudinalDispersion.push_back(khValue);
-				}
-				// Increment counter
-				j++;
+			m_pSimulation->estuary[nCrossSectionNumber].dSetX(values[0]);
+			m_pSimulation->m_vCrossSectionX.push_back(values[0]);
+			m_pSimulation->estuary[nCrossSectionNumber].dSetZ(values[1]);
+			m_pSimulation->estuary[nCrossSectionNumber].dSetManningNumber(values[2]);
+			if (values.size() > 3) m_pSimulation->estuary[nCrossSectionNumber].dSetX_UTM(values[3]);
+			if (values.size() > 4) m_pSimulation->estuary[nCrossSectionNumber].dSetY_UTM(values[4]);
+			if (values.size() > 5) m_pSimulation->estuary[nCrossSectionNumber].dSetRightRBAngle(values[5]);
+			if (values.size() > 6) m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(values[6]);
+			if (values.size() > 7) m_pSimulation->estuary[nCrossSectionNumber].dSetBeta(values[7]);
+			if (values.size() > 8) {
+				const double storageFactor = (values[8] >= 1.0) ? values[8] : 1.0;
+				m_pSimulation->m_vLateralStorageFactor.push_back(storageFactor);
+			}
+			if (values.size() > 9) {
+				const double khValue = (values[9] > 0.0) ? values[9] : 0.0;
+				m_pSimulation->m_vLongitudinalDispersion.push_back(khValue);
 			}
 			// Increment counter
 			nCrossSectionNumber++;
@@ -389,6 +407,10 @@ void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 	}
 
 	int nLine = 0;
+	int expected_cols = -1;
+	int nDataLine = 0;
+	int nFileLine = 0;
+	std::vector<std::vector<int>> sectionNodeFileLines;
 
 	int nLastElevationLine = 1;
 	// int i = 0;
@@ -397,81 +419,131 @@ void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 	int nCrossSectionNumber = 0;
 
 	while (getline(InStream, strRec)) {
+		nFileLine++;
 		// Trim off leading and trailing whitespace
 		strRec = strTrim(&strRec);
 		// If it is a blank line or a comment then ignore it
 		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			nDataLine++;
+			std::vector<double> values;
+			values.reserve(12);
+			{
+				std::stringstream tmp(strRec);
+				std::string tok;
+				while (std::getline(tmp, tok, ',')) {
+					values.push_back(strtod(tok.c_str(), nullptr));
+				}
+			}
+			if (expected_cols < 0) {
+				expected_cols = static_cast<int>(values.size());
+			} else if (static_cast<int>(values.size()) != expected_cols) {
+				throw std::runtime_error(
+					"Inconsistent column count in cross-sections file '" + m_strCrossSectionsFilename +
+					"' at data line " + std::to_string(nDataLine) +
+					" (expected " + std::to_string(expected_cols) +
+					", got " + std::to_string(values.size()) + ")"
+				);
+			}
+			if (values.size() < 10) {
+				throw std::runtime_error(
+					"Cross-sections file '" + m_strCrossSectionsFilename +
+					"' has too few columns at data line " + std::to_string(nDataLine) +
+					" (need at least 10: x,?,eta,B,A,P,Rh,sigma,xl,xr)"
+				);
+			}
 			bool bSetElevationSectionsNumber = true;
 			// It isn't so increment counter
 			nLine++;
-
-			stringstream strLine(strRec);
-
-			string token;
-			int j = 0;
-
-			// Using get line for splitting the string by commas
-			while (getline(strLine, token, ',')) {
-
-				double dValue = strtod(token.c_str(), nullptr);
-
-				if (j == 0 && m_pSimulation->estuary[nCrossSectionNumber].dGetX() != dValue) {
-					if (bSetElevationSectionsNumber) {
-						m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine);
-						bSetElevationSectionsNumber = false;
-						nLastElevationLine = nLine;
-					}
-					nCrossSectionNumber++;
+			const double x_id = values[0];
+			const double x_current = m_pSimulation->estuary[nCrossSectionNumber].dGetX();
+			if (nCrossSectionNumber < m_pSimulation->m_nCrossSectionsNumber && fabs(x_current - x_id) > 1e-6) {
+				if (bSetElevationSectionsNumber) {
+					m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine);
+					bSetElevationSectionsNumber = false;
+					nLastElevationLine = nLine;
 				}
-
-				if (j == 2) {
-					string strItem = "elevation";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
+				nCrossSectionNumber++;
+				if (nCrossSectionNumber >= m_pSimulation->m_nCrossSectionsNumber) {
+					throw std::runtime_error(
+						"Cross-sections file '" + m_strCrossSectionsFilename +
+						"' contains more sections than along-channel file '" + m_strAlongChannelDataFilename + "'"
+					);
 				}
-
-				if (j == 3) {
-					string strItem = "width";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 4) {
-					string strItem = "area";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 5) {
-					string strItem = "perimeter";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 6) {
-					string strItem = "hydraulic radius";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 7) {
-					string strItem = "sigma";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 8) {
-					string strItem = "left river bank location";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 9) {
-					string strItem = "right river bank location";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-				// Increase counter
-				j++;
-
 			}
+			// Track the file line that produced each elevation-node entry for better diagnostics.
+			if (static_cast<int>(sectionNodeFileLines.size()) <= nCrossSectionNumber) {
+				sectionNodeFileLines.resize(static_cast<size_t>(nCrossSectionNumber) + 1);
+			}
+			sectionNodeFileLines[static_cast<size_t>(nCrossSectionNumber)].push_back(nFileLine);
+
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("elevation", values[2]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("width", values[3]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("area", values[4]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("perimeter", values[5]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("hydraulic radius", values[6]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("sigma", values[7]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("left river bank location", values[8]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("right river bank location", values[9]);
 		}
 
 	}
 	// Number of elevation sections for the last Cross-Section
 	m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine + 1);
+
+	// Validate that each cross-section table is usable for runtime interpolation.
+	// This moves “table checks” out of the timestep loop and fails fast on bad inputs.
+	const int nSections = m_pSimulation->m_nCrossSectionsNumber;
+	for (int i = 0; i < nSections; i++) {
+		const int nElev = m_pSimulation->estuary[i].nGetElevationSectionsNumber();
+		const auto& depth = m_pSimulation->estuary[i].vGetWaterDepth();
+		const auto& width = m_pSimulation->estuary[i].vGetWidth();
+		const auto& area = m_pSimulation->estuary[i].vGetArea();
+		const auto& rh = m_pSimulation->estuary[i].vGetHydraulicRadius();
+		if (nElev < 2) {
+			throw std::runtime_error(
+				"Cross-section " + std::to_string(i) + " has <2 elevation nodes in '" + m_strCrossSectionsFilename + "'"
+			);
+		}
+		if (static_cast<int>(depth.size()) != nElev || static_cast<int>(width.size()) != nElev ||
+			static_cast<int>(area.size()) != nElev || static_cast<int>(rh.size()) != nElev) {
+			throw std::runtime_error(
+				"Cross-section " + std::to_string(i) + " table size mismatch in '" + m_strCrossSectionsFilename + "'"
+			);
+		}
+		for (int j = 1; j < nElev; j++) {
+			const int fileLineForNode = (
+				static_cast<size_t>(i) < sectionNodeFileLines.size() &&
+				static_cast<size_t>(j) < sectionNodeFileLines[static_cast<size_t>(i)].size()
+			) ? sectionNodeFileLines[static_cast<size_t>(i)][static_cast<size_t>(j)] : -1;
+			if (!(depth[static_cast<size_t>(j)] > depth[static_cast<size_t>(j - 1)])) {
+				throw std::runtime_error(
+					"Non-increasing elevation table at cross-section " + std::to_string(i) +
+					" (j=" + std::to_string(j) + ") in '" + m_strCrossSectionsFilename + "'" +
+					(fileLineForNode > 0 ? (" (file line " + std::to_string(fileLineForNode) + ")") : "")
+				);
+			}
+			if (!(area[static_cast<size_t>(j)] > area[static_cast<size_t>(j - 1)])) {
+				throw std::runtime_error(
+					"Non-increasing area table at cross-section " + std::to_string(i) +
+					" (j=" + std::to_string(j) + ") in '" + m_strCrossSectionsFilename + "'" +
+					(fileLineForNode > 0 ? (" (file line " + std::to_string(fileLineForNode) + ")") : "") +
+					" (this would cause zero denominators during interpolation)"
+				);
+			}
+			if (area[static_cast<size_t>(j)] > 0.0 && !(width[static_cast<size_t>(j)] > 0.0)) {
+				throw std::runtime_error(
+					"Non-positive width at cross-section " + std::to_string(i) +
+					" (j=" + std::to_string(j) + ") in '" + m_strCrossSectionsFilename + "'"
+				);
+			}
+			if (area[static_cast<size_t>(j)] > 0.0 && !(rh[static_cast<size_t>(j)] >= 0.0)) {
+				throw std::runtime_error(
+					"Invalid hydraulic radius at cross-section " + std::to_string(i) +
+					" (j=" + std::to_string(j) + ") in '" + m_strCrossSectionsFilename + "'"
+				);
+			}
+		}
+	}
 
 	// // Calculate I1 pressure integral for all cross-sections after reading geometry
 	// for (int i = 0; i <= nCrossSectionNumber; i++) {

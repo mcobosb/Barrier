@@ -864,6 +864,33 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     writer.nSetOutputData(this);
     m_nTimeId++;
 
+    // Initialize salt mass balance diagnostics at t=0 (if enabled)
+    if (m_bDoWaterSalinity && m_nCrossSectionsNumber >= 2) {
+        const int last = m_nCrossSectionsNumber - 1;
+        const double psu_to_massfrac = 1.0 / 1000.0; // assumes PSU ~ g/kg
+        double mass0 = 0.0;
+        for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+            const double A = m_vCrossSectionArea[i];
+            if (!(A > DRY_AREA)) continue;
+            double dxCV;
+            if (i == 0) {
+                dxCV = 0.5 * (m_vCrossSectionX[1] - m_vCrossSectionX[0]);
+            } else if (i == last) {
+                dxCV = 0.5 * (m_vCrossSectionX[last] - m_vCrossSectionX[last - 1]);
+            } else {
+                dxCV = 0.5 * (m_vCrossSectionX[i + 1] - m_vCrossSectionX[i - 1]);
+            }
+            if (!(dxCV > 0.0)) continue;
+            const double vol = dGetLateralStorageFactor(i) * A * dxCV;
+            const double rho0 = 1025.0;
+            mass0 += rho0 * vol * (m_vCrossSectionSalinity[i] * psu_to_massfrac);
+        }
+        m_dSaltInitialMass = mass0;
+        m_dSaltInflowDownstream = 0.0;
+        m_dSaltOutflowDownstream = 0.0;
+        m_dSaltNetFlowDownstream = 0.0;
+    }
+
     int m_nStep = 1;
     cout << "    - Running" << endl;
     m_tSysStartLoopTime = time(nullptr);
@@ -902,8 +929,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         // Note: Reservoir temperature (type 3) already pre-computed before loop
         // Current time value obtained by interpolation in boundary condition functions
         
-        // Update boundary conditions and calculate adaptive timestep
-        calculateBoundaryConditions();
+        // Update boundary conditions at t^n and calculate adaptive timestep
+        calculateBoundaryConditions(m_dCurrentTime);
         calculateTimestep();
 
         //==============================================================================================================
@@ -912,7 +939,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         m_nPredictor = 1;
         
         // Apply BC to current state BEFORE calculating hydraulic parameters and fluxes
-        applyBoundariesToCurrentState();
+        applyBoundariesToCurrentState(m_dCurrentTime);
         calculateHydraulicParameters();
 
         if (m_bDoWaterTemperature && bIsGivenTemperature()) {
@@ -933,7 +960,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         calculatePredictor();
         
         // Apply BC to predictor state AFTER calculating predictor interior
-        updatePredictorBoundaries();
+        calculateBoundaryConditions(m_dCurrentTime + m_dTimestep);
+        updatePredictorBoundaries(m_dCurrentTime + m_dTimestep);
         if (bGetDoDryBed()) dryArea();
 
         // Advance transport scalars to predictor state (S*, T*)
@@ -951,7 +979,7 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         m_nPredictor = 2;
         
         // Apply BC to predictor state BEFORE calculating hydraulic parameters and fluxes
-        applyBoundariesToPredictorState();
+        applyBoundariesToPredictorState(m_dCurrentTime + m_dTimestep);
         calculateHydraulicParameters();
 
         if (m_bDoWaterTemperature && bIsGivenTemperature()) {
@@ -972,7 +1000,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         calculateCorrector();
         
         // Apply BC to corrector state AFTER calculating corrector interior
-        updateCorrectorBoundaries();
+        calculateBoundaryConditions(m_dCurrentTime + m_dTimestep);
+        updateCorrectorBoundaries(m_dCurrentTime + m_dTimestep);
         if (bGetDoDryBed()) dryArea();
 
         // Advance transport scalars to corrector state (S**, T**)
@@ -1015,7 +1044,8 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
 
         // Smoothing updates interior nodes (including those adjacent to boundaries).
         // Re-apply boundary conditions so stage/discharge closures remain consistent.
-        applyBoundariesToCurrentState();
+        calculateBoundaryConditions(m_dCurrentTime + m_dTimestep);
+        applyBoundariesToCurrentState(m_dCurrentTime + m_dTimestep);
 
         // Display progress and save output if needed
         AnnounceProgress();
@@ -1025,35 +1055,91 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             checkAnomalousValues();
         }
         
+        // === Salt mass balance diagnostics (downstream boundary) ===
+        // Units note:
+        // - Here we assume salinity values are in PSU ~ g/kg.
+        // - Convert to an approximate mass fraction via S_mass = PSU/1000.
+        // - Salt mass flux at a boundary is: \dot{m}_salt ≈ ρ * Q * (PSU/1000) [kg/s].
+        if (m_bDoWaterSalinity) {
+            const int last = m_nCrossSectionsNumber - 1;
+            if (last >= 0 && m_nCrossSectionsNumber >= 2) {
+                const double t_bc = m_dCurrentTime + m_dTimestep;
+
+                auto interp_bc = [&](double t, const std::vector<double>& tt, const std::vector<double>& vv, double fallback) {
+                    if (tt.size() < 2 || vv.size() < 2 || tt.size() != vv.size()) return fallback;
+                    auto it = std::lower_bound(tt.begin(), tt.end(), t);
+                    if (it == tt.begin()) return vv.front();
+                    if (it == tt.end()) return vv.back();
+                    const size_t idx = static_cast<size_t>(std::distance(tt.begin(), it));
+                    const double t1 = tt[idx - 1];
+                    const double t2 = tt[idx];
+                    const double v1 = vv[idx - 1];
+                    const double v2 = vv[idx];
+                    const double w = (t2 > t1) ? ((t - t1) / (t2 - t1)) : 0.0;
+                    return v1 + (v2 - v1) * w;
+                };
+
+                // Downstream salinity BC at t^{n+1}
+                double down_sal = m_dDownwardSalinityBoundaryValue;
+                if (!m_strDownwardSalinityBoundaryConditionFilename.empty() &&
+                    !m_vDownwardSalinityBoundaryConditionTime.empty() &&
+                    !m_vDownwardSalinityBoundaryConditionValue.empty()) {
+                    down_sal = interp_bc(t_bc, m_vDownwardSalinityBoundaryConditionTime, m_vDownwardSalinityBoundaryConditionValue, down_sal);
+                }
+
+                // Use the downstream *interior face* (between last-1 and last).
+                // The transport update for the last interior CV uses the interface flux,
+                // so this is the meaningful control-surface for salt import/export.
+                const double Q_face_dn = 0.5 * (m_vCrossSectionQ[last - 1] + m_vCrossSectionQ[last]);
+                const double S_dn_upwind = (Q_face_dn < 0.0) ? down_sal : m_vCrossSectionSalinity[last - 1];
+
+                // Density at boundary (kg/m^3): use computed density if available, else a safe seawater default.
+                double rho_dn = 1025.0;
+                if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
+                    const double rhoL = std::max(900.0, m_vCrossSectionDensity[last - 1]);
+                    const double rhoR = std::max(900.0, m_vCrossSectionDensity[last]);
+                    rho_dn = 0.5 * (rhoL + rhoR);
+                }
+
+                const double psu_to_massfrac = 1.0 / 1000.0;
+                const double inflow_kg_s = (Q_face_dn < 0.0) ? (rho_dn * (-Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
+                const double outflow_kg_s = (Q_face_dn > 0.0) ? (rho_dn * ( Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
+
+                // Accumulate (kg)
+                m_dSaltInflowDownstream += inflow_kg_s * m_dTimestep;
+                m_dSaltOutflowDownstream += outflow_kg_s * m_dTimestep;
+                m_dSaltNetFlowDownstream = m_dSaltInflowDownstream - m_dSaltOutflowDownstream;
+
+                // Capture initial mass (kg) once, using a control-volume integration.
+                if (m_dCurrentTime <= 0.0 && m_dSaltInitialMass <= 0.0) {
+                    double mass0 = 0.0;
+                    for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+                        const double A = m_vCrossSectionArea[i];
+                        if (!(A > DRY_AREA)) continue;
+                        double dxCV;
+                        if (i == 0) {
+                            dxCV = 0.5 * (m_vCrossSectionX[1] - m_vCrossSectionX[0]);
+                        } else if (i == last) {
+                            dxCV = 0.5 * (m_vCrossSectionX[last] - m_vCrossSectionX[last - 1]);
+                        } else {
+                            dxCV = 0.5 * (m_vCrossSectionX[i + 1] - m_vCrossSectionX[i - 1]);
+                        }
+                        if (!(dxCV > 0.0)) continue;
+                        const double vol = dGetLateralStorageFactor(i) * A * dxCV; // m^3
+                        double rho_i = 1025.0;
+                        if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
+                            rho_i = std::max(900.0, m_vCrossSectionDensity[i]);
+                        }
+                        mass0 += rho_i * vol * (m_vCrossSectionSalinity[i] * psu_to_massfrac);
+                    }
+                    m_dSaltInitialMass = mass0;
+                }
+            }
+        }
+
         // Write periodic statistics (every simulated hour)
         if (m_nLogFileDetail >= 1) {
             writePeriodicStatistics();
-        }
-
-        // === Salt mass balance diagnostics ===
-        if (m_bDoWaterSalinity && LogStream.is_open() && m_nLogFileDetail >= 1) {
-            // Compute total salt mass in domain (effective storage = S * A)
-            double total_salt = 0.0;
-            for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
-                const double S = dGetLateralStorageFactor(i);
-                total_salt += (S * m_vCrossSectionArea[i]) * m_vCrossSectionSalinity[i];
-            }
-            // Compute salt fluxes at boundaries (kg/s)
-            double salt_in = 0.0, salt_out = 0.0;
-            // Upstream (dam)
-            if (m_vCrossSectionQ[0] > 0.0) {
-                salt_in += m_vCrossSectionQ[0] * m_vCrossSectionSalinity[0];
-            } else {
-                salt_out -= m_vCrossSectionQ[0] * m_vCrossSectionSalinity[0];
-            }
-            // Downstream (ocean)
-            int last = m_nCrossSectionsNumber - 1;
-            if (m_vCrossSectionQ[last] < 0.0) {
-                salt_in += -m_vCrossSectionQ[last] * m_vCrossSectionSalinity[last];
-            } else {
-                salt_out += m_vCrossSectionQ[last] * m_vCrossSectionSalinity[last];
-            }
-            // Removed per-timestep [SaltBalance] log
         }
         
         // Level 2: Save output at EVERY timestep (WARNING: Very slow, huge files)
@@ -1396,6 +1482,13 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
     m_vInvDxSum.resize(m_nCrossSectionsNumber);
     m_vGtimesDX.resize(m_nCrossSectionsNumber);
     
+    // DRY_AREA is a global numerical safety threshold (see include/main.h).
+    // Do NOT derive it from the minimum geometric area because most cross-section tables
+    // start at A=0 for eta=0, which would make DRY_AREA=0 and break dry-bed protection.
+    if (!(DRY_AREA > 0.0)) {
+        DRY_AREA = 1.0;
+    }
+
     for (int i = 0; i < m_nCrossSectionsNumber; i++) {
         // Precompute inverse spacing (1/Δx) for gradient calculations
         if (m_vCrossSectionDX[i] > 1e-10) {
@@ -1407,8 +1500,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
         // Precompute g*Δx for source terms
         m_vGtimesDX[i] = G * m_vCrossSectionDX[i];
         
-        // Set minimum area threshold (10% of minimum geometric area)
-        DRY_AREA = 0.1 * m_vEstuaryAreas[i][0];
+        // DRY_AREA is intentionally NOT updated per cross-section.
     }
     
     // Precompute spacing sums for central differences
@@ -1416,7 +1508,7 @@ void CSimulation::calculateAlongEstuaryInitialConditions() {
         double dx1 = m_vPositionX[i+1] - m_vPositionX[i];
         double dx2 = m_vPositionX[i] - m_vPositionX[i-1];
         m_vDxSum[i] = dx1 + dx2;
-        m_vInvDxSum[i] = 1.0 / m_vDxSum[i];
+        m_vInvDxSum[i] = (m_vDxSum[i] > 1e-12) ? (1.0 / m_vDxSum[i]) : 0.0;
     }
 
     // Initialize hydraulic conditions (skipped if continuing from NetCDF)
@@ -2136,10 +2228,17 @@ void CSimulation::calculateTimestep() {
  */
 //===============================================================================================================================
 void CSimulation::calculateBoundaryConditions() {
+    calculateBoundaryConditions(m_dCurrentTime);
+}
+
+//===============================================================================================================================
+// Time-aware boundary condition evaluation (used to keep predictor/corrector BCs coherent in time)
+//===============================================================================================================================
+void CSimulation::calculateBoundaryConditions(double t_bc) {
     // Upstream boundary (condition type 2 = water surface elevation prescribed)
     if (nGetUpwardEstuarineCondition() == 2) {
         // Step 1: Interpolate elevation from time series at current time
-        double dUpwardBoundaryValue = linearInterpolation1d(m_dCurrentTime, 
+        double dUpwardBoundaryValue = linearInterpolation1d(t_bc, 
                                                            m_vUpwardBoundaryConditionTime, 
                                                            m_vUpwardBoundaryConditionValue);
         
@@ -2158,7 +2257,7 @@ void CSimulation::calculateBoundaryConditions() {
     // Upstream boundary (condition type 3 = discharge prescribed from time series)
     if ((nGetUpwardEstuarineCondition() == 3)) {
         // Interpolate discharge from time series at current time
-        m_dUpwardBoundaryValue = linearInterpolation1d(m_dCurrentTime, 
+        m_dUpwardBoundaryValue = linearInterpolation1d(t_bc, 
                                                        m_vUpwardBoundaryConditionTime, 
                                                        m_vUpwardBoundaryConditionValue);
     }
@@ -2166,7 +2265,7 @@ void CSimulation::calculateBoundaryConditions() {
     // Downstream boundary (condition type 2 = water surface elevation prescribed)
     if (nGetDownwardEstuarineCondition() == 2) {
         // Step 1: Interpolate elevation from time series at current time
-        double dDownwardBoundaryValue = linearInterpolation1d(m_dCurrentTime, 
+        double dDownwardBoundaryValue = linearInterpolation1d(t_bc, 
                                                              m_vDownwardBoundaryConditionTime, 
                                                              m_vDownwardBoundaryConditionValue);
         
@@ -2192,7 +2291,7 @@ void CSimulation::calculateBoundaryConditions() {
                 continue;
             }
             m_vLateralSourcesAtT[node] += linearInterpolation1d(
-                m_dCurrentTime,
+                t_bc,
                 hydrographs[i].vGetTime(),
                 hydrographs[i].vGetQ()
             );
@@ -2766,7 +2865,7 @@ static inline double celerityFromArea(const std::vector<double>& areas,
  * - Type 3: Prescribed discharge (with Manning for area)
  */
 //======================================================================================================================
-void CSimulation::applyBoundariesToCurrentState() {
+void CSimulation::applyBoundariesToCurrentState(double /*t_bc*/) {
     int n = m_nCrossSectionsNumber - 1;
     
     // Upstream boundary - current state
@@ -2898,7 +2997,7 @@ void CSimulation::applyBoundariesToCurrentState() {
  * - Type 3: Prescribed discharge (with Manning for area)
  */
 //======================================================================================================================
-void CSimulation::applyBoundariesToPredictorState() {
+void CSimulation::applyBoundariesToPredictorState(double /*t_bc*/) {
     int n = m_nCrossSectionsNumber - 1;
     
     // Upstream boundary - predictor state
@@ -3020,7 +3119,7 @@ void CSimulation::applyBoundariesToPredictorState() {
  * Includes selective smoothing to prevent spurious oscillations at boundaries.
  */
 //======================================================================================================================
-void CSimulation::updatePredictorBoundaries() {
+void CSimulation::updatePredictorBoundaries(double /*t_bc*/) {
     //==============================================================================================================
     // UPSTREAM BOUNDARY CONDITION
     //==============================================================================================================
@@ -3179,7 +3278,7 @@ void CSimulation::updatePredictorBoundaries() {
  * Boundary condition types same as predictor: 0=open, 1=reflective/discharge, 2=elevation, 3=discharge
  */
 //===============================================================================================================================
-void CSimulation::updateCorrectorBoundaries() {
+void CSimulation::updateCorrectorBoundaries(double /*t_bc*/) {
     //==============================================================================================================
     // UPSTREAM BOUNDARY CONDITION - Corrector
     //==============================================================================================================
@@ -4771,14 +4870,78 @@ void CSimulation::writePeriodicStatistics() {
     LogStream << "SIMULATION DIAGNOSTICS - PERIODIC STATISTICS\n";
     LogStream << "t=" << m_dCurrentTime/3600.0 << "h: ";
 
-    // Salt mass (if salinity active)
+    // Salt diagnostics (if salinity active)
     if (m_bDoWaterSalinity) {
-        double salt_mass = 0.0;
-        for (int i = 0; i < m_nCrossSectionsNumber; i++) {
-            if (m_vCrossSectionArea[i] > DRY_AREA)
-                salt_mass += m_vCrossSectionArea[i] * m_vCrossSectionSalinity[i];
+        // Recompute a physically meaningful salt inventory (kg) for context.
+        // Assumes salinity is PSU ~ g/kg, converted to mass fraction via PSU/1000.
+        const int last = m_nCrossSectionsNumber - 1;
+        const double psu_to_massfrac = 1.0 / 1000.0;
+        double salt_mass_kg = 0.0;
+        if (m_nCrossSectionsNumber >= 2) {
+            for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+                const double A = m_vCrossSectionArea[i];
+                if (!(A > DRY_AREA)) continue;
+                double dxCV;
+                if (i == 0) {
+                    dxCV = 0.5 * (m_vCrossSectionX[1] - m_vCrossSectionX[0]);
+                } else if (i == last) {
+                    dxCV = 0.5 * (m_vCrossSectionX[last] - m_vCrossSectionX[last - 1]);
+                } else {
+                    dxCV = 0.5 * (m_vCrossSectionX[i + 1] - m_vCrossSectionX[i - 1]);
+                }
+                if (!(dxCV > 0.0)) continue;
+                const double vol = dGetLateralStorageFactor(i) * A * dxCV; // m^3
+                double rho_i = 1025.0;
+                if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
+                    rho_i = std::max(900.0, m_vCrossSectionDensity[i]);
+                }
+                salt_mass_kg += rho_i * vol * (m_vCrossSectionSalinity[i] * psu_to_massfrac);
+            }
         }
-        LogStream << "Salt mass = " << salt_mass << " kg\n";
+
+        // Instantaneous downstream salt flux (kg/s) at the current step.
+        if (m_nCrossSectionsNumber < 2) {
+            LogStream << "Salt(inv)=" << std::scientific << std::setprecision(3) << salt_mass_kg << " kg\n" << std::defaultfloat;
+        } else {
+        auto interp_bc = [&](double t, const std::vector<double>& tt, const std::vector<double>& vv, double fallback) {
+            if (tt.size() < 2 || vv.size() < 2 || tt.size() != vv.size()) return fallback;
+            auto it = std::lower_bound(tt.begin(), tt.end(), t);
+            if (it == tt.begin()) return vv.front();
+            if (it == tt.end()) return vv.back();
+            const size_t idx = static_cast<size_t>(std::distance(tt.begin(), it));
+            const double t1 = tt[idx - 1];
+            const double t2 = tt[idx];
+            const double v1 = vv[idx - 1];
+            const double v2 = vv[idx];
+            const double w = (t2 > t1) ? ((t - t1) / (t2 - t1)) : 0.0;
+            return v1 + (v2 - v1) * w;
+        };
+
+        const double t_bc = m_dCurrentTime + m_dTimestep;
+        double down_sal = m_dDownwardSalinityBoundaryValue;
+        if (!m_strDownwardSalinityBoundaryConditionFilename.empty() &&
+            !m_vDownwardSalinityBoundaryConditionTime.empty() &&
+            !m_vDownwardSalinityBoundaryConditionValue.empty()) {
+            down_sal = interp_bc(t_bc, m_vDownwardSalinityBoundaryConditionTime, m_vDownwardSalinityBoundaryConditionValue, down_sal);
+        }
+        // Use the downstream interior face between (last-1, last)
+        const double Q_face_dn = 0.5 * (m_vCrossSectionQ[last - 1] + m_vCrossSectionQ[last]);
+        const double S_dn_upwind = (Q_face_dn < 0.0) ? down_sal : m_vCrossSectionSalinity[last - 1];
+        double rho_dn = 1025.0;
+        if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
+            const double rhoL = std::max(900.0, m_vCrossSectionDensity[last - 1]);
+            const double rhoR = std::max(900.0, m_vCrossSectionDensity[last]);
+            rho_dn = 0.5 * (rhoL + rhoR);
+        }
+        const double inflow_kg_s = (Q_face_dn < 0.0) ? (rho_dn * (-Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
+        const double outflow_kg_s = (Q_face_dn > 0.0) ? (rho_dn * ( Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
+        const double net_kg_s = inflow_kg_s - outflow_kg_s;
+
+        LogStream << "Salt(inv)=" << std::scientific << std::setprecision(3) << salt_mass_kg << " kg"
+                  << "  DownFlux(in,out,net)=" << inflow_kg_s << "," << outflow_kg_s << "," << net_kg_s << " kg/s"
+                  << "  DownCumNet=" << m_dSaltNetFlowDownstream << " kg"
+                  << "\n" << std::defaultfloat;
+        }
     }
 
     LogStream << std::setw(20) << datetime_buf
@@ -5023,14 +5186,16 @@ void CSimulation::writePeriodicStatistics() {
     // Advanced salinity diagnostics (every hour)
     if (m_bDoWaterSalinity) {
         // Find salt wedge intrusion limit (isohaline 1 ppt)
-        // Search from upstream (dam) to downstream (ocean) to find furthest upstream intrusion
+        // Search from upstream (dam) to downstream (ocean) to find the first saline section.
         int intrusion_idx = -1;
-        double intrusion_distance = 0.0;
+        double x_intrusion = 0.0;
+        double intrusion_from_mouth = 0.0;
         for (int i = 0; i < m_nCrossSectionsNumber; i++) {
             if (m_vCrossSectionSalinity[i] >= 1.0) {
                 // First occurrence from upstream = furthest intrusion
                 intrusion_idx = i;
-                intrusion_distance = m_vCrossSectionX[i];
+                x_intrusion = m_vCrossSectionX[i];
+                intrusion_from_mouth = m_vCrossSectionX[m_nCrossSectionsNumber - 1] - x_intrusion;
                 break;
             }
         }
@@ -5045,25 +5210,31 @@ void CSimulation::writePeriodicStatistics() {
                 max_grad_idx = i;
             }
         }
-        // Estimate advective vs diffusive transport
-        double advective_flux = 0.0;
-        double diffusive_flux = 0.0;
+        // Estimate advective vs diffusive transport (report in kg/s)
+        // Advection proxy: |Q|*S converted to kg/s via rho*(PSU/1000).
+        const double psu_to_massfrac = 1.0 / 1000.0;
+        double advective_flux_kg_s = 0.0;
+        double diffusive_flux_kg_s = 0.0;
         int n_active = 0;
         for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
             if (m_vCrossSectionArea[i] > DRY_AREA) {
-                advective_flux += fabs(m_vCrossSectionU[i] * m_vCrossSectionSalinity[i] * m_vCrossSectionArea[i]);
+                double rho_i = 1025.0;
+                if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
+                    rho_i = std::max(900.0, m_vCrossSectionDensity[i]);
+                }
+                advective_flux_kg_s += rho_i * fabs(m_vCrossSectionQ[i]) * (m_vCrossSectionSalinity[i] * psu_to_massfrac);
                 const double Kh = dGetLongitudinalDispersion(i);
                 if (Kh > 0.0) {
                     double dS_dx = (m_vCrossSectionSalinity[i+1] - m_vCrossSectionSalinity[i-1]) /
                                    (m_vCrossSectionX[i+1] - m_vCrossSectionX[i-1]);
-                    diffusive_flux += fabs(Kh * dS_dx * m_vCrossSectionArea[i]);
+                    diffusive_flux_kg_s += rho_i * fabs(Kh * dS_dx * m_vCrossSectionArea[i]) * psu_to_massfrac;
                 }
                 n_active++;
             }
         }
         if (n_active > 0) {
-            advective_flux /= n_active;
-            diffusive_flux /= n_active;
+            advective_flux_kg_s /= n_active;
+            diffusive_flux_kg_s /= n_active;
         }
         // Estimate numerical diffusion (Pe = u*dx/K)
         double Pe_min = 1e10;
@@ -5082,17 +5253,17 @@ void CSimulation::writePeriodicStatistics() {
         }
         LogStream << "🌊 SALINITY [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime/3600.0 << "h]:\n";
         if (intrusion_idx >= 0) {
-            LogStream << "  • Salt wedge intrusion: " << std::setprecision(1) << intrusion_distance/1000.0
-                      << " km (S≥1ppt at section " << intrusion_idx << ")\n";
+            LogStream << "  • Salt wedge intrusion: " << std::setprecision(1) << intrusion_from_mouth/1000.0
+                      << " km from mouth (x=" << x_intrusion/1000.0 << " km, section " << intrusion_idx << ")\n";
         } else {
             LogStream << "  • Salt wedge: Not detected (S<1ppt throughout domain)\n";
         }
         LogStream << "  • Halocline: max gradient = " << std::setprecision(4) << max_grad*1000.0
                   << " ppt/km at x=" << std::setprecision(1) << m_vCrossSectionX[max_grad_idx]/1000.0 << " km\n";
-        LogStream << "  • Transport: Advection=" << std::setprecision(1) << advective_flux
-                  << " kg/s, Diffusion=" << diffusive_flux << " kg/s";
-        if (advective_flux > 0) {
-            LogStream << " (Ratio=" << std::setprecision(2) << diffusive_flux/advective_flux << ")";
+        LogStream << "  • Transport (domain-avg): Advection=" << std::setprecision(1) << advective_flux_kg_s
+                  << " kg/s, Diffusion=" << diffusive_flux_kg_s << " kg/s";
+        if (advective_flux_kg_s > 0) {
+            LogStream << " (Ratio=" << std::setprecision(2) << diffusive_flux_kg_s/advective_flux_kg_s << ")";
         }
         LogStream << "\n";
         double kh_ref = std::max(0.0, m_dLongitudinalDispersion);
@@ -5129,11 +5300,13 @@ void CSimulation::writePeriodicStatistics() {
             
             // Find salt wedge intrusion limit (isohaline 1 ppt)
             int intrusion_idx = -1;
-            double intrusion_distance = 0.0;
-            for (int i = m_nCrossSectionsNumber-1; i >= 0; i--) {
+            double x_intrusion = 0.0;
+            double intrusion_from_mouth = 0.0;
+            for (int i = 0; i < m_nCrossSectionsNumber; i++) {
                 if (m_vCrossSectionSalinity[i] >= 1.0) {
                     intrusion_idx = i;
-                    intrusion_distance = m_vCrossSectionX[i];
+                    x_intrusion = m_vCrossSectionX[i];
+                    intrusion_from_mouth = m_vCrossSectionX[m_nCrossSectionsNumber - 1] - x_intrusion;
                     break;
                 }
             }
@@ -5150,28 +5323,34 @@ void CSimulation::writePeriodicStatistics() {
                 }
             }
             
-            // Estimate advective vs diffusive transport
-            double advective_flux = 0.0;
-            double diffusive_flux = 0.0;
+            // Estimate advective vs diffusive transport (report in kg/s)
+            const double psu_to_massfrac = 1.0 / 1000.0;
+            double advective_flux_kg_s = 0.0;
+            double diffusive_flux_kg_s = 0.0;
             int n_active = 0;
             for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
                 if (m_vCrossSectionArea[i] > DRY_AREA) {
-                    // Advective transport: U * S * A
-                    advective_flux += fabs(m_vCrossSectionU[i] * m_vCrossSectionSalinity[i] * m_vCrossSectionArea[i]);
+                    double rho_i = 1025.0;
+                    if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
+                        rho_i = std::max(900.0, m_vCrossSectionDensity[i]);
+                    }
+
+                    // Advective transport proxy: |Q| * S
+                    advective_flux_kg_s += rho_i * fabs(m_vCrossSectionQ[i]) * (m_vCrossSectionSalinity[i] * psu_to_massfrac);
                     
                     // Diffusive transport: K * dS/dx * A
                     const double Kh = dGetLongitudinalDispersion(i);
                     if (Kh > 0.0) {
                         double dS_dx = (m_vCrossSectionSalinity[i+1] - m_vCrossSectionSalinity[i-1]) / 
                                        (m_vCrossSectionX[i+1] - m_vCrossSectionX[i-1]);
-                        diffusive_flux += fabs(Kh * dS_dx * m_vCrossSectionArea[i]);
+                        diffusive_flux_kg_s += rho_i * fabs(Kh * dS_dx * m_vCrossSectionArea[i]) * psu_to_massfrac;
                     }
                     n_active++;
                 }
             }
             if (n_active > 0) {
-                advective_flux /= n_active;
-                diffusive_flux /= n_active;
+                advective_flux_kg_s /= n_active;
+                diffusive_flux_kg_s /= n_active;
             }
             
             // Estimate numerical diffusion (Pe = u*dx/K)
@@ -5195,17 +5374,17 @@ void CSimulation::writePeriodicStatistics() {
             LogStream << "\n";
             LogStream << "SALINITY DETAIL [t=" << std::fixed << std::setprecision(1) << m_dCurrentTime/3600.0 << "h] (6-hour):\n";
             if (intrusion_idx >= 0) {
-                LogStream << "  - Intrusion (S≥1 ppt): x=" << std::setprecision(2) << intrusion_distance/1000.0
-                          << " km (section " << intrusion_idx << ")\n";
+                LogStream << "  - Intrusion (S≥1 ppt): " << std::setprecision(2) << intrusion_from_mouth/1000.0
+                          << " km from mouth (x=" << x_intrusion/1000.0 << " km, section " << intrusion_idx << ")\n";
             } else {
                 LogStream << "  - Intrusion (S≥1 ppt): not detected\n";
             }
             LogStream << "  - Max |dS/dx|: " << std::setprecision(4) << max_grad*1000.0
                       << " ppt/km at x=" << std::setprecision(2) << m_vCrossSectionX[max_grad_idx]/1000.0 << " km\n";
-            LogStream << "  - Mean |adv flux|≈" << std::setprecision(2) << advective_flux
-                      << " ; mean |diff flux|≈" << std::setprecision(2) << diffusive_flux;
-            if (advective_flux > 0.0) {
-                LogStream << " ; diff/adv=" << std::setprecision(3) << (diffusive_flux / advective_flux);
+            LogStream << "  - Mean |adv flux|≈" << std::setprecision(2) << advective_flux_kg_s << " kg/s"
+                      << " ; mean |diff flux|≈" << std::setprecision(2) << diffusive_flux_kg_s << " kg/s";
+            if (advective_flux_kg_s > 0.0) {
+                LogStream << " ; diff/adv=" << std::setprecision(3) << (diffusive_flux_kg_s / advective_flux_kg_s);
             }
             LogStream << "\n";
             if (bHasLongitudinalDispersionProfile()) {
