@@ -779,6 +779,18 @@ void CYAMLReader::parseTransportSection(const YAML::Node& node, CSimulation* m_p
                 if (down["value"] && down["value"].IsScalar()) {
                     try { m_pSimulation->m_dDownwardSalinityBoundaryValue = down["value"].as<double>(); } catch (...) {}
                 }
+
+                // Optional: mix factor for prescribed ocean salinity on flood
+                // S_in = alpha*Socean + (1-alpha)*S_interior
+                if (down["inflow_mixing_alpha"] && down["inflow_mixing_alpha"].IsScalar()) {
+                    try {
+                        const double a = down["inflow_mixing_alpha"].as<double>();
+                        m_pSimulation->m_dDownstreamSalinityInflowMixAlpha = std::max(0.0, std::min(1.0, a));
+                        std::cout << "        - Downstream salinity inflow_mixing_alpha: "
+                                  << m_pSimulation->m_dDownstreamSalinityInflowMixAlpha << std::endl;
+                    } catch (...) {
+                    }
+                }
             }
         }                
         

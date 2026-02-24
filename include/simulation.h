@@ -487,12 +487,60 @@ public:
 
     //! The downward estuarine salinity condition value at previous the last node and time t
     double m_dNextDownwardSalinityBoundaryValue{};
+
+    //! Optional: mix prescribed downstream inflow salinity with interior salinity.
+    //! Effective inflow salinity on flood: S_in = alpha*Socean + (1-alpha)*S_interior.
+    //! alpha=1 -> current behavior (pure prescribed ocean salinity on flood).
+    //! alpha=0 -> behaves like a fully radiative/open boundary for salinity on flood.
+    double m_dDownstreamSalinityInflowMixAlpha{1.0};
     
     //! Salt mass balance tracking (downstream boundary)
     double m_dSaltInitialMass{0.0};        // Initial total salt mass in estuary at t=0 (kg)
     double m_dSaltInflowDownstream{0.0};   // Cumulative salt entering through ocean boundary (kg)
     double m_dSaltOutflowDownstream{0.0};  // Cumulative salt leaving through ocean boundary (kg)
     double m_dSaltNetFlowDownstream{0.0};  // Net cumulative flow (inflow - outflow) (kg)
+
+    //! Salt mass balance tracking (upstream boundary)
+    double m_dSaltInflowUpstream{0.0};     // Cumulative salt entering through river boundary (kg)
+    double m_dSaltOutflowUpstream{0.0};    // Cumulative salt leaving through river boundary (kg)
+    double m_dSaltNetFlowUpstream{0.0};    // Net cumulative flow (inflow - outflow) (kg)
+
+    //! Salt-budget baseline initialization (for fresh runs and continue/restarts)
+    bool m_bSaltBudgetBaselineInitialized{false};
+
+    //! Per-step boundary salt fluxes used by the tracer solver (kg/s).
+    //! Stored for predictor/corrector so diagnostic budgets can match the scheme exactly.
+    double m_dSaltDownInflowPredKgS{0.0};
+    double m_dSaltDownOutflowPredKgS{0.0};
+    double m_dSaltUpInflowPredKgS{0.0};
+    double m_dSaltUpOutflowPredKgS{0.0};
+
+    double m_dSaltDownInflowCorrKgS{0.0};
+    double m_dSaltDownOutflowCorrKgS{0.0};
+    double m_dSaltUpInflowCorrKgS{0.0};
+    double m_dSaltUpOutflowCorrKgS{0.0};
+
+    //! Per-step boundary *diffusive* salt fluxes (kg/s) used by the tracer solver.
+    //! These capture dispersion exchange across the boundary-adjacent faces:
+    //! - Upstream face: between nodes (0,1)
+    //! - Downstream face: between nodes (last-1,last)
+    //! Split into inflow/outflow relative to the domain for consistent budget reporting.
+    double m_dSaltDownDiffInflowPredKgS{0.0};
+    double m_dSaltDownDiffOutflowPredKgS{0.0};
+    double m_dSaltUpDiffInflowPredKgS{0.0};
+    double m_dSaltUpDiffOutflowPredKgS{0.0};
+
+    double m_dSaltDownDiffInflowCorrKgS{0.0};
+    double m_dSaltDownDiffOutflowCorrKgS{0.0};
+    double m_dSaltUpDiffInflowCorrKgS{0.0};
+    double m_dSaltUpDiffOutflowCorrKgS{0.0};
+
+    //! Periodic-stat window snapshots (for averaged flux diagnostics)
+    double m_dSaltLastStatTime{0.0};
+    double m_dSaltInflowDownstreamLastStat{0.0};
+    double m_dSaltOutflowDownstreamLastStat{0.0};
+    double m_dSaltInflowUpstreamLastStat{0.0};
+    double m_dSaltOutflowUpstreamLastStat{0.0};
     double m_dPredictorBoundaryFlux{0.0};  // Predictor boundary flux (kg/s) - for McCormack averaging
     double m_dCorrectorBoundaryFlux{0.0};  // Corrector boundary flux (kg/s) - for McCormack averaging
     

@@ -865,21 +865,19 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
     m_nTimeId++;
 
     // Initialize salt mass balance diagnostics at t=0 (if enabled)
-    if (m_bDoWaterSalinity && m_nCrossSectionsNumber >= 2) {
+    // NOTE: For mass-balance closure we integrate ONLY interior control volumes.
+    // Boundary nodes (0 and last) are prescribed (Dirichlet/radiation) and are not
+    // evolved by the conservative update, so including them in the inventory breaks
+    // the discrete closure test.
+    if (m_bDoWaterSalinity && m_nCrossSectionsNumber >= 3) {
         const int last = m_nCrossSectionsNumber - 1;
         const double psu_to_massfrac = 1.0 / 1000.0; // assumes PSU ~ g/kg
         double mass0 = 0.0;
-        for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+        for (int i = 1; i <= last - 1; ++i) {
             const double A = m_vCrossSectionArea[i];
-            if (!(A > DRY_AREA)) continue;
+            if (!(A >= DRY_AREA)) continue;
             double dxCV;
-            if (i == 0) {
-                dxCV = 0.5 * (m_vCrossSectionX[1] - m_vCrossSectionX[0]);
-            } else if (i == last) {
-                dxCV = 0.5 * (m_vCrossSectionX[last] - m_vCrossSectionX[last - 1]);
-            } else {
-                dxCV = 0.5 * (m_vCrossSectionX[i + 1] - m_vCrossSectionX[i - 1]);
-            }
+            dxCV = 0.5 * (m_vCrossSectionX[i + 1] - m_vCrossSectionX[i - 1]);
             if (!(dxCV > 0.0)) continue;
             const double vol = dGetLateralStorageFactor(i) * A * dxCV;
             const double rho0 = 1025.0;
@@ -889,6 +887,17 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         m_dSaltInflowDownstream = 0.0;
         m_dSaltOutflowDownstream = 0.0;
         m_dSaltNetFlowDownstream = 0.0;
+
+        m_dSaltInflowUpstream = 0.0;
+        m_dSaltOutflowUpstream = 0.0;
+        m_dSaltNetFlowUpstream = 0.0;
+
+        // Periodic-stat window snapshots baseline (supports continue/restart runs)
+        m_dSaltLastStatTime = m_dCurrentTime;
+        m_dSaltInflowDownstreamLastStat = 0.0;
+        m_dSaltOutflowDownstreamLastStat = 0.0;
+        m_dSaltInflowUpstreamLastStat = 0.0;
+        m_dSaltOutflowUpstreamLastStat = 0.0;
     }
 
     int m_nStep = 1;
@@ -1018,6 +1027,44 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
         mergePredictorCorrector();
         mergeTracerPredictorCorrector();
 
+        // Initialize salt-budget baseline once per run (or continue/restart).
+        // If the run is started from a nonzero time or from a saved state, we want closure relative
+        // to the start of THIS run, not relative to an uninitialized (zero) baseline.
+        if (m_bDoWaterSalinity && m_nCrossSectionsNumber >= 3 && !m_bSaltBudgetBaselineInitialized) {
+            constexpr double rho_ref = 1025.0;
+            constexpr double psu_to_massfrac = 1.0 / 1000.0;
+            const int last = m_nCrossSectionsNumber - 1;
+
+            double salt_mass_kg0 = 0.0;
+            for (int i = 1; i <= last - 1; ++i) {
+                const double A = m_vCrossSectionArea[i];
+                if (!(A >= DRY_AREA)) continue;
+                const double dxCV = 0.5 * (m_vCrossSectionX[i + 1] - m_vCrossSectionX[i - 1]);
+                if (!(dxCV > 0.0)) continue;
+                const double vol = dGetLateralStorageFactor(i) * A * dxCV;
+                salt_mass_kg0 += rho_ref * vol * (m_vCrossSectionSalinity[i] * psu_to_massfrac);
+            }
+
+            m_dSaltInitialMass = salt_mass_kg0;
+
+            // Reset cumulative integrals so BndCumNet is also relative to this baseline.
+            m_dSaltInflowDownstream = 0.0;
+            m_dSaltOutflowDownstream = 0.0;
+            m_dSaltNetFlowDownstream = 0.0;
+            m_dSaltInflowUpstream = 0.0;
+            m_dSaltOutflowUpstream = 0.0;
+            m_dSaltNetFlowUpstream = 0.0;
+
+            // Reset stat-window baselines.
+            m_dSaltLastStatTime = m_dCurrentTime;
+            m_dSaltInflowDownstreamLastStat = 0.0;
+            m_dSaltOutflowDownstreamLastStat = 0.0;
+            m_dSaltInflowUpstreamLastStat = 0.0;
+            m_dSaltOutflowUpstreamLastStat = 0.0;
+
+            m_bSaltBudgetBaselineInitialized = true;
+        }
+
         m_nPredictor = 0;
         if (bGetDoDryBed()) dryArea();
         // Reset per-timestep auto-smoothing marker (used by hourly log '*').
@@ -1055,86 +1102,31 @@ void CSimulation::bDoSimulation(int nArg, char const* pcArgv[]){
             checkAnomalousValues();
         }
         
-        // === Salt mass balance diagnostics (downstream boundary) ===
-        // Units note:
-        // - Here we assume salinity values are in PSU ~ g/kg.
-        // - Convert to an approximate mass fraction via S_mass = PSU/1000.
-        // - Salt mass flux at a boundary is: \dot{m}_salt ≈ ρ * Q * (PSU/1000) [kg/s].
-        if (m_bDoWaterSalinity) {
-            const int last = m_nCrossSectionsNumber - 1;
-            if (last >= 0 && m_nCrossSectionsNumber >= 2) {
-                const double t_bc = m_dCurrentTime + m_dTimestep;
+        // === Salt mass balance diagnostics ===
+        // Important: accumulate boundary salt flux using the SAME boundary fluxes the tracer solver used.
+        // The tracer update uses the correct McCormack merge: AS_new = 0.5*(AS_n + AS**),
+        // where AS** is advanced from AS* (predictor), and AS* from AS_n.
+        // This gives equal 0.5 weighting to predictor and corrector boundary fluxes.
+        if (m_bDoWaterSalinity && m_nCrossSectionsNumber >= 3) {
+            constexpr double wPred = 0.5;
+            constexpr double wCorr = 0.5;
 
-                auto interp_bc = [&](double t, const std::vector<double>& tt, const std::vector<double>& vv, double fallback) {
-                    if (tt.size() < 2 || vv.size() < 2 || tt.size() != vv.size()) return fallback;
-                    auto it = std::lower_bound(tt.begin(), tt.end(), t);
-                    if (it == tt.begin()) return vv.front();
-                    if (it == tt.end()) return vv.back();
-                    const size_t idx = static_cast<size_t>(std::distance(tt.begin(), it));
-                    const double t1 = tt[idx - 1];
-                    const double t2 = tt[idx];
-                    const double v1 = vv[idx - 1];
-                    const double v2 = vv[idx];
-                    const double w = (t2 > t1) ? ((t - t1) / (t2 - t1)) : 0.0;
-                    return v1 + (v2 - v1) * w;
-                };
+            const double dn_in_kg_s  = wPred * (m_dSaltDownInflowPredKgS  + m_dSaltDownDiffInflowPredKgS)
+                                    + wCorr * (m_dSaltDownInflowCorrKgS  + m_dSaltDownDiffInflowCorrKgS);
+            const double dn_out_kg_s = wPred * (m_dSaltDownOutflowPredKgS + m_dSaltDownDiffOutflowPredKgS)
+                                    + wCorr * (m_dSaltDownOutflowCorrKgS + m_dSaltDownDiffOutflowCorrKgS);
+            const double up_in_kg_s  = wPred * (m_dSaltUpInflowPredKgS    + m_dSaltUpDiffInflowPredKgS)
+                                    + wCorr * (m_dSaltUpInflowCorrKgS    + m_dSaltUpDiffInflowCorrKgS);
+            const double up_out_kg_s = wPred * (m_dSaltUpOutflowPredKgS   + m_dSaltUpDiffOutflowPredKgS)
+                                    + wCorr * (m_dSaltUpOutflowCorrKgS   + m_dSaltUpDiffOutflowCorrKgS);
 
-                // Downstream salinity BC at t^{n+1}
-                double down_sal = m_dDownwardSalinityBoundaryValue;
-                if (!m_strDownwardSalinityBoundaryConditionFilename.empty() &&
-                    !m_vDownwardSalinityBoundaryConditionTime.empty() &&
-                    !m_vDownwardSalinityBoundaryConditionValue.empty()) {
-                    down_sal = interp_bc(t_bc, m_vDownwardSalinityBoundaryConditionTime, m_vDownwardSalinityBoundaryConditionValue, down_sal);
-                }
+            m_dSaltInflowDownstream += dn_in_kg_s * m_dTimestep;
+            m_dSaltOutflowDownstream += dn_out_kg_s * m_dTimestep;
+            m_dSaltNetFlowDownstream = m_dSaltInflowDownstream - m_dSaltOutflowDownstream;
 
-                // Use the downstream *interior face* (between last-1 and last).
-                // The transport update for the last interior CV uses the interface flux,
-                // so this is the meaningful control-surface for salt import/export.
-                const double Q_face_dn = 0.5 * (m_vCrossSectionQ[last - 1] + m_vCrossSectionQ[last]);
-                const double S_dn_upwind = (Q_face_dn < 0.0) ? down_sal : m_vCrossSectionSalinity[last - 1];
-
-                // Density at boundary (kg/m^3): use computed density if available, else a safe seawater default.
-                double rho_dn = 1025.0;
-                if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
-                    const double rhoL = std::max(900.0, m_vCrossSectionDensity[last - 1]);
-                    const double rhoR = std::max(900.0, m_vCrossSectionDensity[last]);
-                    rho_dn = 0.5 * (rhoL + rhoR);
-                }
-
-                const double psu_to_massfrac = 1.0 / 1000.0;
-                const double inflow_kg_s = (Q_face_dn < 0.0) ? (rho_dn * (-Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
-                const double outflow_kg_s = (Q_face_dn > 0.0) ? (rho_dn * ( Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
-
-                // Accumulate (kg)
-                m_dSaltInflowDownstream += inflow_kg_s * m_dTimestep;
-                m_dSaltOutflowDownstream += outflow_kg_s * m_dTimestep;
-                m_dSaltNetFlowDownstream = m_dSaltInflowDownstream - m_dSaltOutflowDownstream;
-
-                // Capture initial mass (kg) once, using a control-volume integration.
-                if (m_dCurrentTime <= 0.0 && m_dSaltInitialMass <= 0.0) {
-                    double mass0 = 0.0;
-                    for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
-                        const double A = m_vCrossSectionArea[i];
-                        if (!(A > DRY_AREA)) continue;
-                        double dxCV;
-                        if (i == 0) {
-                            dxCV = 0.5 * (m_vCrossSectionX[1] - m_vCrossSectionX[0]);
-                        } else if (i == last) {
-                            dxCV = 0.5 * (m_vCrossSectionX[last] - m_vCrossSectionX[last - 1]);
-                        } else {
-                            dxCV = 0.5 * (m_vCrossSectionX[i + 1] - m_vCrossSectionX[i - 1]);
-                        }
-                        if (!(dxCV > 0.0)) continue;
-                        const double vol = dGetLateralStorageFactor(i) * A * dxCV; // m^3
-                        double rho_i = 1025.0;
-                        if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
-                            rho_i = std::max(900.0, m_vCrossSectionDensity[i]);
-                        }
-                        mass0 += rho_i * vol * (m_vCrossSectionSalinity[i] * psu_to_massfrac);
-                    }
-                    m_dSaltInitialMass = mass0;
-                }
-            }
+            m_dSaltInflowUpstream += up_in_kg_s * m_dTimestep;
+            m_dSaltOutflowUpstream += up_out_kg_s * m_dTimestep;
+            m_dSaltNetFlowUpstream = m_dSaltInflowUpstream - m_dSaltOutflowUpstream;
         }
 
         // Write periodic statistics (every simulated hour)
@@ -1307,6 +1299,7 @@ void CSimulation::initializeVectors() {
 
     // Temporal terms for transport equations
     m_vCrossSectionSalinityASt =
+    m_vCrossSectionSalinityASt_predictor =
     m_vCrossSectionTemperatureASt = vZeros;
 
     // Density and baroclinic terms
@@ -2080,10 +2073,11 @@ void CSimulation::calculateTimestep() {
         double min_Pe = 1e10;  // Track minimum Péclet number (diagnostic)
         bool any_diffusion = false;
         
-        for (int i = 1; i < m_nCrossSectionsNumber-1; i++) {
+        for (int i = 1; i < m_nCrossSectionsNumber - 1; i++) {
             if (m_vCrossSectionArea[i] > DRY_AREA) {
-                const double dxL = m_vPositionX[i] - m_vPositionX[i - 1];
-                const double dxR = m_vPositionX[i + 1] - m_vPositionX[i];
+                // Use the cross-section coordinates (same grid used by transport operators)
+                const double dxL = m_vCrossSectionX[i] - m_vCrossSectionX[i - 1];
+                const double dxR = m_vCrossSectionX[i + 1] - m_vCrossSectionX[i];
                 const double dX = (dxL > 0.0 && dxR > 0.0) ? std::min(dxL, dxR) : std::max(dxL, dxR);
                 const double u = fabs(m_vCrossSectionU[i]);
                 const double Kh = dGetLongitudinalDispersion(i);
@@ -2091,6 +2085,10 @@ void CSimulation::calculateTimestep() {
                     continue;
                 }
                 any_diffusion = true;
+
+                if (dX <= 1e-12 || !std::isfinite(dX) || !std::isfinite(Kh)) {
+                    continue;
+                }
                 
                 // Diffusion stability: Δt ≤ α·Δx²/Kh
                 const double dt_diffusion = DIFFUSION_SAFETY_FACTOR * dX * dX / Kh;
@@ -2770,6 +2768,23 @@ void CSimulation::calculatePredictor() {
         m_vPredictedCrossSectionQ[i] = m_vCrossSectionQ[i] -
             lambda_forward * (m_vCrossSectionF1[i + 1] - m_vCrossSectionF1[i]) +
             m_dTimestep * m_vCrossSectionGv1[i];
+
+        // Semi-implicit Manning friction: removes stiffness constraint Δt ≤ A·R^(4/3)/(g·n²·|Q|)
+        // Gv1 already contains the explicit friction term -gASf = -θ·Q^n, so:
+        //   Q_expl = Q^n + dt·(G_nc - θ·Q^n)  →  Q_semi = (Q_expl + dt·θ·Q^n) / (1 + dt·θ)
+        {
+            const double A_n = m_vCrossSectionArea[i];
+            const double R_n = m_vCrossSectionHydraulicRadius[i];
+            if (A_n > DRY_AREA && R_n > 1e-6) {
+                const double theta = G * m_vManningNumberSquared[i] * std::fabs(m_vCrossSectionQ[i]) /
+                                     (A_n * std::pow(R_n, 4.0 / 3.0));
+                if (theta > 0.0) {
+                    m_vPredictedCrossSectionQ[i] = (m_vPredictedCrossSectionQ[i] +
+                                                    m_dTimestep * theta * m_vCrossSectionQ[i]) /
+                                                   (1.0 + m_dTimestep * theta);
+                }
+            }
+        }
     }
 
     // Convert predicted cross-sectional area to water depth using geometry tables
@@ -2820,6 +2835,21 @@ void CSimulation::calculateCorrector() {
         m_vCorrectedCrossSectionQ[i] = m_vPredictedCrossSectionQ[i] -
             lambda_backward * (m_vCrossSectionF1[i] - m_vCrossSectionF1[i - 1]) +
             m_dTimestep * m_vCrossSectionGv1[i];
+
+        // Semi-implicit friction (corrector phase): use predicted state for theta
+        {
+            const double A_p = m_vPredictedCrossSectionArea[i];
+            const double R_n = m_vCrossSectionHydraulicRadius[i];
+            if (A_p > DRY_AREA && R_n > 1e-6) {
+                const double theta = G * m_vManningNumberSquared[i] * std::fabs(m_vPredictedCrossSectionQ[i]) /
+                                     (A_p * std::pow(R_n, 4.0 / 3.0));
+                if (theta > 0.0) {
+                    m_vCorrectedCrossSectionQ[i] = (m_vCorrectedCrossSectionQ[i] +
+                                                    m_dTimestep * theta * m_vPredictedCrossSectionQ[i]) /
+                                                   (1.0 + m_dTimestep * theta);
+                }
+            }
+        }
     }
 }
 
@@ -3444,8 +3474,9 @@ void CSimulation::compute_tracer_tvd_flux(const vector<double>& tracer, const ve
     // Early exit if no limiter (use simple upwind)
     if (limiter_type == 0 || !m_bDoMcCormackLimiterFlux) {
         for (int i = 1; i < n; i++) {
-            // Discharge at interface (average of adjacent cells)
-            const double Q_face = 0.5 * (discharge[i-1] + discharge[i]);
+            // Discharge at interface: use same node-based convention as hydrodynamics
+            // (continuity uses F0[i+1]-F0[i] where F0 is Q at nodes).
+            const double Q_face = discharge[i];
             // Upwind concentration
             const double phi_upwind = (Q_face > 0.0) ? tracer[i-1] : tracer[i];
             // Flux = Q * phi
@@ -3456,9 +3487,9 @@ void CSimulation::compute_tracer_tvd_flux(const vector<double>& tracer, const ve
     
     // Main TVD loop
     for (int i = 1; i < n; i++) {
-        // Discharge at interface (average of adjacent cells)
-        // Use Q directly from momentum equations to ensure mass conservation consistency
-        const double Q_face = 0.5 * (discharge[i-1] + discharge[i]);
+        // Discharge at interface: use same node-based convention as hydrodynamics
+        // so that tracer advection is consistent with continuity/momentum discretization.
+        const double Q_face = discharge[i];
         
         if (fabs(Q_face) < 1e-6) {
             flux_limited[i] = 0.0;
@@ -3466,7 +3497,8 @@ void CSimulation::compute_tracer_tvd_flux(const vector<double>& tracer, const ve
         }
         const double delta_phi = tracer[i] - tracer[i-1];
         if (fabs(delta_phi) < 1e-10) {
-            flux_limited[i] = Q_face * tracer[i-1];
+            const double phi_upwind = (Q_face > 0.0) ? tracer[i-1] : tracer[i];
+            flux_limited[i] = Q_face * phi_upwind;
             continue;
         }
         // Compute gradient ratio for TVD limiter
@@ -3575,7 +3607,10 @@ void CSimulation::calculate_salinity_predictor() {
         const double Q_dn = m_vPredictedCrossSectionQ[last];
         if (Q_dn < 0.0) {
             // Inflow from ocean
-            tracer_bc[last] = down_sal;
+            const double S_interior = (m_nCrossSectionsNumber > 1) ? tracer_bc[last - 1] : tracer_bc[last];
+            const double a = std::max(0.0, std::min(1.0, m_dDownstreamSalinityInflowMixAlpha));
+            const double down_sal_in = a * down_sal + (1.0 - a) * S_interior;
+            tracer_bc[last] = down_sal_in;
         } else {
             // Outflow to ocean: radiation/zero-gradient
             tracer_bc[last] = (m_nCrossSectionsNumber > 1) ? tracer_bc[last - 1] : tracer_bc[last];
@@ -3600,12 +3635,86 @@ void CSimulation::calculate_salinity_predictor() {
         double S_upwind;
         if (Q_dn < 0.0) {
             // Inflow from ocean
-            S_upwind = down_sal;
+            const double S_interior = (m_nCrossSectionsNumber > 1) ? tracer_bc[last - 1] : tracer_bc[last];
+            const double a = std::max(0.0, std::min(1.0, m_dDownstreamSalinityInflowMixAlpha));
+            const double down_sal_in = a * down_sal + (1.0 - a) * S_interior;
+            S_upwind = down_sal_in;
         } else {
             // Outflow to ocean
             S_upwind = tracer_bc[last];
         }
         tvd_flux[m_nCrossSectionsNumber] = Q_dn * S_upwind;
+    }
+
+    // Record boundary *advective* salt mass fluxes (kg/s) consistent with the advection operator.
+    // IMPORTANT: the tracer advection uses TVD-limited interface fluxes (tvd_flux), so for exact
+    // mass-balance closure the budget must use those same interface fluxes (not just Q*S upwind).
+    // Use a constant reference density because the tracer equation conserves concentration in volume,
+    // not ρ-weighted salt mass under variable-density flow.
+    {
+        constexpr double rho_ref = 1025.0;
+        constexpr double psu_to_massfrac = 1.0 / 1000.0;
+
+        // Face indexing: tvd_flux[i] corresponds to the face between nodes (i-1, i).
+        // Interior CVs are i=1..N-2, so the boundary-adjacent faces actually used in the divergence are:
+        //  - Upstream: face 1 (between 0 and 1)
+        //  - Downstream: face last (between last-1 and last)
+        const double adv_face_up = tvd_flux[1];
+        const double adv_face_dn = tvd_flux[last];
+
+        // Upstream: +x is into the domain
+        m_dSaltUpInflowPredKgS = (adv_face_up > 0.0) ? (rho_ref * adv_face_up * psu_to_massfrac) : 0.0;
+        m_dSaltUpOutflowPredKgS = (adv_face_up < 0.0) ? (rho_ref * (-adv_face_up) * psu_to_massfrac) : 0.0;
+
+        // Downstream: +x is out of the domain
+        m_dSaltDownInflowPredKgS = (adv_face_dn < 0.0) ? (rho_ref * (-adv_face_dn) * psu_to_massfrac) : 0.0;
+        m_dSaltDownOutflowPredKgS = (adv_face_dn > 0.0) ? (rho_ref * ( adv_face_dn) * psu_to_massfrac) : 0.0;
+    }
+
+    // Record boundary diffusive (dispersion) salt mass fluxes (kg/s) consistent with the diffusion term below.
+    // Diffusive tracer flux at face: Fd = -Kh_face * A_face * dS/dx (units: m^3/s * PSU)
+    // Convert to kg/s via rho_ref * (PSU/1000). Split into inflow/outflow relative to the domain.
+    {
+        constexpr double rho_ref = 1025.0;
+        constexpr double psu_to_massfrac = 1.0 / 1000.0;
+
+        m_dSaltUpDiffInflowPredKgS = 0.0;
+        m_dSaltUpDiffOutflowPredKgS = 0.0;
+        m_dSaltDownDiffInflowPredKgS = 0.0;
+        m_dSaltDownDiffOutflowPredKgS = 0.0;
+
+        if (m_nCrossSectionsNumber >= 2) {
+            // Upstream boundary-adjacent face (0-1)
+            const double dx01 = m_vCrossSectionX[1] - m_vCrossSectionX[0];
+            if (dx01 > 1e-12) {
+                const double Kh_face = 0.5 * (dGetLongitudinalDispersion(0) + dGetLongitudinalDispersion(1));
+                if (Kh_face > 0.0) {
+                    const double A_face = 0.5 * (m_vCrossSectionArea[0] + m_vCrossSectionArea[1]);
+                    const double Fd = -Kh_face * A_face * (tracer_bc[1] - tracer_bc[0]) / dx01;
+                    const double kg_s = rho_ref * Fd * psu_to_massfrac;
+                    // Positive kg_s is transport toward +x, i.e., into the domain from the upstream boundary.
+                    m_dSaltUpDiffInflowPredKgS = (kg_s > 0.0) ? kg_s : 0.0;
+                    m_dSaltUpDiffOutflowPredKgS = (kg_s < 0.0) ? -kg_s : 0.0;
+                }
+            }
+
+            // Downstream boundary-adjacent face (last-1 - last)
+            if (m_nCrossSectionsNumber >= 3) {
+                const int last = m_nCrossSectionsNumber - 1;
+                const double dxN = m_vCrossSectionX[last] - m_vCrossSectionX[last - 1];
+                if (dxN > 1e-12) {
+                    const double Kh_face = 0.5 * (dGetLongitudinalDispersion(last - 1) + dGetLongitudinalDispersion(last));
+                    if (Kh_face > 0.0) {
+                        const double A_face = 0.5 * (m_vCrossSectionArea[last - 1] + m_vCrossSectionArea[last]);
+                        const double Fd = -Kh_face * A_face * (tracer_bc[last] - tracer_bc[last - 1]) / dxN;
+                        const double kg_s = rho_ref * Fd * psu_to_massfrac;
+                        // Positive kg_s is transport toward +x, i.e., leaving the domain to the ocean.
+                        m_dSaltDownDiffInflowPredKgS = (kg_s < 0.0) ? -kg_s : 0.0;
+                        m_dSaltDownDiffOutflowPredKgS = (kg_s > 0.0) ? kg_s : 0.0;
+                    }
+                }
+            }
+        }
     }
     
     // Compute advection and diffusion terms
@@ -3654,20 +3763,29 @@ void CSimulation::calculate_salinity_predictor() {
     m_vPredictedCrossSectionS[last] = tracer_bc[last];
 
     for (int i = 1; i < m_nCrossSectionsNumber - 1; i++) {
-        if (m_vCrossSectionArea[i] > DRY_AREA) {
-            double salt_mass = m_vCrossSectionArea[i] * m_vCrossSectionSalinity[i];
-            double delta_mass = m_vCrossSectionSalinityASt[i];
-            salt_mass += delta_mass;
-            // Enforce physical bounds: salinity >= 0
-            if (salt_mass < 0.0) salt_mass = 0.0;
-            m_vPredictedCrossSectionS[i] = salt_mass / m_vPredictedCrossSectionArea[i];
-            // Clamp to physical range [0, S_ocean]
-            if (m_vPredictedCrossSectionS[i] < 0.0) { m_vPredictedCrossSectionS[i] = 0.0; clamp_count++; }
-            if (m_vPredictedCrossSectionS[i] > down_sal) { m_vPredictedCrossSectionS[i] = down_sal; clamp_count++; }
-        } else {
-            // Dry area: zero salinity
+        const double A_old = m_vCrossSectionArea[i];
+        const double A_new = m_vPredictedCrossSectionArea[i];
+        if (!(A_new > 0.0)) {
             m_vPredictedCrossSectionS[i] = 0.0;
+            m_vCrossSectionSalinityASt_predictor[i] = 0.0;
+            continue;
         }
+
+        // IMPORTANT: when dry-bed treatment is enabled, dryArea() can clip areas to exactly DRY_AREA.
+        // Treat A==DRY_AREA as a valid (tiny) wet volume for tracer mass conservation; do NOT force S=0.
+        const double A_old_eff = (A_old > 0.0) ? A_old : 0.0;
+
+        // Store AS_n = A_old * S_old for use in mergeTracerPredictorCorrector().
+        // The correct McCormack merge requires 0.5*(AS_n + AS**), not 0.5*(AS* + AS**).
+        m_vCrossSectionSalinityASt_predictor[i] = A_old_eff * m_vCrossSectionSalinity[i];
+
+        double salt_mass = A_old_eff * m_vCrossSectionSalinity[i];
+        salt_mass += m_vCrossSectionSalinityASt[i];
+        if (salt_mass < 0.0) salt_mass = 0.0;
+
+        m_vPredictedCrossSectionS[i] = salt_mass / A_new;
+        if (m_vPredictedCrossSectionS[i] < 0.0) { m_vPredictedCrossSectionS[i] = 0.0; clamp_count++; }
+        if (m_vPredictedCrossSectionS[i] > down_sal) { m_vPredictedCrossSectionS[i] = down_sal; clamp_count++; }
     }
     // Removed per-timestep clamping log in predictor
 }
@@ -3740,7 +3858,10 @@ void CSimulation::calculate_salinity_corrector() {
     {
         const double Q_dn = m_vCorrectedCrossSectionQ[last];
         if (Q_dn < 0.0) {
-            tracer_bc[last] = down_sal;
+            const double S_interior = (m_nCrossSectionsNumber > 1) ? tracer_bc[last - 1] : tracer_bc[last];
+            const double a = std::max(0.0, std::min(1.0, m_dDownstreamSalinityInflowMixAlpha));
+            const double down_sal_in = a * down_sal + (1.0 - a) * S_interior;
+            tracer_bc[last] = down_sal_in;
         } else {
             tracer_bc[last] = (m_nCrossSectionsNumber > 1) ? tracer_bc[last - 1] : tracer_bc[last];
         }
@@ -3759,8 +3880,73 @@ void CSimulation::calculate_salinity_corrector() {
     }
     {
         const double Q_dn = m_vCorrectedCrossSectionQ[last];
-        const double S_upwind = (Q_dn < 0.0) ? down_sal : tracer_bc[last];
+        double S_upwind;
+        if (Q_dn < 0.0) {
+            const double S_interior = (m_nCrossSectionsNumber > 1) ? tracer_bc[last - 1] : tracer_bc[last];
+            const double a = std::max(0.0, std::min(1.0, m_dDownstreamSalinityInflowMixAlpha));
+            const double down_sal_in = a * down_sal + (1.0 - a) * S_interior;
+            S_upwind = down_sal_in;
+        } else {
+            S_upwind = tracer_bc[last];
+        }
         tvd_flux[m_nCrossSectionsNumber] = Q_dn * S_upwind;
+    }
+
+    // Record boundary *advective* salt mass fluxes (kg/s) consistent with the TVD-limited interface fluxes.
+    {
+        constexpr double rho_ref = 1025.0;
+        constexpr double psu_to_massfrac = 1.0 / 1000.0;
+
+        const double adv_face_up = tvd_flux[1];
+        const double adv_face_dn = tvd_flux[last];
+
+        m_dSaltUpInflowCorrKgS = (adv_face_up > 0.0) ? (rho_ref * adv_face_up * psu_to_massfrac) : 0.0;
+        m_dSaltUpOutflowCorrKgS = (adv_face_up < 0.0) ? (rho_ref * (-adv_face_up) * psu_to_massfrac) : 0.0;
+
+        m_dSaltDownInflowCorrKgS = (adv_face_dn < 0.0) ? (rho_ref * (-adv_face_dn) * psu_to_massfrac) : 0.0;
+        m_dSaltDownOutflowCorrKgS = (adv_face_dn > 0.0) ? (rho_ref * ( adv_face_dn) * psu_to_massfrac) : 0.0;
+    }
+
+    // Record boundary diffusive (dispersion) salt mass fluxes (kg/s) consistent with the diffusion term below.
+    {
+        constexpr double rho_ref = 1025.0;
+        constexpr double psu_to_massfrac = 1.0 / 1000.0;
+
+        m_dSaltUpDiffInflowCorrKgS = 0.0;
+        m_dSaltUpDiffOutflowCorrKgS = 0.0;
+        m_dSaltDownDiffInflowCorrKgS = 0.0;
+        m_dSaltDownDiffOutflowCorrKgS = 0.0;
+
+        if (m_nCrossSectionsNumber >= 2) {
+            // Upstream boundary-adjacent face (0-1): use predicted areas, consistent with diffusion term below.
+            const double dx01 = m_vCrossSectionX[1] - m_vCrossSectionX[0];
+            if (dx01 > 1e-12) {
+                const double Kh_face = 0.5 * (dGetLongitudinalDispersion(0) + dGetLongitudinalDispersion(1));
+                if (Kh_face > 0.0) {
+                    const double A_face = 0.5 * (m_vPredictedCrossSectionArea[0] + m_vPredictedCrossSectionArea[1]);
+                    const double Fd = -Kh_face * A_face * (tracer_bc[1] - tracer_bc[0]) / dx01;
+                    const double kg_s = rho_ref * Fd * psu_to_massfrac;
+                    m_dSaltUpDiffInflowCorrKgS = (kg_s > 0.0) ? kg_s : 0.0;
+                    m_dSaltUpDiffOutflowCorrKgS = (kg_s < 0.0) ? -kg_s : 0.0;
+                }
+            }
+
+            // Downstream boundary-adjacent face (last-1 - last)
+            if (m_nCrossSectionsNumber >= 3) {
+                const int last = m_nCrossSectionsNumber - 1;
+                const double dxN = m_vCrossSectionX[last] - m_vCrossSectionX[last - 1];
+                if (dxN > 1e-12) {
+                    const double Kh_face = 0.5 * (dGetLongitudinalDispersion(last - 1) + dGetLongitudinalDispersion(last));
+                    if (Kh_face > 0.0) {
+                        const double A_face = 0.5 * (m_vPredictedCrossSectionArea[last - 1] + m_vPredictedCrossSectionArea[last]);
+                        const double Fd = -Kh_face * A_face * (tracer_bc[last] - tracer_bc[last - 1]) / dxN;
+                        const double kg_s = rho_ref * Fd * psu_to_massfrac;
+                        m_dSaltDownDiffInflowCorrKgS = (kg_s < 0.0) ? -kg_s : 0.0;
+                        m_dSaltDownDiffOutflowCorrKgS = (kg_s > 0.0) ? kg_s : 0.0;
+                    }
+                }
+            }
+        }
     }
 
     // Compute advection and diffusion terms
@@ -3801,20 +3987,21 @@ void CSimulation::calculate_salinity_corrector() {
     m_vCorrectedCrossSectionS[last] = tracer_bc[last];
 
     for (int i = 1; i < m_nCrossSectionsNumber - 1; i++) {
-        if (m_vPredictedCrossSectionArea[i] > DRY_AREA) {
-            double salt_mass = m_vPredictedCrossSectionArea[i] * m_vPredictedCrossSectionS[i];
-            double delta_mass = m_vCrossSectionSalinityASt[i];
-            salt_mass += delta_mass;
-            // Enforce physical bounds: salinity >= 0
-            if (salt_mass < 0.0) salt_mass = 0.0;
-            m_vCorrectedCrossSectionS[i] = salt_mass / m_vCorrectedCrossSectionArea[i];
-            // Clamp to physical range [0, S_ocean]
-            if (m_vCorrectedCrossSectionS[i] < 0.0) { m_vCorrectedCrossSectionS[i] = 0.0; clamp_count++; }
-            if (m_vCorrectedCrossSectionS[i] > down_sal) { m_vCorrectedCrossSectionS[i] = down_sal; clamp_count++; }
-        } else {
-            // Dry area: zero salinity
+        const double A_old = m_vPredictedCrossSectionArea[i];
+        const double A_new = m_vCorrectedCrossSectionArea[i];
+        if (!(A_new > 0.0)) {
             m_vCorrectedCrossSectionS[i] = 0.0;
+            continue;
         }
+
+        const double A_old_eff = (A_old > 0.0) ? A_old : 0.0;
+        double salt_mass = A_old_eff * m_vPredictedCrossSectionS[i];
+        salt_mass += m_vCrossSectionSalinityASt[i];
+        if (salt_mass < 0.0) salt_mass = 0.0;
+
+        m_vCorrectedCrossSectionS[i] = salt_mass / A_new;
+        if (m_vCorrectedCrossSectionS[i] < 0.0) { m_vCorrectedCrossSectionS[i] = 0.0; clamp_count++; }
+        if (m_vCorrectedCrossSectionS[i] > down_sal) { m_vCorrectedCrossSectionS[i] = down_sal; clamp_count++; }
     }
     // Removed per-timestep clamping log in corrector
 }
@@ -4159,7 +4346,11 @@ void CSimulation::mergePredictorCorrector() {
             a1_med[i] = u_med + c_med;
             a2_med[i] = u_med - c_med;
 
-            if (!bGetDoSurfaceGradientMethod()) {
+            // Guard: if c_med≈0 the Roe decomposition is singular; skip TVD at this interface.
+            if (c_med < 1e-6) {
+                alfa1_med[i] = 0.0;
+                alfa2_med[i] = 0.0;
+            } else if (!bGetDoSurfaceGradientMethod()) {
                 alfa1_med[i] = ((m_vCrossSectionQ[i+1] - m_vCrossSectionQ[i]) - a2_med[i]*(A_med - m_vCrossSectionArea[i]))/(2.0*c_med);
                 alfa2_med[i] = -((m_vCrossSectionQ[i+1] - m_vCrossSectionQ[i]) - a1_med[i]*(A_med - m_vCrossSectionArea[i]))/(2.0*c_med);
             }
@@ -4169,11 +4360,17 @@ void CSimulation::mergePredictorCorrector() {
             }
 
             if (nGetPsiFormula() != 1) {
-                //! Tseng Psi formula
-                vector<double> deltaValues = {0.0, a1_med[i] - (m_vCrossSectionU[i] + m_vCrossSectionC[i]), m_vCrossSectionU[i+1] + m_vCrossSectionC[i+1] - a1_med[i]};
+                //! Tseng Psi formula — entropy fix spreads for each characteristic family:
+                //  λ₁ = u+c : δ₁ = max(0, Roe_λ₁ - λ₁_L, λ₁_R - Roe_λ₁)
+                //  λ₂ = u-c : δ₂ = max(0, Roe_λ₂ - λ₂_L, λ₂_R - Roe_λ₂)  ← MUST use u-c on right
+                vector<double> deltaValues = {0.0,
+                    a1_med[i] - (m_vCrossSectionU[i]   + m_vCrossSectionC[i]),
+                    (m_vCrossSectionU[i+1] + m_vCrossSectionC[i+1]) - a1_med[i]};
                 delta1 = dMaxVectorValue(deltaValues);
 
-                deltaValues ={0.0, a2_med[i] - (m_vCrossSectionU[i] - m_vCrossSectionC[i]), m_vCrossSectionU[i+1] + m_vCrossSectionC[i+1] - a2_med[i]};
+                deltaValues = {0.0,
+                    a2_med[i] - (m_vCrossSectionU[i]   - m_vCrossSectionC[i]),
+                    (m_vCrossSectionU[i+1] - m_vCrossSectionC[i+1]) - a2_med[i]};
                 delta2 = dMaxVectorValue(deltaValues);
             }
 
@@ -4285,9 +4482,16 @@ void CSimulation::mergePredictorCorrector() {
             const double dx_interface = m_vPositionX[i + 1] - m_vPositionX[i];
             const double lambda_interface = (dx_interface > 1e-12) ? (m_dTimestep / dx_interface) : 0.0;
 
-            // Anti-diffusive flux for each characteristic
-            vFactor1[i] = alfa1_med[i]*psi1_med[i]*(1 - lambda_interface*fabs(a1_med[i]))*(1-fi1_med[i]);
-            vFactor2[i] = alfa2_med[i]*psi2_med[i]*(1 - lambda_interface*fabs(a2_med[i]))*(1-fi2_med[i]);
+            // Anti-diffusive flux for each characteristic.
+            // CRITICAL: clamp (1 - λ|a|) to [0,1].  If a local wave speed exceeds the
+            // grid-average CFL=1 boundary the factor goes negative, turning the
+            // anti-diffusive correction into a diffusive amplification term → NaN.
+            // Clamping to zero simply disables the TVD correction at that interface
+            // (falls back to first-order upwind there), which is stable.
+            const double tvd_coeff1 = std::max(0.0, std::min(1.0, 1.0 - lambda_interface*fabs(a1_med[i])));
+            const double tvd_coeff2 = std::max(0.0, std::min(1.0, 1.0 - lambda_interface*fabs(a2_med[i])));
+            vFactor1[i] = alfa1_med[i]*psi1_med[i]*tvd_coeff1*(1-fi1_med[i]);
+            vFactor2[i] = alfa2_med[i]*psi2_med[i]*tvd_coeff2*(1-fi2_med[i]);
 
             // Project back to physical variables: D1 for continuity, D2 for momentum
             m_vCrossSectionD1Factor[i+1] = 0.5*(vFactor1[i] + vFactor2[i]);
@@ -4310,10 +4514,18 @@ void CSimulation::mergePredictorCorrector() {
 
             const double invSf = 1.0 / dGetLateralStorageFactor(i);
 
-            m_vCrossSectionArea[i] = 0.5 * (m_vPredictedCrossSectionArea[i] + m_vCorrectedCrossSectionArea[i]) +
-                (lambda_cell * invSf) * (m_vCrossSectionD1Factor[i + 1] - m_vCrossSectionD1Factor[i]);
-            m_vCrossSectionQ[i] = 0.5 * (m_vPredictedCrossSectionQ[i] + m_vCorrectedCrossSectionQ[i]) +
-                lambda_cell * (m_vCrossSectionD2Factor[i + 1] - m_vCrossSectionD2Factor[i]);
+            // Suppress TVD anti-diffusion at nodes immediately adjacent to boundaries:
+            // the upwind stencil is incomplete there (one neighbour is an imposed BC node),
+            // causing the smoothness ratio r to blow up and corrupt those nodes.
+            if (i == 1 || i == m_nCrossSectionsNumber - 2) {
+                m_vCrossSectionArea[i] = 0.5 * (m_vPredictedCrossSectionArea[i] + m_vCorrectedCrossSectionArea[i]);
+                m_vCrossSectionQ[i]    = 0.5 * (m_vPredictedCrossSectionQ[i]    + m_vCorrectedCrossSectionQ[i]);
+            } else {
+                m_vCrossSectionArea[i] = 0.5 * (m_vPredictedCrossSectionArea[i] + m_vCorrectedCrossSectionArea[i]) +
+                    (lambda_cell * invSf) * (m_vCrossSectionD1Factor[i + 1] - m_vCrossSectionD1Factor[i]);
+                m_vCrossSectionQ[i] = 0.5 * (m_vPredictedCrossSectionQ[i] + m_vCorrectedCrossSectionQ[i]) +
+                    lambda_cell * (m_vCrossSectionD2Factor[i + 1] - m_vCrossSectionD2Factor[i]);
+            }
         }
         
         //! Apply final boundary conditions after merge
@@ -4343,14 +4555,25 @@ void CSimulation::mergeTracerPredictorCorrector() {
     // and dividing by the final merged area (already computed in mergePredictorCorrector)
     if (bGetDoWaterSalinity() && m_vPredictedCrossSectionS.size() == static_cast<size_t>(m_nCrossSectionsNumber) && m_vCorrectedCrossSectionS.size() == static_cast<size_t>(m_nCrossSectionsNumber)) {
         for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
-            // Average mass (A*S) from predictor and corrector
-            double AS_pred = m_vPredictedCrossSectionArea[i] * m_vPredictedCrossSectionS[i];
             double AS_corr = m_vCorrectedCrossSectionArea[i] * m_vCorrectedCrossSectionS[i];
-            double AS_avg = 0.5 * (AS_pred + AS_corr);
-            
+            double AS_avg;
+
+            if (i >= 1 && i < m_nCrossSectionsNumber - 1) {
+                // Interior nodes: correct McCormack merge is 0.5*(AS_n + AS**),
+                // where AS_n is the pre-timestep salt mass stored in the predictor step.
+                // Using 0.5*(AS* + AS**) is WRONG because AS** starts from AS* (not AS_n),
+                // which would overcount the predictor flux by 0.5*Δt*RHS_pred each timestep.
+                const double AS_n = m_vCrossSectionSalinityASt_predictor[i];
+                AS_avg = 0.5 * (AS_n + AS_corr);
+            } else {
+                // Boundary nodes: both predictor and corrector applied the same BC,
+                // so use the corrector result directly.
+                AS_avg = AS_corr;
+            }
+
             // Use the final merged area (computed in mergePredictorCorrector)
             double A_final = m_vCrossSectionArea[i];
-            
+
             if (A_final > 1e-10) {  // Avoid division by zero
                 m_vCrossSectionSalinity[i] = AS_avg / A_final;
             } else {
@@ -4509,12 +4732,28 @@ void CSimulation::smoothSolution() {
             }
         }
 
-        // Apply smoothed values and update velocity
+        // Apply smoothed values and update velocity.
+        // If salinity is enabled, preserve local salt mass (A*S) when A is modified by smoothing.
+        // This avoids artificial creation/destruction of salt from the stabilization step.
         for (int i = 1; i < n-1; i++) {
-            m_vCrossSectionArea[i] = vAreaSmooth[i];
+            const double A_old = m_vCrossSectionArea[i];
+            const double S_old = (bGetDoWaterSalinity() && static_cast<int>(m_vCrossSectionSalinity.size()) == n)
+                                     ? m_vCrossSectionSalinity[i]
+                                     : 0.0;
+            const double AS_old = A_old * S_old;
+
+            const double A_new = vAreaSmooth[i];
+            m_vCrossSectionArea[i] = A_new;
             m_vCrossSectionQ[i]    = vQSmooth[i];
-            m_vCrossSectionU[i]    = m_vCrossSectionQ[i] /
-                                     (m_vCrossSectionArea[i] + 1e-10);
+            m_vCrossSectionU[i]    = m_vCrossSectionQ[i] / (m_vCrossSectionArea[i] + 1e-10);
+
+            if (bGetDoWaterSalinity() && static_cast<int>(m_vCrossSectionSalinity.size()) == n) {
+                if (A_new > 1e-10) {
+                    m_vCrossSectionSalinity[i] = AS_old / A_new;
+                } else {
+                    m_vCrossSectionSalinity[i] = 0.0;
+                }
+            }
         }
     }
 }
@@ -4874,33 +5113,25 @@ void CSimulation::writePeriodicStatistics() {
     if (m_bDoWaterSalinity) {
         // Recompute a physically meaningful salt inventory (kg) for context.
         // Assumes salinity is PSU ~ g/kg, converted to mass fraction via PSU/1000.
+        // NOTE: Inventory integrates ONLY interior CVs. Boundary nodes are prescribed
+        // (not evolved by the conservative update) and would otherwise break closure.
         const int last = m_nCrossSectionsNumber - 1;
         const double psu_to_massfrac = 1.0 / 1000.0;
+        constexpr double rho_ref = 1025.0;
         double salt_mass_kg = 0.0;
-        if (m_nCrossSectionsNumber >= 2) {
-            for (int i = 0; i < m_nCrossSectionsNumber; ++i) {
+        if (m_nCrossSectionsNumber >= 3) {
+            for (int i = 1; i <= last - 1; ++i) {
                 const double A = m_vCrossSectionArea[i];
-                if (!(A > DRY_AREA)) continue;
-                double dxCV;
-                if (i == 0) {
-                    dxCV = 0.5 * (m_vCrossSectionX[1] - m_vCrossSectionX[0]);
-                } else if (i == last) {
-                    dxCV = 0.5 * (m_vCrossSectionX[last] - m_vCrossSectionX[last - 1]);
-                } else {
-                    dxCV = 0.5 * (m_vCrossSectionX[i + 1] - m_vCrossSectionX[i - 1]);
-                }
+                if (!(A >= DRY_AREA)) continue;
+                const double dxCV = 0.5 * (m_vCrossSectionX[i + 1] - m_vCrossSectionX[i - 1]);
                 if (!(dxCV > 0.0)) continue;
                 const double vol = dGetLateralStorageFactor(i) * A * dxCV; // m^3
-                double rho_i = 1025.0;
-                if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
-                    rho_i = std::max(900.0, m_vCrossSectionDensity[i]);
-                }
-                salt_mass_kg += rho_i * vol * (m_vCrossSectionSalinity[i] * psu_to_massfrac);
+                salt_mass_kg += rho_ref * vol * (m_vCrossSectionSalinity[i] * psu_to_massfrac);
             }
         }
 
-        // Instantaneous downstream salt flux (kg/s) at the current step.
-        if (m_nCrossSectionsNumber < 2) {
+        // Instantaneous salt fluxes (kg/s) at the current step.
+        if (m_nCrossSectionsNumber < 3) {
             LogStream << "Salt(inv)=" << std::scientific << std::setprecision(3) << salt_mass_kg << " kg\n" << std::defaultfloat;
         } else {
         auto interp_bc = [&](double t, const std::vector<double>& tt, const std::vector<double>& vv, double fallback) {
@@ -4918,29 +5149,133 @@ void CSimulation::writePeriodicStatistics() {
         };
 
         const double t_bc = m_dCurrentTime + m_dTimestep;
+
+        // ---- Downstream boundary (ocean) ----
         double down_sal = m_dDownwardSalinityBoundaryValue;
         if (!m_strDownwardSalinityBoundaryConditionFilename.empty() &&
             !m_vDownwardSalinityBoundaryConditionTime.empty() &&
             !m_vDownwardSalinityBoundaryConditionValue.empty()) {
             down_sal = interp_bc(t_bc, m_vDownwardSalinityBoundaryConditionTime, m_vDownwardSalinityBoundaryConditionValue, down_sal);
         }
-        // Use the downstream interior face between (last-1, last)
-        const double Q_face_dn = 0.5 * (m_vCrossSectionQ[last - 1] + m_vCrossSectionQ[last]);
-        const double S_dn_upwind = (Q_face_dn < 0.0) ? down_sal : m_vCrossSectionSalinity[last - 1];
-        double rho_dn = 1025.0;
-        if (static_cast<int>(m_vCrossSectionDensity.size()) == m_nCrossSectionsNumber) {
-            const double rhoL = std::max(900.0, m_vCrossSectionDensity[last - 1]);
-            const double rhoR = std::max(900.0, m_vCrossSectionDensity[last]);
-            rho_dn = 0.5 * (rhoL + rhoR);
+        // Use the same node-based boundary discharge convention as the transport scheme.
+        const double Q_face_dn = m_vCrossSectionQ[last];
+        double S_dn_upwind;
+        double S_dn_interior = m_vCrossSectionSalinity[last - 1];
+        double S_dn_in_effective = down_sal;
+        if (Q_face_dn < 0.0) {
+            const double S_interior = S_dn_interior;
+            const double a = std::max(0.0, std::min(1.0, m_dDownstreamSalinityInflowMixAlpha));
+            const double down_sal_in = a * down_sal + (1.0 - a) * S_interior;
+            S_dn_upwind = down_sal_in;
+            S_dn_in_effective = down_sal_in;
+        } else {
+            S_dn_upwind = S_dn_interior;
+            S_dn_in_effective = S_dn_interior;
         }
-        const double inflow_kg_s = (Q_face_dn < 0.0) ? (rho_dn * (-Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
-        const double outflow_kg_s = (Q_face_dn > 0.0) ? (rho_dn * ( Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
+        double rho_dn = 1025.0;
+        rho_dn = rho_ref;
+        const double adv_inflow_kg_s = (Q_face_dn < 0.0) ? (rho_dn * (-Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
+        const double adv_outflow_kg_s = (Q_face_dn > 0.0) ? (rho_dn * ( Q_face_dn) * (S_dn_upwind * psu_to_massfrac)) : 0.0;
+
+        // Diffusive flux across downstream boundary-adjacent face (last-1 - last)
+        double diff_inflow_kg_s = 0.0;
+        double diff_outflow_kg_s = 0.0;
+        {
+            const double dxN = m_vCrossSectionX[last] - m_vCrossSectionX[last - 1];
+            if (dxN > 1e-12) {
+                const double Kh_face = 0.5 * (dGetLongitudinalDispersion(last - 1) + dGetLongitudinalDispersion(last));
+                if (Kh_face > 0.0) {
+                    const double A_face = 0.5 * (m_vCrossSectionArea[last - 1] + m_vCrossSectionArea[last]);
+                    const double S_last = S_dn_in_effective;
+                    const double S_int = m_vCrossSectionSalinity[last - 1];
+                    const double Fd = -Kh_face * A_face * (S_last - S_int) / dxN;
+                    const double kg_s = rho_dn * Fd * psu_to_massfrac;
+                    // Positive kg_s is toward +x (to ocean) => outflow; negative => inflow.
+                    diff_inflow_kg_s = (kg_s < 0.0) ? (-kg_s) : 0.0;
+                    diff_outflow_kg_s = (kg_s > 0.0) ? ( kg_s) : 0.0;
+                }
+            }
+        }
+
+        const double inflow_kg_s = adv_inflow_kg_s + diff_inflow_kg_s;
+        const double outflow_kg_s = adv_outflow_kg_s + diff_outflow_kg_s;
         const double net_kg_s = inflow_kg_s - outflow_kg_s;
 
+        // ---- Upstream boundary (river) ----
+        double up_sal = m_dUpwardSalinityBoundaryValue;
+        if (!m_strUpwardSalinityBoundaryConditionFilename.empty() &&
+            !m_vUpwardSalinityBoundaryConditionTime.empty() &&
+            !m_vUpwardSalinityBoundaryConditionValue.empty()) {
+            up_sal = interp_bc(t_bc, m_vUpwardSalinityBoundaryConditionTime, m_vUpwardSalinityBoundaryConditionValue, up_sal);
+        }
+        const double Q_face_up = m_vCrossSectionQ[0];
+        const double S_up_upwind = (Q_face_up > 0.0) ? up_sal : m_vCrossSectionSalinity[1];
+        double rho_up = 1025.0;
+        rho_up = rho_ref;
+        const double adv_up_in_kg_s = (Q_face_up > 0.0) ? (rho_up * ( Q_face_up) * (S_up_upwind * psu_to_massfrac)) : 0.0;
+        const double adv_up_out_kg_s = (Q_face_up < 0.0) ? (rho_up * (-Q_face_up) * (S_up_upwind * psu_to_massfrac)) : 0.0;
+
+        // Diffusive flux across upstream boundary-adjacent face (0-1)
+        double diff_up_in_kg_s = 0.0;
+        double diff_up_out_kg_s = 0.0;
+        {
+            const double dx01 = m_vCrossSectionX[1] - m_vCrossSectionX[0];
+            if (dx01 > 1e-12) {
+                const double Kh_face = 0.5 * (dGetLongitudinalDispersion(0) + dGetLongitudinalDispersion(1));
+                if (Kh_face > 0.0) {
+                    const double A_face = 0.5 * (m_vCrossSectionArea[0] + m_vCrossSectionArea[1]);
+                    const double S0 = (Q_face_up > 0.0) ? up_sal : m_vCrossSectionSalinity[1];
+                    const double S1 = m_vCrossSectionSalinity[1];
+                    const double Fd = -Kh_face * A_face * (S1 - S0) / dx01;
+                    const double kg_s = rho_up * Fd * psu_to_massfrac;
+                    // Positive kg_s is toward +x (into domain) => inflow.
+                    diff_up_in_kg_s = (kg_s > 0.0) ? ( kg_s) : 0.0;
+                    diff_up_out_kg_s = (kg_s < 0.0) ? (-kg_s) : 0.0;
+                }
+            }
+        }
+
+        const double up_in_kg_s = adv_up_in_kg_s + diff_up_in_kg_s;
+        const double up_out_kg_s = adv_up_out_kg_s + diff_up_out_kg_s;
+        const double up_net_kg_s = up_in_kg_s - up_out_kg_s;
+
+        // ---- Stat-window averages (Δcum/Δt) ----
+        double down_avg_in = 0.0, down_avg_out = 0.0, down_avg_net = 0.0;
+        double up_avg_in = 0.0, up_avg_out = 0.0, up_avg_net = 0.0;
+        const double dt_stat = m_dCurrentTime - m_dSaltLastStatTime;
+        if (dt_stat > 1e-12) {
+            down_avg_in = (m_dSaltInflowDownstream - m_dSaltInflowDownstreamLastStat) / dt_stat;
+            down_avg_out = (m_dSaltOutflowDownstream - m_dSaltOutflowDownstreamLastStat) / dt_stat;
+            down_avg_net = down_avg_in - down_avg_out;
+
+            up_avg_in = (m_dSaltInflowUpstream - m_dSaltInflowUpstreamLastStat) / dt_stat;
+            up_avg_out = (m_dSaltOutflowUpstream - m_dSaltOutflowUpstreamLastStat) / dt_stat;
+            up_avg_net = up_avg_in - up_avg_out;
+        }
+
+        const double bnd_cum_net = m_dSaltNetFlowDownstream + m_dSaltNetFlowUpstream;
+        const double delta_inv = salt_mass_kg - m_dSaltInitialMass;
+        const double closure_err = delta_inv - bnd_cum_net;
+
         LogStream << "Salt(inv)=" << std::scientific << std::setprecision(3) << salt_mass_kg << " kg"
-                  << "  DownFlux(in,out,net)=" << inflow_kg_s << "," << outflow_kg_s << "," << net_kg_s << " kg/s"
+              << "  Down(Q,S_ocean,S_int,S_in)=" << Q_face_dn << "," << down_sal << "," << S_dn_interior << "," << S_dn_in_effective
+              << "  DownFlux(in,out,net)=" << inflow_kg_s << "," << outflow_kg_s << "," << net_kg_s << " kg/s"
+                  << "  DownAvg(in,out,net)=" << down_avg_in << "," << down_avg_out << "," << down_avg_net << " kg/s"
                   << "  DownCumNet=" << m_dSaltNetFlowDownstream << " kg"
+                  << "  UpFlux(in,out,net)=" << up_in_kg_s << "," << up_out_kg_s << "," << up_net_kg_s << " kg/s"
+                  << "  UpAvg(in,out,net)=" << up_avg_in << "," << up_avg_out << "," << up_avg_net << " kg/s"
+                  << "  UpCumNet=" << m_dSaltNetFlowUpstream << " kg"
+                  << "  ΔInv=" << delta_inv << " kg"
+                  << "  BndCumNet=" << bnd_cum_net << " kg"
+                  << "  Err=" << closure_err << " kg"
                   << "\n" << std::defaultfloat;
+
+        // Update stat-window snapshots only when we actually log a periodic entry.
+        m_dSaltLastStatTime = m_dCurrentTime;
+        m_dSaltInflowDownstreamLastStat = m_dSaltInflowDownstream;
+        m_dSaltOutflowDownstreamLastStat = m_dSaltOutflowDownstream;
+        m_dSaltInflowUpstreamLastStat = m_dSaltInflowUpstream;
+        m_dSaltOutflowUpstreamLastStat = m_dSaltOutflowUpstream;
         }
     }
 
