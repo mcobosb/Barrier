@@ -4,6 +4,30 @@
 
 ---
 
+## [0.13.0] - 2026-05-19
+
+### Added
+- Along-channel input now supports optional `StorageFactor` and `Kh` columns, enabling per-cross-section lateral storage and salinity-dispersion profiles.
+- NetCDF output now includes static `n(x)`, `Sf(x)`, and `Kh(x)` profiles for roughness, lateral storage, and salinity dispersion diagnostics.
+- Salinity YAML configuration expanded with `initial_file`, upstream/downstream boundary-condition files or scalar values, and downstream `inflow_mixing_alpha` control.
+
+### Changed
+- Boundary-condition handling was extended and made more compatible across hydrodynamics and salinity transport workflows.
+- Automatic CFL control now depends on the active limiter/scheme, caps unstable user requests, and reports the selected stability target in startup logs.
+- Runtime smoothing/regularization was refined for extreme-flow events to improve stability under large discharges.
+- Manning `n(eta)` behaviour was softened and the friction/storage formulation was further refined.
+
+### Diagnostics
+- Console and log-file output were reorganized with clearer sectioning and message formatting.
+- Startup summaries now report Manning, lateral-storage, and salinity-dispersion ranges when available.
+
+### Fixes
+- Fixed flooding computation issues.
+- Improved salinity transport robustness, including storage-coupling/source-term handling and follow-up bug fixes.
+- Fixed initial salinity-condition loading from YAML configuration.
+
+---
+
 ## [0.12.0] - 2026-01-14
 
 ### Added
