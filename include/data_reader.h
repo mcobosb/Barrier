@@ -121,24 +121,25 @@ public:
     string const OUT_EXT = ".nc";
     string const LOG_EXT = ".log";
 
-    //! Folder for the .ini file
-    string const m_strIni = ".ini";
-
-    //! Folder for the .conf file
-    string m_strConfig = ".conf";
-
-    //! Read configuration file with global data
-    void bReadConfigurationFile(CSimulation* m_pSimulation);
-
     //! Read along channel data and the initial estuarine condition
     void bReadAlongChannelDataFile(CSimulation* m_pSimulation) const;
 
     //! Read every cross-section geometry
     void bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const;
 
-    //! Read time-series with upward and downward boundary conditions
+    //! Read time-series with upward and downward boundary conditions (hydraulic)
     static void bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation);
     static void bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation);
+
+    //! Read time-series with upward and downward temperature boundary conditions
+    static void bReadUpwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation);
+    static void bReadDownwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation);
+
+    //! Read prescribed (spatially uniform) temperature time series: time, temperature
+    static void bReadGivenTemperatureFile(CSimulation* m_pSimulation);
+
+    //! Read single heat flux forcing file (Tair, relative humidity, wind)
+    static void bReadHeatFluxFile(CSimulation* m_pSimulation);
 
     //! Read along channel sediments file
     void bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) const;
@@ -158,5 +159,7 @@ public:
     //! Get output base path
     string getOutputBasePath() const { return m_strOutputBasePath; }
 
+    //! Read last state from NetCDF to continue simulation
+    void bRestoreStateFromNetCDF(CSimulation* m_pSimulation, const std::string& netcdfPath) const;
 };
 #endif // DATA_READER_H

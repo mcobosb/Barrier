@@ -35,19 +35,10 @@ private:
     void parseRunSection(const YAML::Node& node, CSimulation* sim);
     
     //! Parse geometry section  
-    void parseGeometrySection(const YAML::Node& node, CSimulation* sim);
+    void parseGeometrySection(const YAML::Node& node);
     
-    //! Parse initial conditions section
-    void parseInitialConditionsSection(const YAML::Node& node, CSimulation* sim);
-    
-    //! Parse boundary conditions section
-    void parseBoundaryConditionsSection(const YAML::Node& node, CSimulation* sim);
-    
-    //! Parse forcing section
-    void parseForcingSection(const YAML::Node& node, CSimulation* sim);
-    
-    //! Parse numerics section
-    void parseNumericsSection(const YAML::Node& node, CSimulation* sim);
+    //! Parse hydrodynamics section
+    void parseHydrodynamicsSection(const YAML::Node& node, CSimulation* sim);
     
     //! Parse transport section
     void parseTransportSection(const YAML::Node& node, CSimulation* sim);
@@ -67,6 +58,8 @@ public:
     std::string m_strCrossSectionGeometryFilename;
     std::string m_strUpwardBoundaryConditionFilename;
     std::string m_strDownwardBoundaryConditionFilename;
+    std::string m_strUpwardSalinityBoundaryConditionFilename;
+    std::string m_strDownwardSalinityBoundaryConditionFilename;
     std::string m_strSedimentPropertiesFilename;
     std::string m_strHydrographsFilename;
     std::string m_strSalinityFilename;

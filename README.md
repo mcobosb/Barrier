@@ -70,73 +70,88 @@ Barrier/
 
 ## ⚙️ Configuration
 
-The simulation is configured through a **`.conf` file** (plain text format). Each test case has its own configuration file in the `tests/` directory.
+The simulation is now configured through a **YAML file** (`config.yaml`). Each test case directory (e.g. `tests/1022/`) contains its own `config.yaml` file.
 
-### Configuration File Format (`.conf`)
+### Example YAML Configuration (`config.yaml`)
 
-```ini
-; Example configuration file for BARRIER simulation
-; Run information ------------------------------------------------------------------------------------------
-Main output/log file names                                          [omit path and extension]: simulation_name
-Content of log file                                      [0 = no log file, 1 = most detailed]: 0
+```yaml
+run:
+   name: "1022"
+   start_date: "1999-01-01T00:00:00"
+   duration: 604800  # seconds (7 days)
+   timestep: 3600  # seconds (1 hour)
+   output_variables: full
+   log_level: 0  # no log file
+   continue_simulation: true
+   continue_netcdf_path: "1022_barrier_sim_20251215_1034_CS251_T7d_dt3600_BC12_SAL_TVD_DRY_CFL15.nc"
 
-Simulation start date and time                                          [hh-mm-ss dd/mm/yyyy]: 00-00-00 01/01/2026
-Simulation duration                                         [units may differ from Time step]: 604800 seconds
-Time step                                                                  [seconds or hours]: 3600 seconds
-Names of output variables                                                                    : full
+geometry:
+   along_channel_file: along_channel_data
+   cross_sections_file: cross_sections
 
-; Geometry of the main channel (MC) --------------------------------------------------------------------
-Along channel data file name                                        [omit path and extension]: along_channel_data
-Cross sections channel geometry file name                           [omit path and extension]: cross_sections
+initial_conditions:
+   type: 0  # in calm
 
-; Initial along-channel condition, IEC ---------------------------------------------------------
-Initial along-channel estuarine condition      [0 = in calm, 1 = water flow or 2 = elevation]: 0
+boundary_conditions:
+   upstream:
+      type: 1  # reflective
+      file: ""
+   downstream:
+      type: 2  # elevation
+      file: tides
 
-; Initial along-channel condition of MC --------------------------------------------------------
-Upward estuarine boundary condition, UEBC    [0 = open flow, 1 = water flow or 2 = elevation]: 0
-    - UEBC file name               [omit path and extension - if UEBC = 0, leave it in blank]: -
-Downward estuarine boundary condition, DEBC  [0 = open flow, 1 = water flow or 2 = elevation]: 2
-    - DEBC file name               [omit path and extension - if DEBC = 0, leave it in blank]: tides
+forcing:
+   tributaries_file: ""  # no tributaries
 
-; Along-channel fluvial contributions ----------------------------------------------------------
-Hydro file name of tributaries                                      [omit path and extension]: -
+numerics:
+   courant_number: 0.15
+   tvd_limiter:
+      enabled: true
+      method: minmod  # 1 = MinMod
+      psi_formula: tseng  # 2 = Tseng
+      delta: 0.10
+   surface_gradient: true
+   source_term_balance: true
+   beta_coefficient: true
+   dry_bed: true
+   murillo_condition: true
 
-; Computational constants and methods ----------------------------------------------------------
-Courant Number                                                                [between 0 - 1]: 0.1
-McComarck Limiter Flux                                                               [n or y]: y
-    - Equation for the Limiter Flux     [1 = MinMod, 2 = Roe, 3 = Van Leer or 4 = Van Albada]: 1
-Surface Gradient Method                                                              [n or y]: y
-Source term balance                                                                  [n or y]: y
-Dry bed                                                                              [n or y]: y
+transport:
+   salinity:
+      enabled: true
+      initial_file: ""
+      upstream_condition: 0  # free
+      downstream_condition: 2  # ocean
+      beta: 0.00076
+      dispersion_kh: 750.0  # m²/s
+   sediment:
+      enabled: false
+      equation: 0  # van Rijn
+      properties_file: ""
+   density:
+      enabled: false
 
-; Salinity transport ----------------------------------------------------------------------------
-Salinity transport                                                                   [n or y]: y
-Upward boundary condition for the salinity                                  [0 = 0 psu or 1 =]: 0
-Downward boundary condition for the salinity                  [0 = 0 psu, 1 = seawater or 2 =]: 1
-Longitudinal dispersion coefficient                                                     [m2/s]: 100.0
-Beta coefficient                                                                     [n or y]: y
-Water density                                                                        [n or y]: y
-
-; Sediment transport ----------------------------------------------------------------------------
-Sediment transport                                                                   [n or y]: n
+smoothing:
+   bathymetry: true
+   solution: true
 ```
 
-### Key Parameters
+#### Main YAML Sections
 
-| Parameter | Description | Values |
-|-----------|-------------|--------|
-| **Simulation duration** | Total simulation time | seconds or hours |
-| **Time step** | Computational time step (Δt) | seconds (adaptive with Courant limit) |
-| **Courant Number** | CFL stability condition | 0.0 - 1.0 (typically 0.1 - 0.5) |
-| **UEBC** | Upstream boundary condition | 0=open, 1=discharge, 2=elevation |
-| **DEBC** | Downstream boundary condition | 0=open, 1=discharge, 2=elevation |
-| **McCormack Limiter Flux** | TVD flux limiter | y/n (MinMod/Roe/Van Leer/Van Albada) |
-| **Surface Gradient Method** | Bed slope treatment | y/n |
-| **Dry bed** | Enable dry bed handling | y/n |
-| **Salinity transport** | Enable salinity equations | y/n |
-| **Sediment transport** | Enable sediment equations | y/n |
+| Section | Description |
+|---------|-------------|
+| `run` | General run settings: name, start date, duration, timestep, output, restart options |
+| `geometry` | Input files for along-channel and cross-sections |
+| `initial_conditions` | Type of initial state (0=in calm, 1=flow, 2=elevation) |
+| `boundary_conditions` | Upstream and downstream boundary types and files |
+| `forcing` | Tributary/river inflow files |
+| `numerics` | Courant number, TVD limiter, numerical flags |
+| `transport` | Salinity, sediment, and density transport options |
+| `smoothing` | Bathymetry and solution smoothing flags |
 
----
+See the example above for typical parameter names and values. All input files referenced (e.g. `along_channel_data`, `cross_sections`, `tides`) should be present in the same directory as the YAML file.
+
+> **Note:** The old `.ini`, `.conf`, and `.config` formats are no longer supported. Use only `config.yaml` for new simulations.
 
 ## 📂 Input Data Files
 
@@ -232,7 +247,7 @@ The model implements a **TVD (Total Variation Diminishing) McCormack scheme**, a
 The core algorithm in `CSimulation::bDoSimulation()` follows these steps:
 
 1. **Read Configuration** (`CDataReader::readConfigurationFile()`)
-   - Parse `.conf` file
+   - Parse `config.yaml` file
    - Read cross-section geometry and along-channel data
    - Load boundary conditions and initial conditions
 
@@ -378,34 +393,30 @@ cd ../../build
 ### Example Output
 
 ```
-===============================================================================================
-BARRIER v1.1.0 - 1D Estuarine Hydrodynamic Model
-===============================================================================================
-Reading configuration file: .conf
-  - Cross sections: 251
-  - Simulation duration: 604800 s (7 days)
-  - Time step: 3600 s (1 hour)
-  - Courant number: 0.1
-  - TVD limiter: MinMod
-  - Salinity transport: ENABLED
-  - Dry bed: ENABLED
+Hydrodynamic modeling of main channel of estuaries (03 December 2025) - BARRiEr Project (https://barrier.dinamicambiental.es) for Intel x86/GNU C++ (12:22:12 Dec 15 2025 build)
+(C) 2025 Manuel Cobos
 
-Initializing simulation...
-  - Computing bed slopes...
-  - Precomputing geometric properties...
-  - Setting initial conditions...
+-------------------------------------------------------------------------------
+This program is distributed in the hope that it will be useful. but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details. You
+should have received a copy of the GNU General Public License along with this
+program; if not. contact the Free Software Foundation. Inc.. 675 Mass Ave.
+Cambridge. MA 02139. USA.
+-------------------------------------------------------------------------------
 
-Starting time loop...
-Progress: [####################] 100% | Time: 7.00d / 7.00d | Elapsed: 4.2s
-
-Writing NetCDF output: barrier_sim_20251203_0330_CS251_T7d_dt3600_BC02_SAL_TVD_DRY_CFL10.nc
+    - Started on mcobos at 12:22 on Monday 15 December 2025
+    - Initializing
+      - Detected configuration file
+      - Loading initial NetCDF for continuing simulation: testGRE_barrier_sim_20251215_1040_CS806_T7d_dt3600_BC12_SAL_TVD_DRY_CFL15.nc
+      - Smoothing bathymetry (3 passes)
+      - Output file: testGRE_barrier_sim_20251215_1222_CS806_T7d_dt3600_BC12_SAL_TVD_DRY_CFL15.nc
+    - Running
+    - Elapsed[Remaining] Time: 72.000[ 0.000] s - Progress: 100.000%
+    - Run ended at 12:23 on Monday 15 December 2025
 
 Run successfully end
-Total simulation time: 4.2 seconds
-===============================================================================================
 ```
-
----
 
 ## 📈 Output
 
@@ -467,61 +478,12 @@ The NetCDF file includes comprehensive metadata:
 
 Results can be visualized using:
 
-#### Python (recommended)
-
-The `viewer/` directory contains a Python-based visualization application.
-
-```bash
-# Install dependencies
-conda env create -f viewer/environment.yml
-conda activate barrier-viewer
-
-# Run visualization app
-python viewer/app.py
-```
-
-**Python libraries:**
-```python
-import xarray as xr
-import matplotlib.pyplot as plt
-import numpy as np
-
-# Load simulation results
-ds = xr.open_dataset('barrier_sim_*.nc')
-
-# Plot water elevation over time at a specific location
-ds.eta.isel(x=100).plot()
-plt.title('Water Elevation at x = 100')
-plt.xlabel('Time (s)')
-plt.ylabel('Water Elevation (m)')
-plt.show()
-
-# Plot along-channel profile at a specific time
-ds.eta.isel(time=50).plot()
-plt.title('Water Surface Profile')
-plt.xlabel('Distance (m)')
-plt.ylabel('Elevation (m)')
-plt.show()
-
-# Create a Hovmöller diagram (time vs. space)
-ds.eta.plot(x='time', y='x', cmap='RdBu_r')
-plt.title('Water Elevation Evolution')
-plt.show()
-```
-
-#### Other Tools
-
 - **ncview**: Quick NetCDF file viewer
   ```bash
   ncview barrier_sim_*.nc
   ```
 - **Panoply**: NASA's NetCDF viewer (GUI)
 - **ParaView**: Advanced 3D visualization
-- **MATLAB**: Built-in NetCDF support
-  ```matlab
-  ncdisp('barrier_sim_20251203_0330.nc')
-  eta = ncread('barrier_sim_20251203_0330.nc', 'eta');
-  ```
 
 ---
 
@@ -814,9 +776,9 @@ If you use BARRIER in your research, please cite:
 ```bibtex
 @software{barrier2026,
   title = {{BARRIER}: 1D Estuarine Hydrodynamic Model},
-  author = {Cobos, Manuel and Baquerizo, Asunción and Díez-Minguito, Manuel and Millares, Agustín},
+  author = {Cobos, Manuel},
   year = {2026},
-  version = {0.6.0},
+  version = {0.11.0},
   url = {https://github.com/mcobosb/Barrier},
   note = {Building Analysis capacity to improve the Resilience of the Guadalquivir river estuary}
 }
@@ -826,4 +788,4 @@ If you use BARRIER in your research, please cite:
 
 *For technical support, scientific collaboration, or general inquiries, please contact the development team.*
 
-**Last updated**: December 2025 | **Version**: 0.6.0
+**Last updated**: December 2025 | **Version**: 0.11.0

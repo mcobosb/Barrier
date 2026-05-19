@@ -64,26 +64,40 @@ using std::transform;
 
 
 
-//===============================================================================================================================
-//! The CScreenPresenter constructor
-//===============================================================================================================================
+/**
+ * @brief Construct a new CScreenPresenter object for console I/O
+ * 
+ * Initializes system end time to 0 (will be set when simulation completes).
+ */
 CScreenPresenter::CScreenPresenter() {
    m_tSysEndTime = 0;
 }
 
-//===============================================================================================================================
-//! The CScreenPresenter destructor
-//===============================================================================================================================
+/**
+ * @brief Destructor (default implementation)
+ */
 CScreenPresenter::~CScreenPresenter() = default;
 
 
-//===============================================================================================================================
-//! The nDoSimulation member function of CSimulation sets up and runs the simulation
-//===============================================================================================================================
+/**
+ * @brief Initialize console output and announce simulation start
+ * 
+ * Performs:
+ * 1. Print banner with program name, version, build timestamp
+ * 2. Start CPU and wall-clock timers
+ * 3. Find executable directory
+ * 4. Display license and disclaimer
+ * 5. Print system info (hostname, start time)
+ * 
+ * @param nArg Number of command-line arguments (unused)
+ * @param pcArgv Array of argument strings (used to find executable path)
+ * @param m_pSimulation Pointer to main simulation object
+ * 
+ * @note Called once at beginning of main()
+ */
 void CScreenPresenter::StartingRun([[maybe_unused]] int nArg, char const* pcArgv[], CSimulation* m_pSimulation)
 {
-   // ================================================== initialization section ================================================
-   // Hello, World!
+   // Print program banner
    AnnounceStart(m_pSimulation);
 
    // Start the clock ticking
@@ -98,9 +112,18 @@ void CScreenPresenter::StartingRun([[maybe_unused]] int nArg, char const* pcArgv
 
 
 
-//===============================================================================================================================
-//! Notifies the user that the simulation has ended, asks for keypress if necessary, and if compiled under GNU can send an email
-//===============================================================================================================================
+/**
+ * @brief Display simulation end message with timestamp
+ * 
+ * Prints completion message to stdout and log file.
+ * Records system end time if not already set (e.g., from exception).
+ * 
+ * @note Commented code shows historical features:
+ * - Progress bar final update (100%)
+ * - Elapsed time display
+ * - Error message formatting
+ * - Email notification (removed)
+ */
 void CScreenPresenter::EndingRun()
 {
    // If we don't know the time that the run ended (e.g. because it did not finish correctly), then get it now
@@ -138,9 +161,17 @@ void CScreenPresenter::EndingRun()
    // }
 }
 
-//===============================================================================================================================
-//! Returns the date and time on which the program was compiled
-//===============================================================================================================================
+/**
+ * @brief Get compilation timestamp string
+ * 
+ * Returns string with format: "(HH:MM:SS MMM DD YYYY build)"
+ * or "(HH:MM:SS MMM DD YYYY DEBUG build)" for debug builds.
+ * 
+ * Uses compiler macros __TIME__ and __DATE__.
+ * 
+ * @return Build timestamp string
+ * @note Useful for identifying executable version in bug reports
+ */
 string CScreenPresenter::strGetBuild()
 {
    string strBuild("(");
@@ -148,7 +179,7 @@ string CScreenPresenter::strGetBuild()
    strBuild.append(" ");
    strBuild.append(__DATE__);
 #ifdef _DEBUG
-   strBuild.append(" DEBUG)");
+   strBuild.append(" DEBUG");
 #endif
    strBuild.append(" build)");
 
@@ -156,24 +187,39 @@ string CScreenPresenter::strGetBuild()
 }
 
 
-//===============================================================================================================================
-//! Tells the user that we have started the simulation
-//===============================================================================================================================
+/**
+ * @brief Print program banner to console and log file
+ * 
+ * Displays: PROGRAM_NAME for PLATFORM (build_timestamp)
+ * 
+ * @param m_pSimulation Pointer to simulation object (for log file access)
+ */
 void CScreenPresenter::AnnounceStart(CSimulation* m_pSimulation)
 {
    cout << endl
-        << PROGRAM_NAME << " for " << PLATFORM << " " << strGetBuild() << endl;
+        << PROGRAM_NAME << endl
+        << "      for " << PLATFORM << " " << strGetBuild() << endl;
 
    m_pSimulation->LogStream << endl
-        << PROGRAM_NAME << " for " << PLATFORM << " " << strGetBuild() << endl;
+        << PROGRAM_NAME << endl
+        << "      for " << PLATFORM << " " << strGetBuild() << endl;
 }
 
-//===============================================================================================================================
-//! Starts the clock ticking
-//===============================================================================================================================
+/**
+ * @brief Initialize CPU and wall-clock timers
+ * 
+ * Sets up two timing mechanisms:
+ * 1. CPU time: clock() for processor time (excludes I/O waits)
+ * 2. Wall time: time() for actual elapsed time
+ * 
+ * @param m_pSimulation Pointer to simulation (stores start time)
+ * 
+ * @note CPU time can rollover on very long runs (handled via m_dClkLast)
+ * @warning If clock() fails, CPU timing is disabled (m_dCPUClock = -1)
+ */
 void CScreenPresenter::StartClock(CSimulation* m_pSimulation)
 {
-   // First start the 'CPU time' clock ticking
+   // Initialize CPU clock
    if (static_cast<clock_t>(-1) == clock())
    {
       // There's a problem with the clock, but continue anyway
@@ -192,16 +238,22 @@ void CScreenPresenter::StartClock(CSimulation* m_pSimulation)
 }
 
 
-//===============================================================================================================================
-//! Finds the folder (directory) in which the Barrier executable is located
-//===============================================================================================================================
+/**
+ * @brief Find directory containing Barrier executable
+ * 
+ * Extracts directory path from argv[0] by removing executable name.
+ * 
+ * @param pcArg argv[0] from main() (full path to executable)
+ * @return true if directory found, false if path empty
+ * 
+ * @note Result stored in m_strSVDir (terminated with PATH_SEPARATOR)
+ * @warning Does not validate if directory actually exists
+ */
 bool CScreenPresenter::bFindExeDir(char const* pcArg)
 {
    string strTmp;
-   // char szBuf[BUF_SIZE] = "";
 
-
-    // It failed, so try another approach
+    // Use argv[0] as path
     strTmp = pcArg;
 
 
@@ -216,11 +268,19 @@ bool CScreenPresenter::bFindExeDir(char const* pcArg)
    return true;
 }
 
-//===============================================================================================================================
-//! Returns a string, hopefully giving the name of the computer on which the simulation is running
-//===============================================================================================================================
+/**
+ * @brief Get hostname of computer running simulation
+ * 
+ * Platform-specific implementations:
+ * - Windows: GetComputerNameA() from windows.h
+ * - Linux/Unix: uname() from sys/utsname.h
+ * 
+ * @return Hostname string, or empty string if detection fails
+ * 
+ * @note Used in simulation start banner for identifying compute resources
+ */
 string CScreenPresenter::strGetComputerName()
-{
+{  
     string strComputerName;
 
 #ifdef _WIN32
@@ -241,9 +301,19 @@ string CScreenPresenter::strGetComputerName()
     return strComputerName;
 }
 
-//===============================================================================================================================
-//! Tells the user about the licence
-//===============================================================================================================================
+/**
+ * @brief Display copyright, disclaimer, and simulation start info
+ * 
+ * Prints:
+ * - Copyright notice
+ * - 6-line disclaimer (no warranty, use at own risk)
+ * - Hostname and start timestamp
+ * - "Initializing..." message
+ * 
+ * @param m_pSimulation Pointer to simulation (for start time)
+ * 
+ * @note Required by GPL license to inform users of warranty status
+ */
 void CScreenPresenter::AnnounceLicence(const CSimulation* m_pSimulation) {
    cout << COPYRIGHT << endl
         << endl;
@@ -261,7 +331,11 @@ void CScreenPresenter::AnnounceLicence(const CSimulation* m_pSimulation) {
    cout << INITIALIZING_NOTICE << endl;
 }
 
-
+/**
+ * @brief Print final status message
+ * 
+ * @param strText Message to display (e.g., error description, success message)
+ */
 void CScreenPresenter::AnnounceEnding(const string& strText)
 {
    cout << endl

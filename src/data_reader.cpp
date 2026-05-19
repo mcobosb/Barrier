@@ -48,15 +48,18 @@ using std::find;
 #include "error_handling.h"
 #include "utils.h"
 
-//===============================================================================================================================
-//! The CDataReader constructor
-//===============================================================================================================================
+/**
+ * @brief Construct CDataReader object
+ * 
+ * Initializes:
+ * - Iteration counter (m_ulIter = 0)
+ * - Date/time members to 0
+ * - Duration units multiplier to 0.0
+ */
 CDataReader::CDataReader() {
-	// CEstuary m_pEstuary;
-	// m_pSimulation = new CSimulation;
 	m_ulIter = 0;
 
-	//! Date properties
+	// Date properties
 	m_nSimStartSec =
 	m_nSimStartMin =
 	m_nSimStartHour =
@@ -65,20 +68,28 @@ CDataReader::CDataReader() {
 	m_nSimStartYear = 0;
 
 	m_dDurationUnitsMultiplier = 0.0;
-
-
-
 }
 
-//======================================================================================================================
-//! The CDataReader destructor
-//======================================================================================================================
+/**
+ * @brief Destructor (default implementation)
+ */
 CDataReader::~CDataReader() = default;
 
 
-//===============================================================================================================================
-//! Opens the log file
-//===============================================================================================================================
+/**
+ * @brief Open log file for simulation output
+ * 
+ * Behavior:
+ * - If log_level = 0: Redirect to /dev/null (no logging)
+ * - Otherwise: Create log file with truncation (overwrites existing)
+ * 
+ * @param m_pSimulation Pointer to simulation (contains log filename and detail level)
+ * 
+ * @note Log file contains:
+ * - Initialization messages
+ * - Runtime warnings/errors
+ * - Progress updates (if detail > 0)
+ */
 void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 {
 	if (m_pSimulation->m_nLogFileDetail == 0)
@@ -90,735 +101,37 @@ void CDataReader::bOpenLogFile(CSimulation* m_pSimulation)
 		m_pSimulation->LogStream.open(m_pSimulation->m_strLogFile.c_str(), ios::out | ios::trunc);
 }
 
-//======================================================================================================================
-//! Read .ini file
-//======================================================================================================================
-void CDataReader::bReadConfigurationFile(CSimulation* m_pSimulation) {
-    // Primero leer los paths de configuración
-    if (!bReadConfigurationPaths()) {
-        m_pSimulation->m_nStringError = 1;
-        m_pSimulation->m_bReturnError = true;
-        return;
-    }
 
-    // Construir la ruta completa al archivo .ini
-    string strConfigPath = m_strInputPath;
-    if (!strConfigPath.empty() && strConfigPath.back() != '/') {
-        strConfigPath += "/";
-    }
-    strConfigPath += m_strConfig;
-
-    // Create a read object
-    ifstream InStream;
-
-    // Try to open run details file for input
-    InStream.open(strConfigPath.c_str(), ios::in);
-
-    // Did it open OK?
-    if (!InStream.is_open())
-    {
-        // Error: cannot open run details file for input
-        m_pSimulation->m_nStringError = 1;
-        m_pSimulation->m_bReturnError = true;
-        return;
-    }
-
-    int nLine = 0;
-    int nRet = 0;
-    int i = 0;
-    size_t nPos;
-    string strRec, strErr;
-
-    while (getline(InStream, strRec))
-    {
-        nLine++;
-
-        // Trim off leading and trailing whitespace
-        strRec = strTrim(&strRec);
-
-        // If it is a blank line or a comment then ignore it
-        if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2))
-        {
-            // It isn't so increment counter
-            i++;
-
-            // Find the colon: note that lines MUST have a colon separating data from leading description portion
-            nPos = strRec.find(COLON);
-            if (nPos == string::npos)
-            {
-                // Error: badly formatted (no colon)
-                m_pSimulation->m_nStringError = 3;
-                return;
-            }
-
-            // Strip off leading portion (the bit up to and including the colon)
-            string strRH = strRec.erase(0, nPos+1);
-
-            // Remove leading whitespace after the colon
-            strRH = strTrimLeft(&strRH);
-
-            // Look for trailing comments, if found then terminate string at that point and trim off any trailing whitespace
-            bool bFound = true;
-            while (bFound)
-            {
-                bFound = false;
-
-                nPos = strRH.rfind(QUOTE1);
-                if (nPos != string::npos)
-                {
-                    strRH.resize(nPos);
-                    bFound = true;
-                }
-
-                nPos = strRH.rfind(QUOTE2);
-                if (nPos != string::npos)
-                {
-                    strRH.resize(nPos);
-                    bFound = true;
-                }
-
-                // Trim trailing spaces
-                strRH = strTrimRight(&strRH);
-            }
-
-            int nHour = 0,
-				nMin = 0,
-				nSec = 0,
-				nDay = 0,
-				nMonth = 0,
-				nYear = 0;
-            string strTmp;
-            vector<string> vStrTmp;
-
-            switch (i)
-            {
-                // ---------------------------------------------- Run Information -----------------------------------------------------
-                case 1:
-	                // Text output file names, don't change case
-	                if (strRH.empty())
-	                {
-	                	// Error: badly formatted line
-	                	m_pSimulation->m_nStringError = 3;
-	                	m_pSimulation->m_strErrorAttachment = "line " + to_string(nLine) + ": output file names";
-	                	return;
-	                }
-	                else
-	                {
-	                    m_strRunName = strRH;
-
-	                    // Crear directorio de salida usando el path base
-	                    m_strOutPath = m_strOutputBasePath + "/";
-
-	                    m_pSimulation->m_strOutFile = m_strOutPath; // + strRH + OUT_EXT;
-	                    m_pSimulation->m_strLogFile = m_strOutPath + strRH + LOG_EXT;
-	                }
-	                break;
-
-				case 2:
-	                // Content of log file, 0 = no log file, 1 = least detail, 3 = most detail
-            		if (! bIsStringValidInt(strRH))
-            		{
-               			strErr = "line " + to_string(nLine) + ": invalid integer for log file detail level '" + strRH + "' in " + m_strConfig;
-               			break;
-            		}
-
-            		m_pSimulation->m_nLogFileDetail = stoi(strRH);
-
-            		if ((m_pSimulation->m_nLogFileDetail < NO_LOG_FILE) || (m_pSimulation->m_nLogFileDetail > LOG_FILE_HIGH_DETAIL))
-               			strErr = "line " + to_string(nLine) + ": log file detail level";
-            		break;
-
-         		case 3:
-            		// Get the start date/time of the simulation, format is [hh-mm-ss dd/mm/yyyy]
-            		vStrTmp = VstrSplit(&strRH, SPACE);
-
-            		// Both date and time here?
-            		if (vStrTmp.size() < 2) {
-            			strErr = "line " + to_string(nLine) + ": must have both date and time for simulation start in '" + m_strConfig + "'";
-            			break;
-            		}
-
-            		// OK, first sort out the time
-            		if (! bParseTime(&vStrTmp[0], nHour, nMin, nSec)) {
-            			strErr = "line " + to_string(nLine) + ": could not understand simulation start time in '" + m_strConfig + "'";
-            			break;
-            		}
-
-            		// Next sort out the date
-            		if (! bParseDate(&vStrTmp[1], nDay, nMonth, nYear)) {
-            			strErr = "line " + to_string(nLine) + ": could not understand simulation start date in '" + m_strConfig + "'";
-            			break;
-            		}
-
-            		// Store simulation start time and date
-            		m_nSimStartSec = nSec;
-            		m_nSimStartMin = nMin;
-            		m_nSimStartHour = nHour;
-            		m_nSimStartDay = nDay;
-            		m_nSimStartMonth = nMonth;
-            		m_nSimStartYear = nYear;
-
-            		// ✅ TRANSFERIR: Datos a CSimulation
-            		m_pSimulation->setSimulationStartDateTime(nYear, nMonth, nDay, nHour, nMin, nSec);
-            		break;
-
-	            case 4: {
-		            // Duration of simulation (in hours, days, months, or years): sort out multiplier and user units, as used in the per-timestep output
-            		strRH = strToLower(&strRH);
-
-            		nRet = nSimulationTimeMultiplier(&strRH);
-
-	            	//! TODO 020: Options for another time unit
-	            	m_pSimulation->m_dTimeFactor = 1.0;
-
-            		if (nRet != RTN_OK)
-            		{
-            			strErr = "line " + to_string(nLine) + ": units for duration of simulation";
-            			break;
-            		}
-
-            		// And now calculate the duration of the simulation in hours: first find whitespace between the number and the unit
-            		nPos = strRH.rfind(SPACE);
-            		if (nPos == string::npos)
-            		{
-            			strErr = "line " + to_string(nLine) + ": format of duration simulation line";
-            			break;
-            		}
-
-            		// Cut off rh bit of string
-            		strRH.resize(nPos);
-
-            		// Remove trailing spaces
-            		strRH = strTrimRight(&strRH);
-
-            		// Calculate the duration of the simulation in hours
-            		double dSimDuration = strtod(strRH.c_str(), nullptr) * m_dDurationUnitsMultiplier*m_pSimulation->m_dTimeFactor;
-
-            		if (dSimDuration <= 0)
-            			strErr = "line " + to_string(nLine) + ": duration of simulation must be > 0";
-            		else
-            			m_pSimulation->dSetSimulationDuration(dSimDuration);
-
-            		break;
-	            }
-
-				case 5: {
-					double dMultiplier;
-					// Timestep of simulation (in hours or days)
-            	 strRH = strToLower(&strRH);
-
-            	 dMultiplier = dGetTimeMultiplier(&strRH);
-	            	//! Time unit conversion for output timestep (currently only seconds supported)
-	            	m_pSimulation->m_dTimeFactor = 1.0;
-
-            		if (static_cast<int>(dMultiplier) == TIME_UNKNOWN)
-            		{
-            			strErr = "line " + to_string(nLine) + ": units for simulation timestep";
-            			break;
-            		}
-
-            		// we have the multiplier, now calculate the timestep in hours: look for the whitespace between the number and unit
-            		nPos = strRH.rfind(SPACE);
-            		if (nPos == string::npos)
-            		{
-            			strErr = "line " + to_string(nLine) + ": format of simulation timestep";
-            			break;
-            		}
-
-            		// cut off rh bit of string
-            		strRH.resize(nPos);
-
-            		// remove trailing spaces
-            		strRH = strTrimRight(&strRH);
-
-            		// Check that this is a valid double
-            		if (! bIsStringValidDouble(strRH))
-            		{
-            			strErr = "line " + to_string(nLine) + ": invalid floating point number for timestep '" + strRH + "' in " + m_strConfig;
-            			break;
-            		}
-
-            		double dTimeStep = strtod(strRH.c_str(), nullptr) * dMultiplier*m_pSimulation->m_dTimeFactor; // in hours
-
-            		// Si timestep es 0 o negativo, activar modo de guardar en todos los pasos
-            		if (dTimeStep <= 0) {
-            			m_pSimulation->bSetSaveAllTimesteps(true);
-            			dTimeStep = 1.0; // Valor dummy, se usará dt adaptativo
-            		}
-
-            		if (dTimeStep >= m_pSimulation->dGetSimulationDuration())
-            			strErr = "line " + to_string(nLine) + ": timestep of simulation must be < the duration of the simulation";
-
-            	 m_pSimulation->dSetSimulationTimestep(dTimeStep);
-            	 break;
-	            }
-
-            	case 6: {
-		            // Get the output variables
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": along channel geometry file name";
-	            	else {
-	            		if (strRH == "full") {
-	            			m_pSimulation->m_vOutputVariables = {"A", "Ap", "Ac", "Q", "Qp", "Qc", "Rh", "B", "eta", "level", "beta", "rho", "U", "c", "S", "Qb", "Qs", "Qt", "xl", "xr", "xl_utm_x", "xl_utm_y", "xr_utm_x", "xr_utm_y"};
-	            		}
-	            		else {
-	            			vector<string> vOutputVariables;
-	            			// Obtain the new line
-	            			stringstream strLine(strRH);
-	            			string token;
-
-	            			// Using get line for splitting the string by commas
-	            			while (getline(strLine, token, ',')) {
-	            				m_pSimulation->strAddOutputVariable(token);
-	            			}
-	            		}
-	            	}
-					break;
-	            }
-
-         		case 7: {
-         			// Get the along channel geometry file name
-         			if (strRH.empty())
-         				strErr = "line " + to_string(nLine) + ": along channel geometry file name";
-         			else
-         			{
-         				m_strAlongChannelDataFilename = m_strInputPath;
-         				if (!m_strAlongChannelDataFilename.empty() && m_strAlongChannelDataFilename.back() != '/') {
-         					m_strAlongChannelDataFilename += "/";
-         				}
-         				m_strAlongChannelDataFilename += strRH + ".csv";
-         			}
-         			break;
-         		}
-
-				case 8: {
-		            // Get the cross-sections channel geometry file name
-            		if (strRH.empty())
-            		 strErr = "line " + to_string(nLine) + ": cross sections file name";
-            		else
-            		{
-            			m_strCrossSectionsFilename = m_strInputPath;
-            			if (!m_strCrossSectionsFilename.empty() && m_strCrossSectionsFilename.back() != '/') {
-            				m_strCrossSectionsFilename += "/";
-            			}
-            			m_strCrossSectionsFilename += strRH + ".csv";
-            		}
-            		break;
-	            }
-
-	            case 9: {
-		            // Get the initial along-channel estuarine condition
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ":  initial along-channel estuarine condition";
-	            	else
-	            	{
-	            		// Convert string to int
-	            		m_pSimulation->nSetInitialEstuarineCondition(strtol(strRH.c_str(), nullptr, 10));
-	            	}
-	            	break;
-	            }
-
-            	case 10: {
-	            	// Get the upward estuarine boundary condition
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": upward estuarine boundary condition";
-	            	else
-	            	{
-	            		// Convert string to int
-	            		m_pSimulation->nSetUpwardEstuarineCondition(strtol(strRH.c_str(), nullptr, 10));
-	            	}
-	            	break;
-            	}
-
-            	case 11: {
-	            	// Get the upward estuarine boundary condition filename
-	            	if (m_pSimulation->nGetUpwardEstuarineCondition() == 1 || m_pSimulation->nGetUpwardEstuarineCondition() == 2)
-	            	{
-	            		m_pSimulation->m_strUpwardBoundaryConditionFilename = m_strInputPath;
-	            		if (!m_pSimulation->m_strUpwardBoundaryConditionFilename.empty() && 
-	            			m_pSimulation->m_strUpwardBoundaryConditionFilename.back() != '/') {
-	            			m_pSimulation->m_strUpwardBoundaryConditionFilename += "/";
-	            		}
-	            		m_pSimulation->m_strUpwardBoundaryConditionFilename += strRH + ".csv";
-	            	}
-	            	else {
-	            		m_pSimulation->m_strUpwardBoundaryConditionFilename = "";
-	            	}
-
-	            	break;
-            	}
-
-            	case 12: {
-	            	// Get the downward estuarine boundary condition
-	            	if (strRH.empty())
-	            		strErr = "line " + to_string(nLine) + ": downward estuarine boundary condition";
-	            	else
-	            	{
-	            		int nEstuaryCondition = strtol(strRH.c_str(), nullptr, 10);
-	            		if (nEstuaryCondition != 0 && nEstuaryCondition != 1 && nEstuaryCondition != 2) {
-	            			//! Invalid boundary condition value (must be 0, 1, or 2)
-	            		}
-	            		else {
-	            			m_pSimulation->nSetDownwardEstuarineCondition(nEstuaryCondition);
-	            		}
-
-	            	}
-	            	break;
-            	}
-
-            	case 13: {
-		            // Get the tidal or water flow filename [if downward boundary condition = 1 or 2]
-		            if (m_pSimulation->nGetDownwardEstuarineCondition() == 1 || m_pSimulation->nGetDownwardEstuarineCondition() == 2) {
-	            		m_pSimulation->m_strDownwardBoundaryConditionFilename = m_strInputPath;
-	            		if (!m_pSimulation->m_strDownwardBoundaryConditionFilename.empty() && 
-	            			m_pSimulation->m_strDownwardBoundaryConditionFilename.back() != '/') {
-	            			m_pSimulation->m_strDownwardBoundaryConditionFilename += "/";
-	            		}
-	            		m_pSimulation->m_strDownwardBoundaryConditionFilename += strRH + ".csv";
-		            }
-	            	else {
-	            		m_pSimulation->m_strDownwardBoundaryConditionFilename = "";
-	            	}
-
-	            	break;
-            	}
-
-				case 14:{
-            		// Get the hydro file name
-					if (strRH.empty())
-               			strErr = "line " + to_string(nLine) + ": hydro file name";
-					else if (strRH == "-")
-					{
-						m_pSimulation->m_bHydroFile = false;
-					}
-					else
-            		{
-            			m_pSimulation->m_bHydroFile = true;
-               			m_strHydroFilename = m_strInputPath;
-               			if (!m_strHydroFilename.empty() && m_strHydroFilename.back() != '/') {
-               				m_strHydroFilename += "/";
-               			}
-               			m_strHydroFilename += strRH + ".csv";
-					}
-					break;
-				}
-
-            	case 15: {
-            		// Get the courant number
-            		if (strRH.empty())
-            		 strErr = "line " + to_string(nLine) + ": courant number";
-            		else
-            			m_pSimulation->dSetCourantNumber(strtod(strRH.c_str(), nullptr));
-            		break;
-            	}
-
-            	case 16: {
-					// Use McComarck limiter flux?
-					strRH = strToLower(&strRH);
-
-					if (strRH.empty())
-						strErr = "line " + to_string(nLine) + ": McComarck Limiter Flux";
-
-					if  (strRH.find('y') != string::npos)
-						m_pSimulation->bSetDoMcComarckLimiterFlux(true);
-					else
-						m_pSimulation->bSetDoMcComarckLimiterFlux(false);
-					break;
-            	}
-
-            	case 17: {
-					// Equation for the limiter flux
-					if (strRH.empty())
-						strErr = "line " + to_string(nLine) + ": equation for the limiter flux ";
-
-					if (m_pSimulation->bGetDoMcComarckLimiterFlux())
-					{
-						m_pSimulation->nSetEquationLimiterFlux(strtol(strRH.c_str(), nullptr, 10));
-					}
-					break;
-            	}
-
-            	case 18: {
-					// Psi formula
-					if (strRH.empty())
-						strErr = "line " + to_string(nLine) + ": psi formula ";
-
-					if (m_pSimulation->bGetDoMcComarckLimiterFlux())
-					{
-						m_pSimulation->nSetPsiFormula(strtol(strRH.c_str(), nullptr, 10));
-					}
-					break;
-            	}
-
-            	case 19: {
-					//! Delta value
-					if (strRH.empty())
-						strErr = "line " + to_string(nLine) + ": delta value ";
-
-					if (m_pSimulation->bGetDoMcComarckLimiterFlux())
-					{
-						m_pSimulation->dSetDeltaValue(strtod(strRH.c_str(), nullptr));
-					}
-					break;
-            	}
-
-            	case 20: {
-						// Use Surface Gradient method?
-						strRH = strToLower(&strRH);
-
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": surface gradient method";
-
-						if  (strRH.find('y') != string::npos)
-							m_pSimulation->bSetDoSurfaceGradientMethod(true);
-						else
-							m_pSimulation->bSetDoSurfaceGradientMethod(false);
-						break;
-            	}
-
-            	case 21: {
-						// Use Source Term balance?
-						strRH = strToLower(&strRH);
-
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": source Term balance";
-
-						if  (strRH.find('y') != string::npos)
-							m_pSimulation->bSetDoSurfaceTermBalance(true);
-						else
-							m_pSimulation->bSetDoSurfaceTermBalance(false);
-						break;
-            	}
-
-            	case 22: {
-						// Use beta coefficient?
-						strRH = strToLower(&strRH);
-
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": beta coefficient";
-
-						if  (strRH.find('y') != string::npos)
-							m_pSimulation->bSetDoBetaCoefficient(true);
-						else
-							m_pSimulation->bSetDoBetaCoefficient(false);
-						break;
-            	}
-
-            	case 23: {
-						// Use Dry bed?
-					 strRH = strToLower(&strRH);
-
-					 if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": dry bed";
-
-					 if  (strRH.find('y') != string::npos)
-						 m_pSimulation->bSetDoDryBed(true);
-					 else
-						 m_pSimulation->bSetDoDryBed(false);
-					 break;
-            	}
-
-            	case 24: {
-						// Use Murillo condition?
-						strRH = strToLower(&strRH);
-
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": Murillo condition";
-
-					 if  (strRH.find('y') != string::npos)
-						 m_pSimulation->bSetDoMurilloCondition(true);
-					 else
-						 m_pSimulation->bSetDoMurilloCondition(false);
-					 break;
-            	}
-
-            	case 25: {
-						// Compute water salinity?
-						strRH = strToLower(&strRH);
-
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": Compute water salinity?";
-
-					 if  (strRH.find('y') != string::npos)
-						 m_pSimulation->bSetDoWaterSalinity(true);
-					 else
-						 m_pSimulation->bSetDoWaterSalinity(false);
-					 break;
-            	}
-
-				case 26: {
-						// Get the salinity filename [if it is computed the salinity]
-						if (m_pSimulation->bGetDoWaterSalinity()) {
-							m_pSimulation->m_strInitialSalinityConditionFilename = m_strInputPath;
-							if (!m_pSimulation->m_strInitialSalinityConditionFilename.empty() && 
-	            				m_pSimulation->m_strInitialSalinityConditionFilename.back() != '/') {
-	            				m_pSimulation->m_strInitialSalinityConditionFilename += "/";
-	            			}
-	            			m_pSimulation->m_strInitialSalinityConditionFilename += strRH + ".csv";
-						}
-						else {
-							m_pSimulation->m_strInitialSalinityConditionFilename = "";
-						}
-
-						break;
-				}
-
-				case 27: {
-						// Get the Upward salinity condition
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": - Upward salinity condition";
-						else
-							m_pSimulation->nSetUpwardSalinityCondition(strtol(strRH.c_str(), nullptr, 10));
-						break;
-				}
-
-				case 28: {
-						// Get the Downward salinity condition
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": - Downward salinity condition";
-						else
-							m_pSimulation->nSetDownwardSalinityCondition(strtol(strRH.c_str(), nullptr, 10));
-						break;
-				}
-
-            	case 29: {
-						// Get the beta constant for salinity if compute water density
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": beta constant for salinity";
-
-						if (m_pSimulation->bGetDoWaterSalinity())
-						{
-							m_pSimulation->dSetBetaSalinityConstant(strtod(strRH.c_str(), nullptr));
-						}
-						break;
-            	}
-
-            	case 30: {
-						// Get the longitudinal dispersion constant, KH if compute water density
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": longitudinal dispersion constant, KH";
-
-						if (m_pSimulation->bGetDoWaterSalinity())
-						{
-							m_pSimulation->dSetLongitudinalDispersionConstant(strtod(strRH.c_str(), nullptr));
-						}
-						break;
-            	}
-
-				case 31: {
-						// Compute sediment transport?
-						strRH = strToLower(&strRH);
-
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": Compute sediment transport?";
-
-					 if  (strRH.find('y') != string::npos)
-						 m_pSimulation->bSetDoSedimentTransport(true);
-					 else
-						 m_pSimulation->bSetDoSedimentTransport(false);
-					 break;
-	            }
-
-	            case 32: {
-						// Equation for the sediment transport
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": equation for the sediment transport";
-
-						if (m_pSimulation->bGetDoSedimentTransport())
-						{
-							m_pSimulation->nSetEquationSedimentTransport(strtol(strRH.c_str(), nullptr, 10));
-						}
-						break;
-				}
-
-            	case 33: {
-						// Get the sediment properties file name
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": sediment properties file name";
-
-						if (m_pSimulation->bGetDoSedimentTransport())
-						{
-							m_strSedimentPropertiesFilename = m_strInputPath;
-							if (!m_strSedimentPropertiesFilename.empty() && m_strSedimentPropertiesFilename.back() != '/') {
-								m_strSedimentPropertiesFilename += "/";
-							}
-							m_strSedimentPropertiesFilename += strRH + ".csv";
-						}
-						break;
-            	}
-
-				case 34: {
-						// Compute water density?
-						strRH = strToLower(&strRH);
-
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": Compute water density?";
-
-					 if  (strRH.find('y') != string::npos)
-						 m_pSimulation->bSetDoWaterDensity(true);
-					 else
-						 m_pSimulation->bSetDoWaterDensity(false);
-					 break;
-				}
-				
-				case 35: {
-						// Smooth bathymetry before simulation?
-						strRH = strToLower(&strRH);
-
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": Smooth bathymetry?";
-
-					 if  (strRH.find('y') != string::npos)
-						 m_pSimulation->bSetDoSmoothBathymetry(true);
-					 else
-						 m_pSimulation->bSetDoSmoothBathymetry(false);
-					 break;
-				}
-				
-				case 36: {
-						// Smooth solution during simulation?
-						strRH = strToLower(&strRH);
-
-						if (strRH.empty())
-						 strErr = "line " + to_string(nLine) + ": Smooth solution?";
-
-					 if  (strRH.find('y') != string::npos)
-						 m_pSimulation->bSetDoSmoothSolution(true);
-					 else
-						 m_pSimulation->bSetDoSmoothSolution(false);
-					 break;
-				}
-
-            	default: {
-						// More lines in the configuration file
-						m_pSimulation->m_nStringError = 5;
-						InStream.close();
-						return;
-					}
-
-			}
-        	// Did an error occur?
-        	if (! strErr.empty())
-        	{
-        		// Error in input to run details file
-        		// m_pSimulation->m_strErrorAttachment = ".\nPlease edit " << SV_INI << " and change the following text:" << "    - '" << strRec << "'" << endl
-					 // << endl;
-        		InStream.close();
-        		return;
-        	}
-    	}
-	}
-	// Close file
-    InStream.close();
-
-    // Finally, need to check that we have at least one raster file, so that we know the grid size and units (and preferably also the projection)
-    // bool bNoRasterFiles = true;
-}
-
-
-//======================================================================================================================
-//!	Read Along Channel geometry file
-//======================================================================================================================
+/**
+ * @brief Read along-channel geometry CSV file
+ * 
+ * CSV format (no header):
+ *   X, Z, Manning_n, UTM_X, UTM_Y, RightAngle, LeftAngle, Beta, StorageFactor(optional)
+ * 
+ * Columns:
+ * 1. X: Along-channel coordinate (m, must be monotonic increasing)
+ * 2. Z: Bed elevation (m, vertical datum)
+ * 3. Manning_n: Roughness coefficient (s/m^{1/3})
+ * 4. UTM_X: UTM easting (m)
+ * 5. UTM_Y: UTM northing (m)
+ * 6. RightAngle: Right bank azimuth (degrees from north)
+ * 7. LeftAngle: Left bank azimuth (degrees from north)
+ * 8. Beta: Momentum correction coefficient (typically 1.0-1.1)
+ * 9. StorageFactor (optional): Lateral storage factor S>=1 (dimensionless). If omitted, S=1.
+ * 10. Kh (optional): Longitudinal dispersion coefficient (m2/s). If omitted, uses YAML constant.
+ * 
+ * Actions:
+ * - Creates CCrossSection objects (one per row)
+ * - Populates m_vCrossSectionX vector
+ * - Sets m_nCrossSectionsNumber
+ * - Initializes state vectors (Q, A, eta, S, T) to zero if IC type = 0 (calm)
+ * 
+ * @param m_pSimulation Pointer to simulation object
+ * 
+ * @note Comments start with # or '
+ * @warning File must exist and have consistent columns per row
+ * @see bReadCrossSectionGeometryFile() for cross-section hydraulics
+ */
 void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 	// Create an object
 	ifstream InStream;
@@ -835,93 +148,88 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 	}
 
 	int nCrossSectionNumber = 0;
+	int expected_cols = -1;
+	double prev_x = -std::numeric_limits<double>::infinity();
+	int nDataLine = 0;
 	// int i = 0;
 	// size_t nPos;
 	string strRec, strErr;
 
-	while (getline(InStream, strRec)) {
 
+	while (getline(InStream, strRec)) {
 		// Trim off leading and trailing whitespace
 		strRec = strTrim(&strRec);
-
 		// If it is a blank line or a comment then ignore it
 		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			nDataLine++;
+			std::vector<double> values;
+			values.reserve(12);
+			{
+				std::stringstream tmp(strRec);
+				std::string tok;
+				while (std::getline(tmp, tok, ',')) {
+					values.push_back(strtod(tok.c_str(), nullptr));
+				}
+			}
+			if (expected_cols < 0) {
+				expected_cols = static_cast<int>(values.size());
+			} else if (static_cast<int>(values.size()) != expected_cols) {
+				throw std::runtime_error(
+					"Inconsistent column count in along-channel file '" + m_strAlongChannelDataFilename +
+					"' at data line " + std::to_string(nDataLine) +
+					" (expected " + std::to_string(expected_cols) +
+					", got " + std::to_string(values.size()) + ")"
+				);
+			}
+			if (values.size() < 3) {
+				throw std::runtime_error(
+					"Along-channel file '" + m_strAlongChannelDataFilename +
+					"' has too few columns at data line " + std::to_string(nDataLine) +
+					" (need at least X,Z,Manning_n)"
+				);
+			}
+			const double x = values[0];
+			if (nDataLine > 1 && !(x > prev_x)) {
+				throw std::runtime_error(
+					"Along-channel X must be strictly increasing. Found X=" + std::to_string(x) +
+					" after X=" + std::to_string(prev_x) +
+					" in file '" + m_strAlongChannelDataFilename +
+					"' at data line " + std::to_string(nDataLine)
+				);
+			}
+			prev_x = x;
+			const double manning = values[2];
+			if (!(manning > 0.0)) {
+				throw std::runtime_error(
+					"Invalid Manning_n (<=0) in file '" + m_strAlongChannelDataFilename +
+					"' at data line " + std::to_string(nDataLine)
+				);
+			}
 
 			// Create a new cross-section object and append to estuary
 			m_pSimulation->AddCrossSection();
-
 			// Update section number
 			m_pSimulation->estuary[nCrossSectionNumber].nSetSectionNumber(nCrossSectionNumber);
-
-			// Obtain the new line
-			stringstream strLine(strRec);
-
-			string token;
-			int j = 0;
-
-			// Using get line for splitting the string by commas
-			while (getline(strLine, token, ',')) {
-				double dValue = strtod(token.c_str(), nullptr);
-
-				if (j == 0) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetX(dValue);
-					m_pSimulation->m_vCrossSectionX.push_back(dValue);
-				}
-
-				if (j == 1) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetZ(dValue);
-				}
-
-				if (j == 2) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetManningNumber(dValue);
-				}
-
-				if (j == 3) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetX_UTM(dValue);
-				}
-
-				if (j == 4) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetY_UTM(dValue);
-				}
-
-				if (j == 5) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetRightRBAngle(dValue);
-				}
-
-				if (j == 6) {
-					m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(dValue);
-				}
-
-				if (j == 7)
-				{
-					if  (m_pSimulation->nGetInitialEstuarineCondition() == 1)
-					{
-						m_pSimulation->m_vCrossSectionQ.push_back(dValue);
-						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
-						m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
-					}
-					else if (m_pSimulation->nGetInitialEstuarineCondition() == 2)
-					{
-						dValue = dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ();
-						// if (dValue <= 0) {
-						// 	m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
-						// }
-						// else {
-						m_pSimulation->m_vCrossSectionWaterElevation.push_back(dValue - m_pSimulation->estuary[nCrossSectionNumber].dGetZ());
-						// }
-						m_pSimulation->m_vCrossSectionQ.push_back(0.0);
-						m_pSimulation->m_vCrossSectionArea.push_back(0.0);
-					}
-				}				
-				// Increment counter
-				j++;
-
+			m_pSimulation->estuary[nCrossSectionNumber].dSetX(values[0]);
+			m_pSimulation->m_vCrossSectionX.push_back(values[0]);
+			m_pSimulation->estuary[nCrossSectionNumber].dSetZ(values[1]);
+			m_pSimulation->estuary[nCrossSectionNumber].dSetManningNumber(values[2]);
+			if (values.size() > 3) m_pSimulation->estuary[nCrossSectionNumber].dSetX_UTM(values[3]);
+			if (values.size() > 4) m_pSimulation->estuary[nCrossSectionNumber].dSetY_UTM(values[4]);
+			if (values.size() > 5) m_pSimulation->estuary[nCrossSectionNumber].dSetRightRBAngle(values[5]);
+			if (values.size() > 6) m_pSimulation->estuary[nCrossSectionNumber].dSetLeftRBAngle(values[6]);
+			if (values.size() > 7) m_pSimulation->estuary[nCrossSectionNumber].dSetBeta(values[7]);
+			if (values.size() > 8) {
+				const double storageFactor = (values[8] >= 1.0) ? values[8] : 1.0;
+				m_pSimulation->m_vLateralStorageFactor.push_back(storageFactor);
 			}
-
+			if (values.size() > 9) {
+				const double khValue = (values[9] > 0.0) ? values[9] : 0.0;
+				m_pSimulation->m_vLongitudinalDispersion.push_back(khValue);
+			}
 			// Increment counter
 			nCrossSectionNumber++;
 		}
-
 	}
 	m_pSimulation->m_nCrossSectionsNumber = nCrossSectionNumber;
 	if  (m_pSimulation->nGetInitialEstuarineCondition() == 0)
@@ -932,14 +240,157 @@ void CDataReader::bReadAlongChannelDataFile(CSimulation* m_pSimulation) const {
 			m_pSimulation->m_vCrossSectionArea.push_back(0.0);
 			m_pSimulation->m_vCrossSectionWaterElevation.push_back(0.0);
 			m_pSimulation->m_vCrossSectionSalinity.push_back(0.0);
+			// Initialize temperature if applicable
+			if (m_pSimulation->m_bDoWaterTemperature) {
+				m_pSimulation->m_vCrossSectionTemperature.push_back(0.0);
+			}
 		}
 	}
-
 }
 
-//======================================================================================================================
-//!	Read Cross-Section geometry file
-//======================================================================================================================
+/**
+ * @brief Read upstream temperature boundary condition CSV file
+ * 
+ * CSV format (no header): time, temperature
+ * - time: Seconds since simulation start
+ * - temperature: Water temperature (°C)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Used when upstream BC type = 2 (time-varying)
+ */
+void CDataReader::bReadUpwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation) {
+
+	ifstream InStream;
+	
+	InStream.open(m_pSimulation->m_strUpwardTemperatureBoundaryConditionFilename.c_str(), ios::in);
+	if (!InStream.is_open()) {
+		cerr << ERR << "cannot open " << m_pSimulation->m_strUpwardTemperatureBoundaryConditionFilename << " for input" << endl;
+		return;
+	}
+	string strRec;
+	while (getline(InStream, strRec)) {
+		strRec = strTrim(&strRec);
+		if ((!strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			stringstream string_line(strRec);
+			string token;
+			int j = 0;
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				if (j == 0) m_pSimulation->m_vUpwardTemperatureBoundaryConditionTime.push_back(dValue);
+				if (j == 1) m_pSimulation->m_vUpwardTemperatureBoundaryConditionValue.push_back(dValue);
+				j++;
+			}
+		}
+	}
+}
+
+/**
+ * @brief Read downstream temperature boundary condition CSV file
+ * 
+ * CSV format (no header): time, temperature
+ * - time: Seconds since simulation start
+ * - temperature: Ocean/downstream water temperature (°C)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Used when downstream BC type = 2 (time-varying)
+ */
+void CDataReader::bReadDownwardTemperatureBoundaryConditionFile(CSimulation* m_pSimulation) {
+	// Create an object
+	ifstream InStream;
+
+	InStream.open(m_pSimulation->m_strDownwardTemperatureBoundaryConditionFilename.c_str(), ios::in);
+	if (!InStream.is_open()) {
+		cerr << ERR << "cannot open " << m_pSimulation->m_strDownwardTemperatureBoundaryConditionFilename << " for input" << endl;
+		return;
+	}
+	string strRec;
+	while (getline(InStream, strRec)) {
+		strRec = strTrim(&strRec);
+		if ((!strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			stringstream string_line(strRec);
+			string token;
+			int j = 0;
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				if (j == 0) m_pSimulation->m_vDownwardTemperatureBoundaryConditionTime.push_back(dValue);
+				if (j == 1) m_pSimulation->m_vDownwardTemperatureBoundaryConditionValue.push_back(dValue);
+				j++;
+			}
+		}
+	}
+}
+
+/**
+ * @brief Read prescribed (spatially uniform) temperature time series CSV file
+ *
+ * CSV format (no header): time, temperature
+ * - time: Seconds since simulation start
+ * - temperature: Water temperature (°C)
+ */
+void CDataReader::bReadGivenTemperatureFile(CSimulation* m_pSimulation) {
+
+	ifstream InStream;
+	InStream.open(m_pSimulation->m_strGivenTemperatureFilename.c_str(), ios::in);
+
+	if (!InStream.is_open()) {
+		cerr << ERR << "cannot open " << m_pSimulation->m_strGivenTemperatureFilename << " for input" << endl;
+		return;
+	}
+
+	m_pSimulation->m_vGivenTemperatureTime.clear();
+	m_pSimulation->m_vGivenTemperatureValue.clear();
+
+	string strRec;
+	while (getline(InStream, strRec)) {
+		strRec = strTrim(&strRec);
+		if ((!strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			stringstream string_line(strRec);
+			string token;
+			int j = 0;
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				if (j == 0) m_pSimulation->m_vGivenTemperatureTime.push_back(dValue);
+				if (j == 1) m_pSimulation->m_vGivenTemperatureValue.push_back(dValue);
+				j++;
+			}
+		}
+	}
+}
+
+/**
+ * @brief Read cross-section hydraulic properties CSV file
+ * 
+ * CSV format (no header, multiple rows per cross-section):
+ *   SectionID, not_used, elevation, width, area, perimeter, Rh, sigma, left_y, right_y
+ * 
+ * Structure:
+ * - Each cross-section has N rows (one per elevation level)
+ * - SectionID matches X coordinate from along-channel file
+ * - Rows grouped by SectionID (must be consecutive)
+ * 
+ * Columns:
+ * 1. SectionID: X coordinate identifier
+ * 2. (unused)
+ * 3. elevation: Water depth from bed (m), must be monotonic
+ * 4. width: Channel width at this elevation (m)
+ * 5. area: Cross-sectional area (m²)
+ * 6. perimeter: Wetted perimeter (m)
+ * 7. Rh: Hydraulic radius = A/P (m)
+ * 8. sigma: Width function (m)
+ * 9. left_y: Left bank distance from thalweg (m)
+ * 10. right_y: Right bank distance from thalweg (m)
+ * 
+ * Post-processing:
+ * - Calls calculateI1() for each cross-section (pressure integral)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Typically generated from survey data using GIS tools or HEC-RAS
+ * @warning Elevations must be strictly increasing within each cross-section
+ * @see CCrossSection::calculateI1() for pressure integral computation
+ */
 void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) const {
 	// Create an object
 	ifstream InStream;
@@ -956,6 +407,10 @@ void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 	}
 
 	int nLine = 0;
+	int expected_cols = -1;
+	int nDataLine = 0;
+	int nFileLine = 0;
+	std::vector<std::vector<int>> sectionNodeFileLines;
 
 	int nLastElevationLine = 1;
 	// int i = 0;
@@ -964,99 +419,153 @@ void CDataReader::bReadCrossSectionGeometryFile(CSimulation* m_pSimulation) cons
 	int nCrossSectionNumber = 0;
 
 	while (getline(InStream, strRec)) {
+		nFileLine++;
 		// Trim off leading and trailing whitespace
 		strRec = strTrim(&strRec);
 		// If it is a blank line or a comment then ignore it
 		if ((! strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			nDataLine++;
+			std::vector<double> values;
+			values.reserve(12);
+			{
+				std::stringstream tmp(strRec);
+				std::string tok;
+				while (std::getline(tmp, tok, ',')) {
+					values.push_back(strtod(tok.c_str(), nullptr));
+				}
+			}
+			if (expected_cols < 0) {
+				expected_cols = static_cast<int>(values.size());
+			} else if (static_cast<int>(values.size()) != expected_cols) {
+				throw std::runtime_error(
+					"Inconsistent column count in cross-sections file '" + m_strCrossSectionsFilename +
+					"' at data line " + std::to_string(nDataLine) +
+					" (expected " + std::to_string(expected_cols) +
+					", got " + std::to_string(values.size()) + ")"
+				);
+			}
+			if (values.size() < 10) {
+				throw std::runtime_error(
+					"Cross-sections file '" + m_strCrossSectionsFilename +
+					"' has too few columns at data line " + std::to_string(nDataLine) +
+					" (need at least 10: x,?,eta,B,A,P,Rh,sigma,xl,xr)"
+				);
+			}
 			bool bSetElevationSectionsNumber = true;
 			// It isn't so increment counter
 			nLine++;
-
-			stringstream strLine(strRec);
-
-			string token;
-			int j = 0;
-
-			// Using get line for splitting the string by commas
-			while (getline(strLine, token, ',')) {
-
-				double dValue = strtod(token.c_str(), nullptr);
-
-				if (j == 0 && m_pSimulation->estuary[nCrossSectionNumber].dGetX() != dValue) {
-					if (bSetElevationSectionsNumber) {
-						m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine);
-						bSetElevationSectionsNumber = false;
-						nLastElevationLine = nLine;
-					}
-					nCrossSectionNumber++;
+			const double x_id = values[0];
+			const double x_current = m_pSimulation->estuary[nCrossSectionNumber].dGetX();
+			if (nCrossSectionNumber < m_pSimulation->m_nCrossSectionsNumber && fabs(x_current - x_id) > 1e-6) {
+				if (bSetElevationSectionsNumber) {
+					m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine);
+					bSetElevationSectionsNumber = false;
+					nLastElevationLine = nLine;
 				}
-
-				if (j == 2) {
-					string strItem = "elevation";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
+				nCrossSectionNumber++;
+				if (nCrossSectionNumber >= m_pSimulation->m_nCrossSectionsNumber) {
+					throw std::runtime_error(
+						"Cross-sections file '" + m_strCrossSectionsFilename +
+						"' contains more sections than along-channel file '" + m_strAlongChannelDataFilename + "'"
+					);
 				}
-
-				if (j == 3) {
-					string strItem = "width";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 4) {
-					string strItem = "area";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 5) {
-					string strItem = "perimeter";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 6) {
-					string strItem = "hydraulic radius";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 7) {
-					string strItem = "sigma";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 8) {
-					string strItem = "left river bank location";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 9) {
-					string strItem = "right river bank location";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				if (j == 10) {
-					string strItem = "beta";
-					m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector(strItem, dValue);
-				}
-
-				// Increase counter
-				j++;
-
 			}
+			// Track the file line that produced each elevation-node entry for better diagnostics.
+			if (static_cast<int>(sectionNodeFileLines.size()) <= nCrossSectionNumber) {
+				sectionNodeFileLines.resize(static_cast<size_t>(nCrossSectionNumber) + 1);
+			}
+			sectionNodeFileLines[static_cast<size_t>(nCrossSectionNumber)].push_back(nFileLine);
+
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("elevation", values[2]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("width", values[3]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("area", values[4]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("perimeter", values[5]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("hydraulic radius", values[6]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("sigma", values[7]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("left river bank location", values[8]);
+			m_pSimulation->estuary[nCrossSectionNumber].dAppend2Vector("right river bank location", values[9]);
 		}
 
 	}
 	// Number of elevation sections for the last Cross-Section
 	m_pSimulation->estuary[nCrossSectionNumber].nSetElevationSectionsNumber(nLine - nLastElevationLine + 1);
 
-	// Calculate I1 pressure integral for all cross-sections after reading geometry
-	for (int i = 0; i <= nCrossSectionNumber; i++) {
-		m_pSimulation->estuary[i].calculateI1();
+	// Validate that each cross-section table is usable for runtime interpolation.
+	// This moves “table checks” out of the timestep loop and fails fast on bad inputs.
+	const int nSections = m_pSimulation->m_nCrossSectionsNumber;
+	for (int i = 0; i < nSections; i++) {
+		const int nElev = m_pSimulation->estuary[i].nGetElevationSectionsNumber();
+		const auto& depth = m_pSimulation->estuary[i].vGetWaterDepth();
+		const auto& width = m_pSimulation->estuary[i].vGetWidth();
+		const auto& area = m_pSimulation->estuary[i].vGetArea();
+		const auto& rh = m_pSimulation->estuary[i].vGetHydraulicRadius();
+		if (nElev < 2) {
+			throw std::runtime_error(
+				"Cross-section " + std::to_string(i) + " has <2 elevation nodes in '" + m_strCrossSectionsFilename + "'"
+			);
+		}
+		if (static_cast<int>(depth.size()) != nElev || static_cast<int>(width.size()) != nElev ||
+			static_cast<int>(area.size()) != nElev || static_cast<int>(rh.size()) != nElev) {
+			throw std::runtime_error(
+				"Cross-section " + std::to_string(i) + " table size mismatch in '" + m_strCrossSectionsFilename + "'"
+			);
+		}
+		for (int j = 1; j < nElev; j++) {
+			const int fileLineForNode = (
+				static_cast<size_t>(i) < sectionNodeFileLines.size() &&
+				static_cast<size_t>(j) < sectionNodeFileLines[static_cast<size_t>(i)].size()
+			) ? sectionNodeFileLines[static_cast<size_t>(i)][static_cast<size_t>(j)] : -1;
+			if (!(depth[static_cast<size_t>(j)] > depth[static_cast<size_t>(j - 1)])) {
+				throw std::runtime_error(
+					"Non-increasing elevation table at cross-section " + std::to_string(i) +
+					" (j=" + std::to_string(j) + ") in '" + m_strCrossSectionsFilename + "'" +
+					(fileLineForNode > 0 ? (" (file line " + std::to_string(fileLineForNode) + ")") : "")
+				);
+			}
+			if (!(area[static_cast<size_t>(j)] > area[static_cast<size_t>(j - 1)])) {
+				throw std::runtime_error(
+					"Non-increasing area table at cross-section " + std::to_string(i) +
+					" (j=" + std::to_string(j) + ") in '" + m_strCrossSectionsFilename + "'" +
+					(fileLineForNode > 0 ? (" (file line " + std::to_string(fileLineForNode) + ")") : "") +
+					" (this would cause zero denominators during interpolation)"
+				);
+			}
+			if (area[static_cast<size_t>(j)] > 0.0 && !(width[static_cast<size_t>(j)] > 0.0)) {
+				throw std::runtime_error(
+					"Non-positive width at cross-section " + std::to_string(i) +
+					" (j=" + std::to_string(j) + ") in '" + m_strCrossSectionsFilename + "'"
+				);
+			}
+			if (area[static_cast<size_t>(j)] > 0.0 && !(rh[static_cast<size_t>(j)] >= 0.0)) {
+				throw std::runtime_error(
+					"Invalid hydraulic radius at cross-section " + std::to_string(i) +
+					" (j=" + std::to_string(j) + ") in '" + m_strCrossSectionsFilename + "'"
+				);
+			}
+		}
 	}
+
+	// // Calculate I1 pressure integral for all cross-sections after reading geometry
+	// for (int i = 0; i <= nCrossSectionNumber; i++) {
+	// 	m_pSimulation->estuary[i].calculateI1();
+	// }
 
 }
 
 
-//======================================================================================================================
-//!	Read Upward Boundary Condition file
-//======================================================================================================================
+/**
+ * @brief Read upstream hydraulic boundary condition CSV file
+ * 
+ * CSV format (no header): time, value
+ * - time: Seconds since simulation start
+ * - value: Discharge Q (m³/s) or elevation h (m), depending on BC type
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note BC type set in config:
+ * - Type 1: value = constant discharge
+ * - Type 2: value = water elevation time series
+ */
 void CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
 	// Create an object
@@ -1113,9 +622,18 @@ void CDataReader::bReadUpwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 }
 
 
-//======================================================================================================================
-//!	Read Downward Boundary Condition file
-//======================================================================================================================
+/**
+ * @brief Read downstream hydraulic boundary condition CSV file
+ * 
+ * CSV format (no header): time, value
+ * - time: Seconds since simulation start
+ * - value: Water elevation h (m) - typically tidal time series
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Only reads if downstream BC type != 0 (not free)
+ * @note Common use: Astronomical tide predictions from harmonic analysis
+ */
 void CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation) {
 
 	if (m_pSimulation->nGetDownwardEstuarineCondition() != 0)
@@ -1155,7 +673,6 @@ void CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 				while (getline(string_line, token, ',')) {
 					double dValue = strtod(token.c_str(), nullptr);
 					if (j == 0) {
-						//! TODO 010: Setter and getter
 						m_pSimulation->m_vDownwardBoundaryConditionTime.push_back(dValue);
 					}
 
@@ -1175,9 +692,26 @@ void CDataReader::bReadDownwardBoundaryConditionFile(CSimulation* m_pSimulation)
 }
 
 
-//======================================================================================================================
-//!	Read Along Channel Sediment properties file
-//======================================================================================================================
+/**
+ * @brief Read sediment properties CSV file
+ * 
+ * CSV format (no header):
+ *   SectionID, D_avg, D90, D50, sigma, rho_s, thickness
+ * 
+ * Columns:
+ * 1. SectionID: Cross-section identifier
+ * 2. D_avg: Average sediment diameter (m)
+ * 3. D90: 90th percentile grain size (m)
+ * 4. D50: Median grain size (m)
+ * 5. sigma: Sediment gradation coefficient (D84/D50)
+ * 6. rho_s: Sediment relative density (typically 2.65 for quartz)
+ * 7. thickness: Active layer thickness (m)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Required if sediment transport enabled
+ * @see calculate_sediment_transport() for usage in van Rijn formula
+ */
 void CDataReader::bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) const {
 	// Create an object
 	ifstream InStream;
@@ -1252,9 +786,37 @@ void CDataReader::bReadAlongChannelSedimentsFile(CSimulation* m_pSimulation) con
 	}
 }
 
-//======================================================================================================================
-//! Read Hydro input file
-//======================================================================================================================
+/**
+ * @brief Read lateral inflow hydrographs CSV file
+ * 
+ * File structure:
+ * 1. First line: N (number of tributaries)
+ * 2. For each tributary:
+ *    - Blank line (separator)
+ *    - Location line: UTM_X, UTM_Y
+ *    - Data lines: time, discharge
+ * 
+ * Example:
+ *   3
+ *   
+ *   450000, 4050000
+ *   0, 10.5
+ *   3600, 12.3
+ *   ...
+ *   
+ *   451000, 4051000
+ *   0, 5.2
+ *   ...
+ * 
+ * Post-processing:
+ * - Finds nearest cross-section for each tributary (Euclidean distance)
+ * - Stores in m_nNearestCrossSectionNo
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Discharge linearly interpolated during simulation
+ * @warning UTM coordinates must match projection of main channel
+ */
 void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 	if (m_pSimulation->m_bHydroFile) {
 		// Create an object
@@ -1375,10 +937,117 @@ void CDataReader::bReadHydrographsFile(CSimulation* m_pSimulation) const {
 	}
 }
 
+/**
+ * @brief Read meteorological forcing CSV file for heat flux calculations
+ * 
+ * CSV format (no header):
+ * - 5 columns: time, T_air, RH, wind, pressure (when RH data available)
+ * - 4 columns: time, T_air, wind, pressure (when calculate_rh_from_temperature enabled)
+ * 
+ * Columns:
+ * - time: Seconds since simulation start
+ * - T_air: Air temperature (°C)
+ * - RH: Relative humidity (%) [optional if calculating from temperature]
+ * - wind: Wind speed (m/s)
+ * - pressure: Atmospheric pressure (Pa)
+ * 
+ * @param m_pSimulation Pointer to simulation
+ * 
+ * @note Flexible format:
+ * - If calculate_rh_from_temperature = true: expects 4 columns (no RH)
+ * - If calculate_rh_from_temperature = false: expects 5 columns (with RH)
+ * - Can also handle 5 columns when calculate_rh_from_temperature = true (RH data ignored)
+ * 
+ * @note Used in calculateRadiativeFluxes() for:
+ * - Sensible heat flux: Q_S = ρ_a·c_p·C_H·U·(T_water - T_air)
+ * - Latent heat flux: Q_L = ρ_a·L_v·C_E·U·(q_sat - q_air)
+ * - Longwave radiation (if not measured directly)
+ * 
+ * @see calculateRadiativeFluxes() in simulation.cpp
+ * @see calculateDailyMinTemperatures() for RH estimation preprocessing
+ */
+void CDataReader::bReadHeatFluxFile(CSimulation* m_pSimulation) {
+	if (m_pSimulation->m_strHeatFluxFile.empty()) return;
+	std::ifstream InStream(m_pSimulation->m_strHeatFluxFile.c_str(), std::ios::in);
+	if (!InStream.is_open()) {
+		std::cerr << ERR << "cannot open " << m_pSimulation->m_strHeatFluxFile << " for input" << std::endl;
+		return;
+	}
+	
+	bool calculate_rh = m_pSimulation->m_bCalculateRHFromTemperature;
+	int expected_cols = calculate_rh ? 4 : 5;
+	
+	std::string strRec;
+	while (getline(InStream, strRec)) {
+		strRec = strTrim(&strRec);
+		if ((!strRec.empty()) && (strRec[0] != QUOTE1) && (strRec[0] != QUOTE2)) {
+			std::stringstream string_line(strRec);
+			std::string token;
+			int j = 0;
+			double time = 0.0, tair = 0.0, rh = 0.0, wind = 0.0, pressure = 0.0;
+			
+			while (getline(string_line, token, ',')) {
+				double dValue = strtod(token.c_str(), nullptr);
+				
+				if (calculate_rh) {
+					// Format: time, T_air, wind, pressure (4 columns)
+					if (j == 0) time = dValue;
+					if (j == 1) tair = dValue;
+					if (j == 2) wind = dValue;
+					if (j == 3) pressure = dValue;
+				} else {
+					// Format: time, T_air, RH, wind, pressure (5 columns)
+					if (j == 0) time = dValue;
+					if (j == 1) tair = dValue;
+					if (j == 2) rh = dValue;
+					if (j == 3) wind = dValue;
+					if (j == 4) pressure = dValue;
+				}
+				j++;
+			}
+			
+			// Validate column count
+			if ((calculate_rh && j >= 4) || (!calculate_rh && j >= 5)) {
+				m_pSimulation->m_vHeatFluxTime.push_back(time);
+				m_pSimulation->m_vHeatFluxAirTemp.push_back(tair);
+				if (!calculate_rh) {
+					m_pSimulation->m_vHeatFluxRelHumidity.push_back(rh);
+				}
+				m_pSimulation->m_vHeatFluxWind.push_back(wind);
+				m_pSimulation->m_vHeatFluxAtmosphericPressure.push_back(pressure);
+			} else {
+				std::cerr << "Warning: Skipping line with " << j << " columns (expected " 
+				          << expected_cols << ")" << std::endl;
+			}
+		}
+	}
+	
+	// Log information about data reading
+	if (calculate_rh && m_pSimulation->m_nLogFileDetail >= 1) {
+		std::cout << "      - Heat flux file read: " << m_pSimulation->m_vHeatFluxTime.size() 
+		          << " records (RH will be calculated from temperature)" << std::endl;
+	} else if (m_pSimulation->m_nLogFileDetail >= 1) {
+		std::cout << "      - Heat flux file read: " << m_pSimulation->m_vHeatFluxTime.size() 
+		          << " records (RH from data)" << std::endl;
+	}
+}
 
-//===============================================================================================================================
-//! Given a string containing time units, this returns the appropriate multiplier
-//===============================================================================================================================
+
+/**
+ * @brief Get time multiplier to convert specified units to seconds
+ * 
+ * Supported units (case-insensitive substring match):
+ * - "second" → 1
+ * - "hour" → 3600
+ * - "day" → 86400
+ * - "month" → 2628000 (assumes 30.416667 days)
+ * - "year" → 31557600 (assumes 365.25 days)
+ * 
+ * @param strIn String containing time unit (e.g., "hours", "days")
+ * @return Multiplier to convert to seconds, or TIME_UNKNOWN if not recognized
+ * 
+ * @note Used for converting boundary condition time series
+ */
 double CDataReader::dGetTimeMultiplier(string const *strIn)
 {
 	// Then return the correct multiplier, since m_dTimeStep is in hours
@@ -1405,9 +1074,18 @@ double CDataReader::dGetTimeMultiplier(string const *strIn)
 }
 
 
-//===============================================================================================================================
-//! Given a string containing time units, this sets up the appropriate multiplier and display units for the simulation
-//===============================================================================================================================
+/**
+ * @brief Set simulation duration units and multiplier
+ * 
+ * Sets:
+ * - m_dDurationUnitsMultiplier: Conversion factor to hours
+ * - m_strDurationUnits: Display string ("seconds", "hours", "days", etc.)
+ * 
+ * @param strIn String containing time unit
+ * @return RTN_OK on success, RTN_ERR_TIMEUNITS if unit not recognized
+ * 
+ * @note Called during config file parsing
+ */
 int CDataReader::nSimulationTimeMultiplier(string const *strIn)
 {
     // Next set up the correct multiplier, since m_dTimeStep is in hours
@@ -1444,9 +1122,12 @@ int CDataReader::nSimulationTimeMultiplier(string const *strIn)
     return RTN_OK;
 }
 
-//===============================================================================================================================
-//! This finds time units in a string
-//===============================================================================================================================
+/**
+ * @brief Identify time unit from string
+ * 
+ * @param strIn String to search (case-insensitive)
+ * @return TIME_SECONDS, TIME_HOURS, TIME_DAYS, TIME_MONTHS, TIME_YEARS, or TIME_UNKNOWN
+ */
 int CDataReader::nDoTimeUnits(string const *strIn)
 {
 	if (strIn->find("second") != string::npos)
@@ -1464,9 +1145,11 @@ int CDataReader::nDoTimeUnits(string const *strIn)
 }
 
 
-//===============================================================================================================================
-//! Trims whitespace from the left side of a string, does not change the original string
-//===============================================================================================================================
+/**
+ * @brief Trim leading whitespace from string (does not modify original)
+ * @param strIn Input string
+ * @return Trimmed copy
+ */
 string CDataReader::strTrimLeft(string const *strIn)
 {
    // Trim leading spaces
@@ -1476,9 +1159,18 @@ string CDataReader::strTrimLeft(string const *strIn)
       return strIn->substr(nStartPosition);
 }
 
-//===============================================================================================================================
-//! Trims whitespace from the right side of a string, does not change the original string
-//===============================================================================================================================
+/**
+ * @brief Trim trailing whitespace and carriage returns (does not modify original)
+ * 
+ * Removes:
+ * - Trailing spaces and tabs
+ * - Windows carriage returns (\r)
+ * 
+ * @param strIn Input string
+ * @return Trimmed copy
+ * 
+ * @note Handles files edited in Windows and transferred to Linux
+ */
 string CDataReader::strTrimRight(string const *strIn)
 {
    string strTmp(*strIn);
@@ -1493,9 +1185,16 @@ string CDataReader::strTrimRight(string const *strIn)
       return strTmp.substr(0, nEndPos + 1);
 }
 
-//===============================================================================================================================
-//! Trims whitespace from both sides of a string, does not change the original string
-//===============================================================================================================================
+/**
+ * @brief Trim leading and trailing whitespace (does not modify original)
+ * 
+ * Combines strTrimLeft() and strTrimRight().
+ * 
+ * @param strIn Input string
+ * @return Trimmed copy
+ * 
+ * @note Most commonly used trim function in CSV parsing
+ */
 string CDataReader::strTrim(string const *strIn)
 {
    string strTmp = *strIn;
@@ -1519,9 +1218,26 @@ string CDataReader::strTrim(string const *strIn)
 }
 
 
-//===============================================================================================================================
-//! Parses a date string into days, months, and years, and checks each of them
-//===============================================================================================================================
+/**
+ * @brief Parse date string into day, month, year components
+ * 
+ * Expected format: DD/MM/YYYY (or DD-MM-YYYY, platform-dependent)
+ * 
+ * Validation:
+ * - Day: 1-31
+ * - Month: 1-12
+ * - Year: > 0
+ * - All components must be valid integers
+ * 
+ * @param strDate Input date string
+ * @param nDay Output: day (1-31)
+ * @param nMonth Output: month (1-12)
+ * @param nYear Output: year (>0)
+ * @return true if valid, false if parsing/validation fails
+ * 
+ * @note Does NOT validate day-month combinations (e.g., allows 31/02)
+ * @warning Separator is platform-dependent (SLASH macro)
+ */
 bool CDataReader::bParseDate(string const *strDate, int &nDay, int &nMonth, int &nYear)
 {
 #ifdef _WIN32
@@ -1585,9 +1301,25 @@ bool CDataReader::bParseDate(string const *strDate, int &nDay, int &nMonth, int 
    return true;
 }
 
-//===============================================================================================================================
-//! Parses a time string into hours, minutes, and seconds, and checks each of them
-//===============================================================================================================================
+/**
+ * @brief Parse time string into hour, minute, second components
+ * 
+ * Expected format: HH-MM-SS (dash-separated)
+ * 
+ * Validation:
+ * - Hour: 0-23
+ * - Minute: 0-59
+ * - Second: 0-59
+ * - All components must be valid integers
+ * 
+ * @param strTime Input time string
+ * @param nHour Output: hour (0-23)
+ * @param nMin Output: minute (0-59)
+ * @param nSec Output: second (0-59)
+ * @return true if valid, false if parsing/validation fails
+ * 
+ * @note Uses DASH separator (defined in header)
+ */
 bool CDataReader::bParseTime(string const *strTime, int &nHour, int &nMin, int &nSec)
 {
    vector<string> vStrTmp = VstrSplit(strTime, DASH);
@@ -1646,9 +1378,26 @@ bool CDataReader::bParseTime(string const *strTime, int &nHour, int &nMin, int &
    return true;
 }
 
-//======================================================================================================================
-//! Read .ini file to get input and output paths
-//======================================================================================================================
+/**
+ * @brief Read .ini file for input/output directory paths
+ * 
+ * .ini format:
+ *   input_path = "/path/to/input/data"
+ *   output_path = "/path/to/output/results"
+ * 
+ * Features:
+ * - Ignores comments (lines starting with # or ;)
+ * - Strips quotes from values
+ * - Case-insensitive keys (INPUT_PATH also works)
+ * 
+ * @return true if both paths found, false if .ini missing or incomplete
+ * 
+ * @note Sets:
+ * - m_strInputPath: Base directory for CSV files
+ * - m_strOutputBasePath: Base directory for NetCDF output
+ * 
+ * @see YAML config for relative path resolution
+ */
 bool CDataReader::bReadConfigurationPaths() {
     std::ifstream configFile(".ini");
     
@@ -1716,4 +1465,147 @@ bool CDataReader::bReadConfigurationPaths() {
     std::cout << "      - Output path: " << m_strOutputBasePath << std::endl;
     
     return true;
+}
+
+/**
+ * @brief Restore simulation state from NetCDF restart file
+ * 
+ * Purpose: Enable warm-start simulations (continue from previous run)
+ * 
+ * Procedure:
+ * 1. Open NetCDF file in read-only mode
+ * 2. Read dimensions (x, time)
+ * 3. Extract last timestep (index = time_len - 1)
+ * 4. Restore all state variables:
+ *    - Hydraulics: Q, A, eta, U, B, Rh, c
+ *    - Transport: S (salinity), rho (density)
+ *    - Sediment: Qb, Qs, Qt
+ *    - Derived: level (water depth)
+ * 5. Close file
+ * 
+ * @param m_pSimulation Pointer to simulation object
+ * @param netcdfPath Path to NetCDF restart file
+ * 
+ * @note Variables not found are skipped (no error)
+ * @warning Assumes spatial discretization matches (same number of cross-sections)
+ * @warning Time not restored (commented out) - simulation starts at t=0 by default
+ * 
+ * Usage:
+ *   config.yaml:
+ *     continue_simulation: true
+ *     continue_netcdf_path: "previous_run.nc"
+ * 
+ * @see nDefineNetCDFFile() in data_writer.cpp for output format
+ */
+void CDataReader::bRestoreStateFromNetCDF(CSimulation* m_pSimulation, const std::string& netcdfPath) const {
+    int ncid;
+    int retval = nc_open(netcdfPath.c_str(), NC_NOWRITE, &ncid);
+    if (retval != NC_NOERR) {
+        std::cerr << "Error opening NetCDF for state restoration: " << nc_strerror(retval) << std::endl;
+        return;
+    }
+
+	// Read dimensions
+	size_t len_x = 0, len_time = 0;
+	int dimid_x, dimid_time;
+	nc_inq_dimid(ncid, "x", &dimid_x);
+	nc_inq_dimlen(ncid, dimid_x, &len_x);
+	nc_inq_dimid(ncid, "time", &dimid_time);
+	nc_inq_dimlen(ncid, dimid_time, &len_time);
+	
+	// VALIDATION: Check spatial discretization consistency
+	if (len_x != static_cast<size_t>(m_pSimulation->m_nCrossSectionsNumber)) {
+		std::cerr << "\n" << std::string(80, '=') << "\n";
+		std::cerr << "ERROR: Spatial discretization mismatch!\n";
+		std::cerr << "NetCDF file has " << len_x << " cross-sections\n";
+		std::cerr << "Current geometry has " << m_pSimulation->m_nCrossSectionsNumber << " cross-sections\n";
+		std::cerr << "\nPossible causes:\n";
+		std::cerr << "  1. NetCDF file from different simulation setup\n";
+		std::cerr << "  2. Geometry files (along_channel_data.csv) changed since NetCDF creation\n";
+		std::cerr << "  3. Wrong NetCDF file specified in continue_netcdf_path\n";
+		std::cerr << "\nSolution: Use NetCDF file with " << m_pSimulation->m_nCrossSectionsNumber 
+		          << " cross-sections or update geometry files\n";
+		std::cerr << std::string(80, '=') << "\n";
+		nc_close(ncid);
+		exit(EXIT_FAILURE);
+	}
+
+	// Read the last temporal index from saved state
+	size_t last_idx = len_time > 0 ? len_time - 1 : 0;
+	
+	// VALIDATION: Check X coordinates consistency (optional but recommended)
+	int x_varid;
+	if (nc_inq_varid(ncid, "x", &x_varid) == NC_NOERR) {
+		std::vector<double> netcdf_x(len_x);
+		if (nc_get_var_double(ncid, x_varid, netcdf_x.data()) == NC_NOERR) {
+			// Compare first, middle, and last coordinates
+			const double tol = 1.0;  // 1 meter tolerance
+			bool x_mismatch = false;
+			int mismatch_idx = -1;
+			
+			const std::vector<size_t> check_indices = {0, len_x/2, len_x-1};
+			for (size_t i : check_indices) {
+				if (i < len_x && i < m_pSimulation->m_vCrossSectionX.size()) {
+					double diff = fabs(netcdf_x[i] - m_pSimulation->m_vCrossSectionX[i]);
+					if (diff > tol) {
+						x_mismatch = true;
+						mismatch_idx = i;
+						break;
+					}
+				}
+			}
+			
+			if (x_mismatch) {
+				std::cerr << "\n" << std::string(80, '=') << "\n";
+				std::cerr << "WARNING: X coordinate mismatch detected!\n";
+				std::cerr << "Cross-section " << mismatch_idx << ":\n";
+				std::cerr << "  NetCDF X = " << netcdf_x[mismatch_idx] << " m\n";
+				std::cerr << "  Current X = " << m_pSimulation->m_vCrossSectionX[mismatch_idx] << " m\n";
+				std::cerr << "  Difference = " << fabs(netcdf_x[mismatch_idx] - m_pSimulation->m_vCrossSectionX[mismatch_idx]) << " m\n";
+				std::cerr << "\nThis suggests geometry files have changed since NetCDF was created.\n";
+				std::cerr << "Continuing with current geometry, but results may be inconsistent.\n";
+				std::cerr << std::string(80, '=') << "\n\n";
+			}
+		}
+	}
+
+	// Map NetCDF variables to simulation vectors
+	auto restore_var = [&](const char* varname, std::vector<double>& target) {
+		int varid;
+		if (nc_inq_varid(ncid, varname, &varid) == NC_NOERR) {
+			std::vector<double> buffer(len_x);
+			size_t start[2] = {last_idx, 0};
+			size_t count[2] = {1, len_x};
+			if (nc_get_vara_double(ncid, varid, start, count, buffer.data()) == NC_NOERR) {
+				target = buffer;
+			}
+		}
+	};
+
+	restore_var("Q", m_pSimulation->m_vCrossSectionQ);
+	restore_var("A", m_pSimulation->m_vCrossSectionArea);
+	restore_var("eta", m_pSimulation->m_vCrossSectionWaterElevation);
+	restore_var("U", m_pSimulation->m_vCrossSectionU);
+	restore_var("B", m_pSimulation->m_vCrossSectionWidth);
+	restore_var("Rh", m_pSimulation->m_vCrossSectionHydraulicRadius);
+	restore_var("rho", m_pSimulation->m_vCrossSectionDensity);
+	restore_var("S", m_pSimulation->m_vCrossSectionSalinity);
+	restore_var("c", m_pSimulation->m_vCrossSectionC);
+	restore_var("Qs", m_pSimulation->m_vCrossSectionQs);
+	restore_var("Qb", m_pSimulation->m_vCrossSectionQb);
+	restore_var("Qt", m_pSimulation->m_vCrossSectionQt);
+	restore_var("level", m_pSimulation->m_vCrossSectionWaterDepth);
+
+	// Read current time
+	// int time_varid;
+	// if (nc_inq_varid(ncid, "time", &time_varid) == NC_NOERR) {
+	// 	double t;
+	// 	size_t start[1] = {last_idx};
+	// 	size_t count[1] = {1};
+	// 	if (nc_get_vara_double(ncid, time_varid, start, count, &t) == NC_NOERR) {
+	// 		m_pSimulation->m_dCurrentTime = t;
+	// 	}
+	// }
+
+	nc_close(ncid);
 }

@@ -1,4 +1,163 @@
-# Changelog
+## [Unreleased]
+
+- (no changes yet)
+
+---
+
+## [0.13.0] - 2026-05-19
+
+### Added
+- Along-channel input now supports optional `StorageFactor` and `Kh` columns, enabling per-cross-section lateral storage and salinity-dispersion profiles.
+- NetCDF output now includes static `n(x)`, `Sf(x)`, and `Kh(x)` profiles for roughness, lateral storage, and salinity dispersion diagnostics.
+- Salinity YAML configuration expanded with `initial_file`, upstream/downstream boundary-condition files or scalar values, and downstream `inflow_mixing_alpha` control.
+
+### Changed
+- Boundary-condition handling was extended and made more compatible across hydrodynamics and salinity transport workflows.
+- Automatic CFL control now depends on the active limiter/scheme, caps unstable user requests, and reports the selected stability target in startup logs.
+- Runtime smoothing/regularization was refined for extreme-flow events to improve stability under large discharges.
+- Manning `n(eta)` behaviour was softened and the friction/storage formulation was further refined.
+
+### Diagnostics
+- Console and log-file output were reorganized with clearer sectioning and message formatting.
+- Startup summaries now report Manning, lateral-storage, and salinity-dispersion ranges when available.
+
+### Fixes
+- Fixed flooding computation issues.
+- Improved salinity transport robustness, including storage-coupling/source-term handling and follow-up bug fixes.
+- Fixed initial salinity-condition loading from YAML configuration.
+
+---
+
+## [0.12.0] - 2026-01-14
+
+### Added
+- Hydrodynamic upstream boundary-condition support for discharge time series (`boundary_conditions.upstream.type: discharge`).
+- Prescribed (spatially uniform) water temperature time series mode (`transport.temperature.given_file`).
+- Embed YAML configuration content into NetCDF output (`yaml_configuration`) to preserve full run provenance.
+- Viewer: more robust NetCDF loading (env var `NETCDF_PATH`, caching) and flood-line (left/right bank) map overlay from UTM coordinates.
+
+### Diagnostics
+- More informative startup console summaries for:
+  - Cross-sections (count and ranges)
+  - Hydrodynamic boundary-condition time series (type, date range, min/max)
+  - Hydrographs (count, date range, min/max)
+- Clearer startup step numbering and log output organization.
+
+### Fixes
+- Lateral inflows (hydrographs): accumulate multiple hydrographs per cross-section and avoid double-counting (handled via continuity source term).
+- Boundary-condition application robustness improvements (time-series types, safer handling and reporting).
+- Continue-from-NetCDF now validates spatial discretization (and warns on geometry/X mismatches).
+
+### Performance
+- Cross-section tabulated getters now return `const std::vector<double>&` instead of copies.
+
+### Changed
+- Hydrodynamic/transport flux computations refactored toward a conservative formulation.
+
+---
+
+## [0.11.0] - 2025-12-23
+
+### Major Features
+- **Water Temperature Transport Module:**
+  - Full advection-diffusion-heating equation with McCormack predictor-corrector scheme.
+  - Comprehensive surface energy balance: shortwave radiation (Q_SW), longwave radiation (Q_LW), sensible heat (Q_H), and latent heat (Q_E).
+  - Dynamic solar geometry with zenith-angle dependent albedo (Briegleb et al. 1986).
+  - Turbulent fluxes using bulk aerodynamic formulas with calibratable coefficients (Stanton and Dalton numbers).
+  - Meteorological forcing input: air temperature, relative humidity, wind speed, atmospheric pressure.
+  - **NEW: Relative humidity estimation from temperature using FAO-56 method** - when RH data is unavailable, it can be calculated from air temperature and daily minimum temperature using the Magnus-Tetens equation.
+
+- **Upstream 0D Reservoir Temperature Model:**
+  - Boundary condition type 3: well-mixed tank energy balance model for upstream inflows.
+  - Configurable parameters: temperature offset, atmospheric exchange, and inflow water effect.
+  - Uses same radiative physics as main 1D model.
+
+### Technical Improvements
+- Added physical constants library (water, air, radiation properties) and inline helper functions.
+- Enhanced density coupling: ρ = ρ₀·(1 + β_S·S - β_T·T) with configurable thermal expansion coefficient.
+- Extended YAML configuration with `transport.temperature` section for all temperature parameters.
+- New CSV reader for meteorological forcing data.
+- Temperature variable added to NetCDF output with CF-compliant metadata.
+- **NEW: `calc_rh_from_temp()` function** - implements FAO-56 method for relative humidity estimation.
+- **NEW: `calculateDailyMinTemperatures()` function** - pre-computes daily minimum temperatures outside main loop for efficiency.
+- **NEW: YAML option `calculate_rh_from_temperature`** - enables/disables RH calculation from temperature data.
+
+### Notes
+- Temperature calibration pending (requires site-specific tuning of cs, cl, cloud_cover coefficients).
+- Backward compatibility: existing YAML files need `transport.temperature` section to enable temperature simulation.
+- RH estimation assumes T_min ≈ T_dew (valid in most climates, may need adjustment in arid regions).
+
+---
+
+## [0.10.0] - 2025-12-20
+
+### Added
+- **Manning number as a function of eta:**
+  - The model now supports making the Manning number dependent on eta (water surface elevation), allowing for more flexible hydraulic parameterization per cross-section.
+
+### Changed
+- **Refactor of width gradient threshold calculation:**
+  - Refactored `CCrossSection::calculateEtaMaxWidthGradient` to take and modify a `double&` instead of a `std::vector<double>&`.
+  - Removed the unused `sectionIdx` parameter from the function and all calls.
+  - Corrected initialization of `m_vEtaWidthGradientThreshold` to be a `std::vector<double>` with one value per section.
+  - Simplified the simulation loop call to compute the width gradient threshold per section.
+
+## [0.9.0] - 2025-12-18
+
+### Improvements and Fixes
+- **Salinity transport correction:**
+  - Restored explicit advection and diffusion calculation for salinity in the predictor-corrector scheme.
+  - Salinity now evolves physically with advective-diffusive transport.
+- **Temperature output:**
+  - Added the `temperature` variable as NetCDF output, with full metadata and writer support.
+- **Refactor and robustness:**
+  - Cleaned up redundant vector initializations.
+  - Minor improvements in boundary condition handling and predictor-corrector coupling.
+- **Validation:**
+  - Confirmed correct coupling of S-T-hydrodynamics and output of all relevant variables.
+
+### Notes
+- The model is now fully coupled and correctly exports both salinity and temperature.
+- It is recommended to review the new NetCDF files to validate physical results.
+
+
+## [0.8.0] - 2025-12-17
+
+### Major Features
+- **Temperature Transport Module:**
+  - Implemented full support for water temperature transport, including advection and diffusion.
+  - Added configuration options for temperature transport in `config.yaml` (enable/disable, initial conditions, dispersion coefficient, boundary conditions, and heat fluxes).
+  - Integrated meteorological forcings and energy balance (Qnet) for temperature evolution.
+  - All temperature-related parameters are now configurable via YAML.
+
+- **Density Function Update:**
+  - The density calculation now uses both salinity and temperature, with configurable coefficients (`betaS` and `betaT`) read from `config.yaml`.
+  - The new formula allows for more physically accurate coupling between salinity, temperature, and hydrodynamics.
+
+### Technical Improvements
+- Refactored YAML reader to support temperature transport and new density parameters.
+- Improved documentation for temperature and density configuration in the README and example YAML files.
+
+### Notes
+- Backward compatibility: Existing YAML files must add the new temperature and density parameters for full functionality.
+- All test cases updated to include temperature transport and new density logic.
+
+
+## [0.7.0] - 2025-12-15
+
+### Major Changes
+- **Full migration to YAML:**
+  - Removed support and documentation for legacy `.ini`, `.conf`, and `.config` formats.
+  - The README now documents exclusively the use of `config.yaml` for simulation configuration.
+  - Example YAML structure and main parameters included in the documentation.
+  - All test cases must use YAML files.
+- **Documentation improvements:**
+  - Clarified the structure and meaning of each YAML section.
+  - Removed obsolete references to old formats throughout the project documentation.
+
+### Notes
+- If you have old configuration files, convert them to YAML following the updated example in the README.
+
 
 ## [0.6.0] - 2025-12-03
 

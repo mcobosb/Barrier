@@ -21,9 +21,14 @@ using std::transform;
 
 
 
-//===============================================================================================================================
-//! Returns the lower case version of an string, leaving the original unchanged
-//===============================================================================================================================
+/**
+ * @brief Convert string to lowercase (creates a copy)
+ * 
+ * @param strIn Pointer to input string (left unchanged)
+ * @return Lowercase version of input
+ * 
+ * @note Uses std::transform with tolower
+ */
 string strToLower(string const *strIn)
 {
     string strOut = *strIn;
@@ -31,9 +36,20 @@ string strToLower(string const *strIn)
     return strOut;
 }
 
-//===============================================================================================================================
-//! From http://stackoverflow.com/questions/236129/split-a-string-in-c They implement (approximately) Python's split() function. This first version puts the results into a pre-constructed string vector. It ignores empty items
-//===============================================================================================================================
+/**
+ * @brief Split string by delimiter (Python-like split() function)
+ * 
+ * Helper function that populates a pre-constructed vector.
+ * Empty items are ignored (e.g., "a,,b" with ',' delimiter gives ["a", "b"]).
+ * 
+ * @param s Pointer to input string
+ * @param delim Delimiter character (e.g., ',', ' ', ':')
+ * @param elems Pointer to output vector (modified in-place)
+ * @return Reference to elems vector
+ * 
+ * @note Source: stackoverflow.com/questions/236129/split-a-string-in-c
+ * @see VstrSplit() for version that returns new vector
+ */
 vector<string> VstrSplit2(string const *s, char const delim, vector<string> *elems)
 {
     stringstream ss(*s);
@@ -46,9 +62,17 @@ vector<string> VstrSplit2(string const *s, char const delim, vector<string> *ele
     return *elems;
 }
 
-//===============================================================================================================================
-//! From http://stackoverflow.com/questions/236129/split-a-string-in-c They implement (approximately) Python's split() function. This second version returns a new string vector (it calls the first version)
-//===============================================================================================================================
+/**
+ * @brief Split string by delimiter (convenience wrapper)
+ * 
+ * Returns a new vector of split strings. Calls VstrSplit2() internally.
+ * 
+ * Example: VstrSplit("a,b,c", ',') returns ["a", "b", "c"]
+ * 
+ * @param s Pointer to input string
+ * @param delim Delimiter character
+ * @return Vector of split strings (empty items ignored)
+ */
 vector<string> VstrSplit(string const *s, char const delim)
 {
     vector<string> elems;
@@ -57,9 +81,17 @@ vector<string> VstrSplit(string const *s, char const delim)
 }
 
 
-//===============================================================================================================================
-//! Checks to see if a string can be read as a valid double number. Does not find trailing (i.e.post-number) rubbish, but then neither does strtod(). From https://stackoverflow.com/questions/392981/how-can-i-convert-string-to-double-in-c
-//===============================================================================================================================
+/**
+ * @brief Validate if string can be parsed as double
+ * 
+ * Uses std::istringstream to attempt parsing.
+ * 
+ * @param str String to validate (e.g., "3.14", "-1.5e-3")
+ * @return true if valid double, false otherwise
+ * 
+ * @warning Does NOT detect trailing garbage (e.g., "3.14abc" returns true)
+ * @note Source: stackoverflow.com/questions/392981
+ */
 bool bIsStringValidDouble(string& str)
 {
     std::istringstream iStr(str);
@@ -71,9 +103,18 @@ bool bIsStringValidDouble(string& str)
     return true;
 }
 
-//===============================================================================================================================
-//! Checks to see if a string can be read as a valid integer, from https://stackoverflow.com/questions/2844817/how-do-i-check-if-a-c-string-is-an-int
-//===============================================================================================================================
+/**
+ * @brief Validate if string can be parsed as integer
+ * 
+ * Trims leading whitespace, removes optional sign (+/-), then checks for digits only.
+ * 
+ * @param str String to validate (modified: whitespace/sign removed)
+ * @return true if valid integer, false otherwise
+ * 
+ * @note Accepts: "42", "-17", "+3", "  123"
+ * @note Rejects: "3.14", "1e5", "12abc"
+ * @note Source: stackoverflow.com/questions/2844817
+ */
 bool bIsStringValidInt(string& str)
 {
     // Trim leading whitespace
@@ -89,13 +130,21 @@ bool bIsStringValidInt(string& str)
     return (str.find_first_not_of("0123456789") == string::npos);
 }
 
-//===============================================================================================================================
-//! Compute the min value of a vector
-//===============================================================================================================================
+/**
+ * @brief Find minimum value in vector
+ * 
+ * Simple O(n) linear search.
+ * 
+ * @param vec Input vector (must not be empty)
+ * @return Minimum value
+ * 
+ * @warning Undefined behavior if vector is empty (no check)
+ * @note Used in TVD flux limiters (Superbee, MinMod)
+ */
 double dMinVectorValue(const vector<double>& vec) {
     // if (vec.empty()) {
-    //     std::cerr << "El vector está vacío." << std::endl;
-    //     return std::numeric_limits<int>::max(); // Retorna el mayor valor posible de int
+    //     std::cerr << "Vector is empty." << std::endl;
+    //     return std::numeric_limits<int>::max(); // Return maximum possible int value
     // }
 
     double minValue = vec[0]; // Starting value
@@ -109,13 +158,21 @@ double dMinVectorValue(const vector<double>& vec) {
     return minValue;
 }
 
-//===============================================================================================================================
-//! Compute the max value of a vector
-//===============================================================================================================================
+/**
+ * @brief Find maximum value in vector
+ * 
+ * Simple O(n) linear search.
+ * 
+ * @param vec Input vector (must not be empty)
+ * @return Maximum value
+ * 
+ * @warning Undefined behavior if vector is empty (no check)
+ * @note Used in TVD flux limiters (Superbee)
+ */
 double dMaxVectorValue(const vector<double>& vec) {
     // if (vec.empty()) {
-    //     std::cerr << "El vector está vacío." << std::endl;
-    //     return std::numeric_limits<int>::max(); // Retorna el mayor valor posible de int
+    //     std::cerr << "Vector is empty." << std::endl;
+    //     return std::numeric_limits<int>::max(); // Return maximum possible int value
     // }
 
     double maxValue = vec[0]; // Starting value

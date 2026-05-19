@@ -18,20 +18,38 @@
 #include <iostream>
 #include <exception>
 
-//===============================================================================================================================
-//! Saint Venant main function
-//===============================================================================================================================
+/**
+ * @brief Main entry point for Barrier 1D estuarine hydrodynamic model
+ * 
+ * Execution flow:
+ * 1. Create CSimulation object (reads config, allocates memory)
+ * 2. Run simulation loop: bDoSimulation(argc, argv)
+ * 3. Finalize and report results: bDoSimulationEnd()
+ * 4. Handle exceptions and return appropriate exit code
+ * 
+ * @param argc Number of command-line arguments
+ * @param argv Array of argument strings (argv[1] = config file path)
+ * @return 0 on success, 1 for std::exception, 2 for unknown errors
+ * 
+ * @note Exception safety:
+ * - std::exception catches: file I/O, memory allocation, math errors
+ * - Unknown exceptions (...)  catch potential C-style errors
+ * 
+ * @see CSimulation::bDoSimulation() for main loop
+ * @see CSimulation::bDoSimulationEnd() for cleanup/output
+ */
 int main(int argc, char const* argv[])
 {
     int returnCode = 0;
     
     try {
-        //! Initialize objects ---------------------------------------------------------------------------------------------
-        // Create a CSimulation object
+        // Initialize simulation engine from config file
         CSimulation pSimulation;
 
-        // Run the simulation and then check how it ends
+        // Execute simulation loop (predictor-corrector steps)
         pSimulation.bDoSimulation(argc, argv);
+        
+        // Finalize: close NetCDF, print summary, cleanup
         pSimulation.bDoSimulationEnd();
     }
     catch (const std::exception& e) {

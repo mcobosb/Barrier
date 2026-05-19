@@ -6,7 +6,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Definir el nombre del proyecto.
-project(barrier VERSION 0.6.0 LANGUAGES CXX)
+project(barrier VERSION 0.11.0 LANGUAGES CXX)
 
 # Establecer el estándar de C++.
 set(CMAKE_CXX_STANDARD 20)
@@ -16,7 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-    message(STATUS "OpenMP encontrado - Paralelización habilitada")
+    # message(STATUS "OpenMP encontrado - Paralelización habilitada")
 endif()
 
 # Establecer el tipo de build por defecto
@@ -101,11 +101,16 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     )
 
 elseif(CMAKE_BUILD_TYPE STREQUAL "ReleaseFast")
-    # ✅ MÁXIMO RENDIMIENTO: Solo cuando sepas que funciona
+    # High performance with numerical safety
     target_compile_options(barrier PRIVATE
-        -O3 -DNDEBUG -march=native -ffast-math 
+        -O3 -DNDEBUG -march=native
+        -fno-math-errno          # Safe: errno not used
+        -fno-signed-zeros        # Safe: sign of zero irrelevant
+        -fno-trapping-math       # Safe: no FP exception handlers
         -funroll-loops -fomit-frame-pointer
         -flto
+        # REMOVED -ffast-math: breaks NaN/Inf checks and reassociates operations
+        #    Can cause undefined behavior with divisions by zero or comparisons
     )
     target_link_options(barrier PRIVATE -flto=auto -Wl,--gc-sections -Wl,--strip-all)
     target_compile_definitions(barrier PRIVATE NDEBUG)

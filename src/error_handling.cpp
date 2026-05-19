@@ -7,9 +7,26 @@ using std::to_string;
 
 #include "error_handling.h"
 
-//===============================================================================================================================
-//! Returns an error message given an error code
-//===============================================================================================================================
+/**
+ * @brief Convert error code to human-readable message
+ * 
+ * Error codes:
+ * - RTN_OK (0): Successful completion
+ * - RTN_ERR_INI: Configuration file read error (missing file, syntax error)
+ * - RTN_ERR_SV_DIR: Invalid output directory path
+ * - RTN_ERR_BADLY_FORMAT_COLON: Malformed string with colon separator
+ * - RTN_CLOSE_NETCDF: NetCDF file close error (disk full, permissions)
+ * - RTN_EXTRA_LINES: Unexpected lines in config file
+ * - RTN_ERR_TIMEUNITS: Invalid time units in forcing data
+ * 
+ * @param nErr Error code from error_handling.h
+ * @return Error description string
+ * 
+ * @note Used by:
+ * - CSimulation::bDoSimulationEnd() for final status
+ * - Exception handlers for debugging
+ * - Log files for post-processing analysis
+ */
 string strGetErrorText(int const nErr)
 {
     string strErr;
